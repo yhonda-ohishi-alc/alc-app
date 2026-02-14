@@ -5,6 +5,10 @@ rust-alc-api/
 # 機密ドキュメント (Tanita Confidential)
 docs/*.pdf
 
+# 共通
+node_modules/
+.wrangler/
+
 # FC-1200 WASM ソース (プロトコル秘匿)
 fc1200-wasm/src/
 fc1200-wasm/Cargo.toml

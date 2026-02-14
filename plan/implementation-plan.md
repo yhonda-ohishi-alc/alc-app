@@ -289,7 +289,7 @@ web/
 
 ---
 
-## Phase 5a: WebRTC シグナリング (`cf-alc-signaling/`)
+## Phase 5a: WebRTC シグナリング (`cf-alc-signaling/`) ✅
 
 **目標**: Cloudflare Durable Objects で WebRTC シグナリングサーバーを構築。
 
@@ -305,12 +305,12 @@ cf-alc-signaling/
     └── signaling-room.ts
 ```
 
-- [ ] `npm init` + `wrangler` セットアップ
-- [ ] `wrangler.toml` — Durable Objects バインディング設定
+- [x] `npm init` + `wrangler` セットアップ
+- [x] `wrangler.toml` — Durable Objects バインディング設定
 
 ### 5a-2. シグナリングルーム実装 **[H]**
 
-- [ ] `src/signaling-room.ts` — Hibernatable WebSockets 実装
+- [x] `src/signaling-room.ts` — Hibernatable WebSockets 実装
   ```typescript
   export class SignalingRoom extends DurableObject {
     async fetch(request: Request): Promise<Response>
@@ -322,7 +322,7 @@ cf-alc-signaling/
   - SDP Offer/Answer 中継
   - ICE Candidate 中継
   - ルーム参加者管理 (測定端末 / 管理者)
-- [ ] `src/index.ts` — Worker エントリポイント
+- [x] `src/index.ts` — Worker エントリポイント
   - URL パスからルーム ID を取得
   - Durable Object にルーティング
 
@@ -414,7 +414,7 @@ cf-alc-signaling/
 | **3a** | Rust NFC ブリッジ | ✅ 完了 | なし |
 | **3b** | Web ハードウェア統合 | ✅ 完了 | 1, 2, 3a |
 | **4** | バックエンド API | ✅ 完了 | なし |
-| **5a** | WebRTC シグナリング | 未着手 | なし |
+| **5a** | WebRTC シグナリング | ✅ 完了 | なし |
 | **5b** | Web 統合 (API + WebRTC) | 未着手 | 1, 4, 5a |
 | **6** | 結合テスト + デプロイ | 未着手 | 全て |
 
