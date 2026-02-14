@@ -367,9 +367,9 @@ cf-alc-signaling/
 
 ### 5b-4. PWA オフライン対応 **[M]**
 
-- [ ] Service Worker 設定 (workbox via @vite-pwa/nuxt)
-- [ ] オフライン時に直前の測定結果をキャッシュ表示
-- [ ] バックグラウンド同期 (オフライン測定 → オンライン復帰時に API 送信)
+- [x] Service Worker 設定 (workbox via @vite-pwa/nuxt)
+- [x] オフライン時に直前の測定結果をキャッシュ表示
+- [x] バックグラウンド同期 (オフライン測定 → オンライン復帰時に API 送信)
 
 ### Milestone 5 チェックポイント
 > 測定結果が API に保存される

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FaceAuthResult, MeasurementResult } from '~/types'
-import { initApi, saveMeasurement } from '~/utils/api'
+import { initApi } from '~/utils/api'
 
 const config = useRuntimeConfig()
 const step = ref<'nfc' | 'face_auth' | 'measuring' | 'result'>('nfc')
@@ -11,6 +11,10 @@ const faceSnapshot = ref<Blob | null>(null)
 
 const saveError = ref<string | null>(null)
 const isSaving = ref(false)
+const saveStatus = ref<'saved' | 'queued' | null>(null)
+
+// オフライン同期
+const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflineSync()
 
 // API 初期化
 onMounted(() => {
@@ -46,16 +50,16 @@ function onFaceAuthResult(result: FaceAuthResult) {
   }
 }
 
-// FC-1200 測定結果 → API に保存
+// FC-1200 測定結果 → API に保存 (オフライン時はキューに退避)
 async function onMeasurementResult(result: MeasurementResult) {
   measurementResult.value = result
   step.value = 'result'
 
-  // バックグラウンドで API に保存
   isSaving.value = true
   saveError.value = null
+  saveStatus.value = null
   try {
-    await saveMeasurement(result, faceSnapshot.value || undefined)
+    saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined)
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : '保存エラー'
     console.warn('測定結果の保存に失敗:', e)
@@ -74,6 +78,7 @@ function reset() {
   measurementResult.value = null
   faceSnapshot.value = null
   saveError.value = null
+  saveStatus.value = null
   isSaving.value = false
 }
 
@@ -84,6 +89,28 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 
 <template>
   <div class="flex flex-col items-center min-h-screen p-4">
+    <!-- オフラインバナー -->
+    <div
+      v-if="!isOnline"
+      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
+    >
+      オフライン — 測定結果はローカルに保存されます
+    </div>
+    <!-- 未送信キュー通知 -->
+    <div
+      v-if="pending > 0 && isOnline && !isSyncing"
+      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 flex items-center justify-between text-sm"
+    >
+      <span class="text-blue-700">未送信の測定結果: {{ pending }}件</span>
+      <button class="text-blue-600 font-medium hover:underline" @click="syncQueue">同期する</button>
+    </div>
+    <div
+      v-if="isSyncing"
+      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700"
+    >
+      同期中...
+    </div>
+
     <header class="w-full max-w-md text-center py-6">
       <h1 class="text-2xl font-bold text-gray-800">アルコールチェッカー</h1>
       <!-- ステップインジケーター -->
@@ -180,7 +207,10 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         />
         <!-- API 保存状態 -->
         <div v-if="isSaving" class="text-center text-sm text-gray-500">
-          サーバーに保存中...
+          保存中...
+        </div>
+        <div v-else-if="saveStatus === 'queued'" class="text-center text-sm text-amber-600">
+          オフラインのためローカルに保存しました (オンライン復帰時に自動送信)
         </div>
         <div v-else-if="saveError" class="text-center text-sm text-red-500">
           保存失敗: {{ saveError }}
