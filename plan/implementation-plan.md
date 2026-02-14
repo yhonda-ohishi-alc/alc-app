@@ -336,34 +336,34 @@ cf-alc-signaling/
 
 ---
 
-## Phase 5b: Web 統合 (API + WebRTC)
+## Phase 5b: Web 統合 (API + WebRTC) ✅
 
 ### 5b-1. API クライアント **[M]**
 
-- [ ] `app/utils/api.ts` — GCP バックエンド API クライアント
-  - 認証トークン管理
+- [x] `app/utils/api.ts` — GCP バックエンド API クライアント
+  - 認証トークン管理 (暫定 X-Tenant-ID ヘッダー)
   - 測定結果送信
   - 乗務員データ取得/同期
   - 顔写真アップロード
 
 ### 5b-2. WebRTC 実装 **[H]**
 
-- [ ] `app/composables/useWebRtc.ts`
-  - `connect(roomId)` — DO シグナリングサーバーに WebSocket 接続
+- [x] `app/composables/useWebRtc.ts`
+  - `connect(signalingUrl, roomId)` — DO シグナリングサーバーに WebSocket 接続
   - `startStreaming(stream)` — カメラ映像の P2P 送信
-  - `onRemoteStream(callback)` — リモート映像受信
+  - `remoteStream` ref — リモート映像受信
   - SDP Offer/Answer 処理
   - ICE Candidate 交換
-  - 再接続ロジック
+  - Keep-alive ping
 
 ### 5b-3. ダッシュボード **[M]**
 
-- [ ] `app/pages/dashboard.vue` — 管理者ダッシュボード
+- [x] `app/pages/dashboard.vue` — 管理者ダッシュボード
   - 測定履歴一覧 (API から取得)
   - フィルタ (日付, 乗務員, 結果)
   - リアルタイム映像プレビュー (WebRTC)
-- [ ] `app/components/MeasurementHistory.vue` — 履歴テーブル
-- [ ] `app/components/RemoteCamera.vue` — リモートカメラビュー
+- [x] `app/components/MeasurementHistory.vue` — 履歴テーブル
+- [x] `app/components/RemoteCamera.vue` — リモートカメラビュー
 
 ### 5b-4. PWA オフライン対応 **[M]**
 
@@ -415,7 +415,7 @@ cf-alc-signaling/
 | **3b** | Web ハードウェア統合 | ✅ 完了 | 1, 2, 3a |
 | **4** | バックエンド API | ✅ 完了 | なし |
 | **5a** | WebRTC シグナリング | ✅ 完了 | なし |
-| **5b** | Web 統合 (API + WebRTC) | 未着手 | 1, 4, 5a |
+| **5b** | Web 統合 (API + WebRTC) | ✅ 完了 | 1, 4, 5a |
 | **6** | 結合テスト + デプロイ | 未着手 | 全て |
 
 ## 並行実装が可能な組み合わせ

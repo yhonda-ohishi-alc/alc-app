@@ -3,6 +3,14 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
+  runtimeConfig: {
+    public: {
+      apiBase: 'http://localhost:3001',
+      signalingUrl: 'http://localhost:8787',
+      tenantId: 'default',
+    },
+  },
+
   modules: [
     '@nuxtjs/tailwindcss',
     '@vite-pwa/nuxt',

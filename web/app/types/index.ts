@@ -66,3 +66,59 @@ export interface FaceRecord {
   descriptor: Float32Array
   updatedAt: number
 }
+
+/** API: 測定結果 (サーバー側) */
+export interface ApiMeasurement {
+  id: string
+  tenant_id: string
+  employee_id: string
+  alcohol_value: number
+  result_type: 'normal' | 'over' | 'error'
+  device_use_count: number
+  face_photo_url?: string
+  measured_at: string
+  created_at: string
+}
+
+/** API: 乗務員 */
+export interface ApiEmployee {
+  id: string
+  tenant_id: string
+  nfc_id: string
+  name: string
+  created_at: string
+}
+
+/** API: 測定結果一覧レスポンス */
+export interface MeasurementsResponse {
+  measurements: ApiMeasurement[]
+  total: number
+  page: number
+  per_page: number
+}
+
+/** API: 測定フィルタ */
+export interface MeasurementFilter {
+  employee_id?: string
+  result_type?: 'normal' | 'over' | 'error'
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+/** シグナリングメッセージ (クライアント → サーバー) */
+export interface SignalingOutMessage {
+  type: 'sdp_offer' | 'sdp_answer' | 'ice_candidate' | 'ping'
+  sdp?: string
+  candidate?: RTCIceCandidateInit
+}
+
+/** シグナリングメッセージ (サーバー → クライアント) */
+export interface SignalingInMessage {
+  type: 'sdp_offer' | 'sdp_answer' | 'ice_candidate' | 'peer_joined' | 'peer_left' | 'error' | 'pong'
+  sdp?: string
+  candidate?: RTCIceCandidateInit
+  role?: 'device' | 'admin'
+  message?: string
+}

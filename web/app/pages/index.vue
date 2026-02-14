@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import type { FaceAuthResult, MeasurementResult } from '~/types'
+import { initApi, saveMeasurement } from '~/utils/api'
 
+const config = useRuntimeConfig()
 const step = ref<'nfc' | 'face_auth' | 'measuring' | 'result'>('nfc')
 const employeeId = ref('')
 const authResult = ref<FaceAuthResult | null>(null)
 const measurementResult = ref<MeasurementResult | null>(null)
 const faceSnapshot = ref<Blob | null>(null)
+
+const saveError = ref<string | null>(null)
+const isSaving = ref(false)
+
+// API 初期化
+onMounted(() => {
+  initApi(config.public.apiBase as string)
+})
 
 // 手動入力フォールバック
 const manualIdInput = ref('')
@@ -36,10 +46,22 @@ function onFaceAuthResult(result: FaceAuthResult) {
   }
 }
 
-// FC-1200 測定結果
-function onMeasurementResult(result: MeasurementResult) {
+// FC-1200 測定結果 → API に保存
+async function onMeasurementResult(result: MeasurementResult) {
   measurementResult.value = result
   step.value = 'result'
+
+  // バックグラウンドで API に保存
+  isSaving.value = true
+  saveError.value = null
+  try {
+    await saveMeasurement(result, faceSnapshot.value || undefined)
+  } catch (e) {
+    saveError.value = e instanceof Error ? e.message : '保存エラー'
+    console.warn('測定結果の保存に失敗:', e)
+  } finally {
+    isSaving.value = false
+  }
 }
 
 // リセット
@@ -51,6 +73,8 @@ function reset() {
   authResult.value = null
   measurementResult.value = null
   faceSnapshot.value = null
+  saveError.value = null
+  isSaving.value = false
 }
 
 const steps = ['NFC', '顔認証', '測定', '結果'] as const
@@ -154,6 +178,13 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
           :face-photo-blob="faceSnapshot"
           @reset="reset"
         />
+        <!-- API 保存状態 -->
+        <div v-if="isSaving" class="text-center text-sm text-gray-500">
+          サーバーに保存中...
+        </div>
+        <div v-else-if="saveError" class="text-center text-sm text-red-500">
+          保存失敗: {{ saveError }}
+        </div>
       </div>
     </main>
 
@@ -169,6 +200,9 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </button>
         <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
           顔登録
+        </NuxtLink>
+        <NuxtLink to="/dashboard" class="text-blue-600 hover:underline text-sm">
+          管理画面
         </NuxtLink>
       </div>
     </footer>
