@@ -8,6 +8,12 @@ export default defineNuxtConfig({
     '@vite-pwa/nuxt',
   ],
 
+  vite: {
+    optimizeDeps: {
+      exclude: ['fc1200-wasm'],
+    },
+  },
+
   pwa: {
     registerType: 'autoUpdate',
     manifest: {

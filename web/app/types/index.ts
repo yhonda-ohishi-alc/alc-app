@@ -27,7 +27,17 @@ export interface NfcErrorEvent {
   error: string
 }
 
+/** NFC ステータスイベント */
+export interface NfcStatusEvent {
+  type: 'status'
+  readers: string[]
+  connected: boolean
+}
+
 export type NfcEvent = NfcReadEvent | NfcErrorEvent
+
+/** NFC WebSocket イベント (全種別) */
+export type NfcWebSocketEvent = NfcReadEvent | NfcErrorEvent | NfcStatusEvent
 
 /** FC-1200 測定状態 */
 export type Fc1200State =
@@ -38,6 +48,17 @@ export type Fc1200State =
   | 'blow_waiting'
   | 'measuring'
   | 'result_received'
+
+/** FC-1200 WASM イベント (feed() が返す JSON 配列の要素) */
+export interface Fc1200Event {
+  type: 'state_changed' | 'measurement_result' | 'error'
+  state?: Fc1200State
+  alcohol_value?: number
+  result_type?: 'normal' | 'over' | 'error'
+  use_count?: number
+  error_code?: string
+  message?: string
+}
 
 /** 顔 embedding レコード */
 export interface FaceRecord {

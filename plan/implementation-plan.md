@@ -31,7 +31,7 @@ Phase 6: 結合テスト + デプロイ
 
 ---
 
-## Phase 1: Web 基盤 + 顔認証 ★最優先
+## Phase 1: Web 基盤 + 顔認証 ✅
 
 **目標**: Nuxt 4 プロジェクトを構築し、顔認証フローを単独で動作させる。
 **ハードウェア依存**: なし (カメラのみ)
@@ -54,31 +54,31 @@ web/
 └── tailwind.config.ts
 ```
 
-- [ ] `npx nuxi init` で Nuxt 4 プロジェクト作成
-- [ ] Tailwind CSS 導入 (`@nuxtjs/tailwindcss`)
-- [ ] PWA 設定 (`@vite-pwa/nuxt`)
-- [ ] TypeScript 型定義 (`app/types/index.ts`)
+- [x] `npx nuxi init` で Nuxt 4 プロジェクト作成
+- [x] Tailwind CSS 導入 (`@nuxtjs/tailwindcss`)
+- [x] PWA 設定 (`@vite-pwa/nuxt`)
+- [x] TypeScript 型定義 (`app/types/index.ts`)
 
 ### 1-2. human.js セットアップ **[M]**
 
-- [ ] `@vladmandic/human` インストール
-- [ ] `app/utils/human-config.ts` — モデル設定
+- [x] `@vladmandic/human` インストール
+- [x] `app/utils/human-config.ts` — モデル設定
   - face detection: blazeface (軽量)
   - face description: embedding 抽出用
   - body/hand/gesture: 無効化 (不要)
-- [ ] `app/composables/useFaceDetection.ts` — human.js 初期化 + 顔検出
+- [x] `app/composables/useFaceDetection.ts` — human.js 初期化 + 顔検出
   - `load()` — モデルロード (初回のみ)
   - `detect(video)` — 顔検出 + embedding 取得
   - `isReady` — ロード状態
 
 ### 1-3. 顔認証コア実装 **[H]**
 
-- [ ] `app/utils/face-db.ts` — IndexedDB による顔 embedding ストレージ
+- [x] `app/utils/face-db.ts` — IndexedDB による顔 embedding ストレージ
   - `saveFaceDescriptor(employeeId, descriptor)` — 登録
   - `getFaceDescriptor(employeeId)` — 取得
   - `getAllDescriptors()` — 全件取得
   - `deleteFaceDescriptor(employeeId)` — 削除
-- [ ] `app/composables/useFaceAuth.ts` — 顔認証ロジック
+- [x] `app/composables/useFaceAuth.ts` — 顔認証ロジック
   - `register(employeeId, video)` — 顔登録 (embedding 保存)
   - `verify(employeeId, video)` — 1:1 照合 (NFC ID → 本人確認)
   - `identify(video)` — 1:N 識別 (NFC なしでの識別)
@@ -87,7 +87,7 @@ web/
 
 ### 1-4. カメラ制御 **[M]**
 
-- [ ] `app/composables/useCamera.ts`
+- [x] `app/composables/useCamera.ts`
   - `start(facingMode)` — カメラ起動 (`getUserMedia`)
   - `stop()` — カメラ停止
   - `takeSnapshot()` — スナップショット撮影 (Canvas → Blob)
@@ -96,42 +96,42 @@ web/
 
 ### 1-5. 顔認証 UI **[M]**
 
-- [ ] `app/components/CameraPreview.vue` — カメラプレビュー + 顔検出オーバーレイ
-- [ ] `app/components/FaceAuth.vue` — 顔認証コンポーネント
+- [x] `app/components/CameraPreview.vue` — カメラプレビュー + 顔検出オーバーレイ
+- [x] `app/components/FaceAuth.vue` — 顔認証コンポーネント
   - 状態表示: 検出中 → 照合中 → 成功/失敗
   - 認証成功時にスナップショット自動撮影
-- [ ] `app/pages/index.vue` — 測定画面 (まず顔認証のみ)
-- [ ] `app/pages/register.vue` — 顔登録画面
+- [x] `app/pages/index.vue` — 測定画面 (まず顔認証のみ)
+- [x] `app/pages/register.vue` — 顔登録画面
 
 ### Milestone 1 チェックポイント
 > ブラウザでカメラ起動 → 顔検出 → 登録 → 認証が動作する
 
 ---
 
-## Phase 2: FC-1200 プロトコル WASM (`fc1200-wasm/`)
+## Phase 2: FC-1200 プロトコル WASM (`fc1200-wasm/`) ✅
 
 **目標**: FC-1200 RS232C プロトコルを Rust で実装し、WASM にコンパイル。
 **注意**: `src/`, `Cargo.toml`, `Cargo.lock` は `.gitignore` 済み (ソース秘匿)
 
 ### 2-1. Rust WASM プロジェクト作成 **[L]**
 
-- [ ] `cargo init --lib fc1200-wasm`
-- [ ] `Cargo.toml` に `wasm-bindgen`, `serde`, `serde_json` 追加
-- [ ] wasm-pack ビルド確認 (`wasm-pack build --target web`)
+- [x] `cargo init --lib fc1200-wasm`
+- [x] `Cargo.toml` に `wasm-bindgen`, `serde`, `serde_json` 追加
+- [x] wasm-pack ビルド確認 (`wasm-pack build --target web`)
 
 ### 2-2. プロトコルパーサー **[M]**
 
-- [ ] `src/commands.rs` — コマンド定義
+- [x] `src/commands.rs` — コマンド定義
   - FC→PC: `RQCN`, `UT`, `MSWM`, `MSBL`, `MSTO`, `MSEN`, `RS`, `RSOV`, `RSERBL`
   - PC→FC: `CNOK`, `CNNG`, `RSOK`, `RSNG`, `RQDD`, `DDOK`, `DT`, `RQUT`, `UTOK`
   - パーサー: CRLF 区切りでバイト列 → コマンド enum に変換
-- [ ] `src/protocol.rs` — シリアライズ/デシリアライズ
+- [x] `src/protocol.rs` — シリアライズ/デシリアライズ
   - `parse(bytes) → Option<Command>` — 受信バイト列のパース
   - `serialize(command) → Vec<u8>` — 送信バイト列の生成
 
 ### 2-3. ステートマシン **[H]**
 
-- [ ] `src/state_machine.rs` — 測定モードのステートマシン
+- [x] `src/state_machine.rs` — 測定モードのステートマシン
   ```
   Idle → WaitingConnection → Connected → WarmingUp
   → BlowWaiting → Measuring → ResultReceived → Idle
@@ -142,7 +142,7 @@ web/
 
 ### 2-4. WASM バインディング **[M]**
 
-- [ ] `src/lib.rs` — wasm-bindgen エントリポイント
+- [x] `src/lib.rs` — wasm-bindgen エントリポイント
   ```rust
   #[wasm_bindgen]
   pub fn create_session() -> Fc1200Session;
@@ -152,8 +152,8 @@ web/
       pub fn state(&self) -> String;
   }
   ```
-- [ ] `wasm-pack build --target web` → `pkg/` 出力
-- [ ] ユニットテスト (Rust 側)
+- [x] `wasm-pack build --target web` → `pkg/` 出力
+- [x] ユニットテスト (Rust 側)
 
 ### Milestone 2 チェックポイント
 > Rust テストで全コマンドのパース + ステートマシン遷移が正しく動作する
@@ -161,54 +161,59 @@ web/
 
 ---
 
-## Phase 3a: Rust NFC ブリッジ (`rust-nfc-bridge/`) ※別リポジトリ
+## Phase 3a: Rust NFC ブリッジ (`rust-nfc-bridge/`) ※別リポジトリ ✅
 
-**目標**: Windows で NFC リーダーの読み取りを仮想シリアルポート経由でブラウザに公開。
+**目標**: NFC リーダーの読み取りを WebSocket 経由でブラウザに公開。
+**変更**: 当初の仮想 COM ポート案から WebSocket (`ws://127.0.0.1:9876`) に変更。PC/SC API で NFC リーダーと通信。
 
 ### 3a-1. Rust プロジェクト作成 **[L]**
 
-- [ ] `cargo init rust-nfc-bridge`
-- [ ] 依存関係: `tokio`, `serialport`, `serde_json`
+- [x] `cargo init rust-nfc-bridge`
+- [x] 依存関係: `tokio`, `pcsc`, `tokio-tungstenite`, `serde_json`
 
 ### 3a-2. NFC リーダー通信 **[M]**
 
-- [ ] `src/nfc/reader.rs` — NFC リーダーとのシリアル通信
+- [x] `src/nfc/reader.rs` — PC/SC API で NFC リーダーと通信
   - リーダー検出 + 接続
-  - カード読み取り (UID / NDEF)
+  - カード読み取り (UID — MIFARE & FeliCa)
   - ポーリングループ
 
-### 3a-3. 仮想シリアルポート公開 **[H]**
+### 3a-3. WebSocket サーバー公開 **[H]**
 
-- [ ] `src/main.rs` — エントリポイント
-  - NFC 読み取り結果を仮想 COM ポートに JSON 出力
-  - `{ "type": "nfc_read", "employee_id": "12345678" }`
-  - `{ "type": "nfc_error", "error": "read_failed" }`
-- [ ] Windows 仮想 COM ポートドライバ対応
+- [x] `src/ws/server.rs` — WebSocket サーバー (ws://127.0.0.1:9876)
+  - NFC 読み取り結果を JSON ブロードキャスト
+  - `{ "type": "nfc_read", "employee_id": "AABBCCDD" }`
+  - `{ "type": "nfc_error", "error": "..." }`
+  - `{ "type": "status", "readers": [...], "connected": true }`
+- [x] `src/events.rs` — NfcEvent enum (serde tag = "type")
+- [x] `src/config.rs` — CLI 設定 (port, polling interval, cooldown)
 
 ### Milestone 3a チェックポイント
 > Windows で NFC カードタッチ → 仮想 COM ポートに JSON 出力される
 
 ---
 
-## Phase 3b: Web ハードウェア統合 (`web/`)
+## Phase 3b: Web ハードウェア統合 (`web/`) ✅
 
 **目標**: NFC + FC-1200 を Web フロントエンドに統合。
+**変更**: NFC は WebSerial ではなく WebSocket で接続 (rust-nfc-bridge が WebSocket サーバー)
 
-### 3b-1. NFC WebSerial 接続 **[M]**
+### 3b-1. NFC WebSocket 接続 **[M]**
 
-- [ ] `app/composables/useNfcSerial.ts`
-  - `connect()` — WebSerial でNFC Bridge の仮想 COM に接続
+- [x] `app/composables/useNfcWebSocket.ts` (**useNfcSerial から変更**)
+  - `connect()` — WebSocket で NFC Bridge (`ws://127.0.0.1:9876`) に接続
   - `disconnect()` — 切断
   - `onRead(callback)` — NFC 読み取りイベント
   - `isConnected` — 接続状態
-- [ ] `app/components/NfcStatus.vue` — NFC 接続状態 + 読み取り結果表示
+  - 自動再接続 (3秒間隔, 最大10回)
+- [x] `app/components/NfcStatus.vue` — NFC 接続状態 + 読み取り結果表示
 
 ### 3b-2. FC-1200 WebSerial + WASM 接続 **[H]**
 
-- [ ] `app/utils/fc1200.ts` — WASM 初期化ラッパー
-  - `init()` — WASM ロード
-  - `createSession()` — セッション作成
-- [ ] `app/composables/useFc1200Serial.ts`
+- [x] `app/utils/fc1200.ts` — WASM 初期化ラッパー
+  - `initFc1200Wasm()` — WASM ロード (動的インポート, SSR 安全)
+  - `createFc1200Session()` — セッション作成
+- [x] `app/composables/useFc1200Serial.ts`
   - `connect(baudRate: 9600)` — WebSerial で FC-1200 に直接接続
   - `disconnect()` — 切断
   - `startMeasurement()` — 測定開始 (WASM ステートマシン駆動)
@@ -216,16 +221,16 @@ web/
   - `result` — 測定結果 ref
   - 受信ループ: `reader.read()` → `session.feed(data)` → イベント処理
   - 送信: `session.get_response()` → `writer.write(bytes)`
-- [ ] `app/components/AlcMeasurement.vue` — 測定状態 + 結果表示
+- [x] `app/components/AlcMeasurement.vue` — 測定状態 + 結果表示
   - ウォームアップ中 / 吹きかけ待ち / 測定中 / 結果表示
 
 ### 3b-3. 測定フロー統合 **[H]**
 
-- [ ] `app/pages/index.vue` を更新 — 全フロー統合
+- [x] `app/pages/index.vue` を更新 — 全フロー統合
   ```
   NFC タッチ → 顔認証 → FC-1200 測定 → 結果表示
   ```
-- [ ] `app/components/ResultCard.vue` — 測定結果カード
+- [x] `app/components/ResultCard.vue` — 測定結果カード
   - 顔写真 + アルコール値 + NFC ID + タイムスタンプ
 
 ### Milestone 3 チェックポイント
@@ -402,17 +407,16 @@ cf-alc-signaling/
 
 ## タスク数サマリー
 
-| Phase | 内容 | タスク数 | 依存 |
-|-------|------|---------|------|
-| **1** | Web 基盤 + 顔認証 | 15 | なし |
-| **2** | FC-1200 WASM | 8 | なし |
-| **3a** | Rust NFC ブリッジ | 5 | なし |
-| **3b** | Web ハードウェア統合 | 7 | 1, 2, 3a |
-| **4** | バックエンド API | 10 | なし |
-| **5a** | WebRTC シグナリング | 4 | なし |
-| **5b** | Web 統合 (API + WebRTC) | 8 | 1, 4, 5a |
-| **6** | 結合テスト + デプロイ | 6 | 全て |
-| | **合計** | **63** | |
+| Phase | 内容 | 状態 | 依存 |
+|-------|------|------|------|
+| **1** | Web 基盤 + 顔認証 | ✅ 完了 | なし |
+| **2** | FC-1200 WASM | ✅ 完了 | なし |
+| **3a** | Rust NFC ブリッジ | ✅ 完了 | なし |
+| **3b** | Web ハードウェア統合 | ✅ 完了 (未コミット) | 1, 2, 3a |
+| **4** | バックエンド API | 未着手 | なし |
+| **5a** | WebRTC シグナリング | 未着手 | なし |
+| **5b** | Web 統合 (API + WebRTC) | 未着手 | 1, 4, 5a |
+| **6** | 結合テスト + デプロイ | 未着手 | 全て |
 
 ## 並行実装が可能な組み合わせ
 
