@@ -1,26 +1,75 @@
-# web
+# Nuxt Minimal Starter
 
-アルコールチェッカーシステムの Web フロントエンド。Cloudflare Pages にデプロイ。
+Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
 
-## 技術スタック
+## Setup
 
-- Nuxt 4 + PWA (`@vite-pwa/nuxt`)
-- `@vladmandic/human` - 顔認証
-- WebRTC (`getUserMedia`) - カメラ
-- WebSerial API - NFC Bridge / FC-1200 接続
-- Tailwind CSS
-
-## 主な機能
-
-- NFC カード読み取り (Rust NFC Bridge 経由)
-- 顔認証による本人確認 (human.js)
-- FC-1200 アルコール測定 (WASM プロトコル処理)
-- WebRTC リアルタイム映像 (CF Durable Objects シグナリング)
-- 管理者ダッシュボード
-- PWA オフライン対応
-
-## デプロイ
+Make sure to install dependencies:
 
 ```bash
-npx wrangler pages deploy
+# npm
+npm install
+
+# pnpm
+pnpm install
+
+# yarn
+yarn install
+
+# bun
+bun install
 ```
+
+## Development Server
+
+Start the development server on `http://localhost:3000`:
+
+```bash
+# npm
+npm run dev
+
+# pnpm
+pnpm dev
+
+# yarn
+yarn dev
+
+# bun
+bun run dev
+```
+
+## Production
+
+Build the application for production:
+
+```bash
+# npm
+npm run build
+
+# pnpm
+pnpm build
+
+# yarn
+yarn build
+
+# bun
+bun run build
+```
+
+Locally preview production build:
+
+```bash
+# npm
+npm run preview
+
+# pnpm
+pnpm preview
+
+# yarn
+yarn preview
+
+# bun
+bun run preview
+```
+
+Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
