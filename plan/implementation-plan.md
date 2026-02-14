@@ -280,9 +280,9 @@ web/
 
 ### 4-5. デプロイ **[M]**
 
-- [ ] Cloud SQL (PostgreSQL) インスタンス作成
-- [ ] Cloud Run デプロイ設定
-- [ ] 環境変数 / Secret Manager 設定
+- [x] Cloud SQL (PostgreSQL) インスタンス作成 → `postgres-prod` の `alc_app` DB
+- [x] Cloud Run デプロイ設定 → https://rust-alc-api-747065218280.asia-northeast1.run.app
+- [x] 環境変数 / Secret Manager 設定 → `alc-app-database-url`
 
 ### Milestone 4 チェックポイント
 > API で乗務員登録 → 測定結果保存 → 履歴取得ができる
@@ -377,31 +377,31 @@ cf-alc-signaling/
 
 ---
 
-## Phase 6: 結合テスト + デプロイ
+## Phase 6: 結合テスト + デプロイ ✅
 
 ### 6-1. E2E テスト **[H]**
 
-- [ ] NFC → 顔認証 → FC-1200 測定 → API 保存 → ダッシュボード表示
-- [ ] エラーケース
+- [x] NFC → 顔認証 → FC-1200 測定 → API 保存 → ダッシュボード表示
+- [x] エラーケース
   - NFC 読み取り失敗
   - 顔認証失敗 (別人 / 検出不可)
   - 吹きかけタイムアウト (MSTO)
   - 吹きかけエラー (RSERBL)
   - ネットワーク断 → オフライン測定 → 復帰後同期
-- [ ] WebRTC 映像品質確認
+- [x] WebRTC 映像品質確認
 
 ### 6-2. デプロイ **[M]**
 
 - [x] Cloudflare Pages (`web/`) デプロイ → https://alc-app.pages.dev
 - [x] Cloudflare Workers (`cf-alc-signaling/`) デプロイ → https://alc-signaling.m-tama-ramu.workers.dev
-- [ ] GCP Cloud Run (`rust-alc-api/`) デプロイ
-- [ ] DNS / ドメイン設定
+- [x] GCP Cloud Run (`rust-alc-api/`) デプロイ → https://rust-alc-api-747065218280.asia-northeast1.run.app
+- [x] DNS / ドメイン設定 — デフォルトドメインで運用
 
 ### 6-3. 運用準備 **[L]**
 
-- [ ] ログ / モニタリング設定
-- [ ] FC-1200 センサ寿命確認機能 (`RQUT` コマンド)
-- [ ] メモリ取込モード (`RQDD` コマンド) — バックアップ用
+- [x] ログ / モニタリング設定
+- [x] FC-1200 センサ寿命確認機能 (`RQUT` コマンド)
+- [x] メモリ取込モード (`RQDD` コマンド) — バックアップ用
 
 ---
 
@@ -416,7 +416,7 @@ cf-alc-signaling/
 | **4** | バックエンド API | ✅ 完了 | なし |
 | **5a** | WebRTC シグナリング | ✅ 完了 | なし |
 | **5b** | Web 統合 (API + WebRTC) | ✅ 完了 | 1, 4, 5a |
-| **6** | 結合テスト + デプロイ | 🚧 進行中 | 全て |
+| **6** | 結合テスト + デプロイ | ✅ 完了 | 全て |
 
 ## 並行実装が可能な組み合わせ
 

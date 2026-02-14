@@ -234,6 +234,9 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         <NuxtLink to="/dashboard" class="text-blue-600 hover:underline text-sm">
           管理画面
         </NuxtLink>
+        <NuxtLink to="/maintenance" class="text-blue-600 hover:underline text-sm">
+          メンテナンス
+        </NuxtLink>
       </div>
     </footer>
   </div>

@@ -51,13 +51,34 @@ export type Fc1200State =
 
 /** FC-1200 WASM イベント (feed() が返す JSON 配列の要素) */
 export interface Fc1200Event {
-  type: 'state_changed' | 'measurement_result' | 'error'
+  type: 'state_changed' | 'measurement_result' | 'usage_time' | 'memory_data' | 'date_update_response' | 'error'
   state?: Fc1200State
   alcohol_value?: number
   result_type?: 'normal' | 'over' | 'error'
   use_count?: number
   error_code?: string
   message?: string
+  // usage_time (RQUT)
+  total_seconds?: number
+  elapsed_days?: number
+  // memory_data (RQDD)
+  id?: string
+  datetime?: string
+  // date_update_response
+  success?: boolean
+}
+
+/** FC-1200 センサ寿命情報 */
+export interface SensorLifetime {
+  totalSeconds: number
+  elapsedDays: number
+}
+
+/** FC-1200 メモリデータ */
+export interface MemoryRecord {
+  id: string
+  datetime: string
+  alcoholValue: number
 }
 
 /** 顔 embedding レコード */

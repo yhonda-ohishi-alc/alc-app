@@ -1,4 +1,4 @@
-import type { Fc1200State, Fc1200Event, MeasurementResult } from '~/types'
+import type { Fc1200State, Fc1200Event, MeasurementResult, SensorLifetime, MemoryRecord } from '~/types'
 import type { Fc1200WasmSession } from 'fc1200-wasm'
 import { initFc1200Wasm, createFc1200Session } from '~/utils/fc1200'
 
@@ -16,6 +16,9 @@ export function useFc1200Serial() {
   const state = ref<Fc1200State>('idle')
   const error = ref<string | null>(null)
   const result = ref<MeasurementResult | null>(null)
+  const sensorLifetime = ref<SensorLifetime | null>(null)
+  const memoryRecords = ref<MemoryRecord[]>([])
+  const dateUpdateSuccess = ref<boolean | null>(null)
 
   let port: SerialPort | null = null
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -123,6 +126,27 @@ export function useFc1200Serial() {
         }
         break
 
+      case 'usage_time':
+        sensorLifetime.value = {
+          totalSeconds: event.total_seconds ?? 0,
+          elapsedDays: event.elapsed_days ?? 0,
+        }
+        break
+
+      case 'memory_data':
+        if (event.id && event.datetime && event.alcohol_value !== undefined) {
+          memoryRecords.value.push({
+            id: event.id,
+            datetime: event.datetime,
+            alcoholValue: event.alcohol_value,
+          })
+        }
+        break
+
+      case 'date_update_response':
+        dateUpdateSuccess.value = event.success ?? false
+        break
+
       case 'error':
         error.value = getErrorMessage(event.error_code, event.message)
         break
@@ -160,6 +184,62 @@ export function useFc1200Serial() {
     await sendPendingResponse()
   }
 
+  /** センサ寿命確認 (RQUT) */
+  async function checkSensorLifetime(): Promise<void> {
+    if (!session || !isConnected.value) {
+      error.value = 'FC-1200 が接続されていません'
+      return
+    }
+    error.value = null
+    sensorLifetime.value = null
+    session.check_sensor_lifetime()
+    await sendPendingResponse()
+  }
+
+  /** メモリ取込開始 (RQDD) */
+  async function startMemoryRead(): Promise<void> {
+    if (!session || !isConnected.value) {
+      error.value = 'FC-1200 が接続されていません'
+      return
+    }
+    error.value = null
+    memoryRecords.value = []
+    session.start_memory_read()
+    await sendPendingResponse()
+  }
+
+  /** メモリ取込完了 (DDOK — デバイスメモリクリア) */
+  async function completeMemoryRead(): Promise<void> {
+    if (!session || !isConnected.value) {
+      error.value = 'FC-1200 が接続されていません'
+      return
+    }
+    session.complete_memory_read()
+    await sendPendingResponse()
+  }
+
+  /** デバイス日時更新 (DT) */
+  async function updateDeviceDate(datetime?: string): Promise<void> {
+    if (!session || !isConnected.value) {
+      error.value = 'FC-1200 が接続されていません'
+      return
+    }
+    error.value = null
+    dateUpdateSuccess.value = null
+    const dt = datetime ?? formatDateForDevice(new Date())
+    session.update_date(dt)
+    await sendPendingResponse()
+  }
+
+  function formatDateForDevice(date: Date): string {
+    const yy = String(date.getFullYear()).slice(2)
+    const mm = String(date.getMonth() + 1).padStart(2, '0')
+    const dd = String(date.getDate()).padStart(2, '0')
+    const hh = String(date.getHours()).padStart(2, '0')
+    const mi = String(date.getMinutes()).padStart(2, '0')
+    return `${yy}${mm}${dd}${hh}${mi}`
+  }
+
   function resetSession(): void {
     if (session) {
       session.reset()
@@ -167,6 +247,9 @@ export function useFc1200Serial() {
     }
     result.value = null
     error.value = null
+    sensorLifetime.value = null
+    memoryRecords.value = []
+    dateUpdateSuccess.value = null
   }
 
   async function disconnect(): Promise<void> {
@@ -210,10 +293,17 @@ export function useFc1200Serial() {
     state: readonly(state),
     error: readonly(error),
     result: readonly(result),
+    sensorLifetime: readonly(sensorLifetime),
+    memoryRecords: readonly(memoryRecords),
+    dateUpdateSuccess: readonly(dateUpdateSuccess),
     isWebSerialSupported,
     connect,
     disconnect,
     startMeasurement,
     resetSession,
+    checkSensorLifetime,
+    startMemoryRead,
+    completeMemoryRead,
+    updateDeviceDate,
   }
 }
