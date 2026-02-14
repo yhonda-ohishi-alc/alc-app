@@ -238,43 +238,43 @@ web/
 
 ---
 
-## Phase 4: バックエンド API (`rust-alc-api/`) ※別リポジトリ
+## Phase 4: バックエンド API (`rust-alc-api/`) ※別リポジトリ ✅
 
 **目標**: 測定結果の永続化 + マルチテナント対応 API。
 
 ### 4-1. Rust Axum プロジェクト作成 **[L]**
 
-- [ ] `cargo init rust-alc-api`
-- [ ] 依存関係: `axum`, `tokio`, `sqlx`, `serde`, `tower-http`
-- [ ] `Dockerfile` (Cloud Run 用)
+- [x] `cargo init rust-alc-api`
+- [x] 依存関係: `axum`, `tokio`, `sqlx`, `serde`, `tower-http`
+- [x] `Dockerfile` (Cloud Run 用)
 
 ### 4-2. PostgreSQL スキーマ + RLS **[M]**
 
-- [ ] `migrations/001_create_tables.sql`
+- [x] `migrations/001_create_tables.sql`
   - `tenants` — 事業所テーブル
   - `employees` — 乗務員テーブル (NFC ID, 顔 embedding)
   - `measurements` — 測定結果テーブル
-- [ ] `migrations/002_enable_rls.sql`
+- [x] `migrations/002_enable_rls.sql`
   - RLS ポリシー (tenant_id ベースのアイソレーション)
   - `current_setting('app.current_tenant_id')` で制御
 
 ### 4-3. API エンドポイント実装 **[H]**
 
-- [ ] `src/db/pool.rs` — SQLx 接続プール
-- [ ] `src/middleware/auth.rs` — 認証 + RLS セッション設定
-- [ ] `src/routes/measurements.rs`
+- [x] `src/db/pool.rs` — SQLx 接続プール
+- [x] `src/middleware/auth.rs` — 認証 + RLS セッション設定
+- [x] `src/routes/measurements.rs`
   - `POST /api/measurements` — 測定結果保存
   - `GET /api/measurements` — 履歴一覧 (フィルタ対応)
   - `GET /api/measurements/:id` — 詳細
-- [ ] `src/routes/employees.rs`
+- [x] `src/routes/employees.rs`
   - `POST /api/employees` — 乗務員登録
   - `GET /api/employees` — 一覧
   - `PUT /api/employees/:id/face` — 顔データ更新
-- [ ] `src/routes/auth.rs` — 認証 API
+- [x] `src/routes/auth.rs` — 認証 API
 
 ### 4-4. Cloud Storage 連携 **[M]**
 
-- [ ] `POST /api/upload/face-photo` — 顔写真アップロード
+- [x] `POST /api/upload/face-photo` — 顔写真アップロード
   - GCP Cloud Storage に保存
   - Signed URL 発行
 
@@ -412,8 +412,8 @@ cf-alc-signaling/
 | **1** | Web 基盤 + 顔認証 | ✅ 完了 | なし |
 | **2** | FC-1200 WASM | ✅ 完了 | なし |
 | **3a** | Rust NFC ブリッジ | ✅ 完了 | なし |
-| **3b** | Web ハードウェア統合 | ✅ 完了 (未コミット) | 1, 2, 3a |
-| **4** | バックエンド API | 未着手 | なし |
+| **3b** | Web ハードウェア統合 | ✅ 完了 | 1, 2, 3a |
+| **4** | バックエンド API | ✅ 完了 | なし |
 | **5a** | WebRTC シグナリング | 未着手 | なし |
 | **5b** | Web 統合 (API + WebRTC) | 未着手 | 1, 4, 5a |
 | **6** | 結合テスト + デプロイ | 未着手 | 全て |
