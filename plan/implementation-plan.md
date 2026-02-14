@@ -328,7 +328,7 @@ cf-alc-signaling/
 
 ### 5a-3. デプロイ **[L]**
 
-- [ ] `npx wrangler deploy`
+- [x] `npx wrangler deploy` → https://alc-signaling.m-tama-ramu.workers.dev
 - [ ] 動作確認 (WebSocket 接続テスト)
 
 ### Milestone 5a チェックポイント
@@ -392,8 +392,8 @@ cf-alc-signaling/
 
 ### 6-2. デプロイ **[M]**
 
-- [ ] Cloudflare Pages (`web/`) デプロイ設定
-- [ ] Cloudflare Workers (`cf-alc-signaling/`) デプロイ
+- [x] Cloudflare Pages (`web/`) デプロイ → https://alc-app.pages.dev
+- [x] Cloudflare Workers (`cf-alc-signaling/`) デプロイ → https://alc-signaling.m-tama-ramu.workers.dev
 - [ ] GCP Cloud Run (`rust-alc-api/`) デプロイ
 - [ ] DNS / ドメイン設定
 
@@ -416,7 +416,7 @@ cf-alc-signaling/
 | **4** | バックエンド API | ✅ 完了 | なし |
 | **5a** | WebRTC シグナリング | ✅ 完了 | なし |
 | **5b** | Web 統合 (API + WebRTC) | ✅ 完了 | 1, 4, 5a |
-| **6** | 結合テスト + デプロイ | 未着手 | 全て |
+| **6** | 結合テスト + デプロイ | 🚧 進行中 | 全て |
 
 ## 並行実装が可能な組み合わせ
 

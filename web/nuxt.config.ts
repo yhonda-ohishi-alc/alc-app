@@ -11,6 +11,10 @@ export default defineNuxtConfig({
     },
   },
 
+  nitro: {
+    preset: 'cloudflare_pages',
+  },
+
   modules: [
     '@nuxtjs/tailwindcss',
     '@vite-pwa/nuxt',
