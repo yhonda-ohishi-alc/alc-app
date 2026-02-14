@@ -1,0 +1,32 @@
+#!/bin/bash
+# 機密ファイルのコミットを防止する pre-commit hook
+
+BLOCKED_PATTERNS=(
+  "docs/.*\.pdf"
+  "fc1200-wasm/src/"
+  "fc1200-wasm/Cargo\.toml"
+  "fc1200-wasm/Cargo\.lock"
+)
+
+staged_files=$(git diff --cached --name-only)
+blocked=()
+
+for file in $staged_files; do
+  for pattern in "${BLOCKED_PATTERNS[@]}"; do
+    if echo "$file" | grep -qE "^${pattern}"; then
+      blocked+=("$file")
+    fi
+  done
+done
+
+if [ ${#blocked[@]} -gt 0 ]; then
+  echo "❌ コミット拒否: 機密ファイルが含まれています"
+  echo ""
+  for f in "${blocked[@]}"; do
+    echo "  - $f"
+  done
+  echo ""
+  echo "これらのファイルは public リポジトリにコミットできません。"
+  echo "git reset HEAD <file> でステージングを解除してください。"
+  exit 1
+fi

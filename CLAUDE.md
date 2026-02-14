@@ -2,13 +2,15 @@
 
 業務用アルコール検知システム。タニタ FC-1200 + NFC + 顔認証による本人確認付きアルコール測定。
 
+**リポジトリ**: https://github.com/yhonda-ohishi-alc/alc-app (public)
+
 ## プロジェクト構成
 
 | フォルダ | 説明 | リポジトリ |
 |---------|------|----------|
 | `web/` | Nuxt 4 PWA フロントエンド (Cloudflare Pages) | このリポジトリ |
 | `fc1200-wasm/` | FC-1200 RS232C プロトコル WASM (ソース秘匿) | このリポジトリ |
-| `cf-signaling/` | WebRTC シグナリング (Cloudflare Durable Objects + Hibernatable WS) | このリポジトリ |
+| `cf-alc-signaling/` | WebRTC シグナリング (Cloudflare Durable Objects + Hibernatable WS) | このリポジトリ |
 | `rust-nfc-bridge/` | NFC リーダー → 仮想シリアルポート (Windows) | 別リポジトリ |
 | `rust-alc-api/` | バックエンド API (GCP Cloud Run + PostgreSQL RLS) | 別リポジトリ |
 | `plan/` | 実装計画ドキュメント | このリポジトリ |
@@ -26,7 +28,8 @@
 
 ## 重要な注意事項
 
-- `docs/` 内の FC-1200 通信仕様は **Tanita Confidential** - 取り扱い注意
-- `fc1200-wasm/` は WASM にコンパイルしてプロトコル実装を秘匿すること
+- **リポジトリは public** — 機密情報のコミットに注意
+- `docs/*.pdf` (FC-1200 通信仕様 = **Tanita Confidential**) は `.gitignore` 済み — **絶対にコミットしない**
+- `fc1200-wasm/src/`, `Cargo.toml`, `Cargo.lock` は `.gitignore` 済み — WASM にコンパイルしてプロトコル実装を秘匿
 - `rust-nfc-bridge/` と `rust-alc-api/` は `.gitignore` 済み (別リポジトリ管理)
 - Durable Objects の WebRTC 実装は **Hibernatable WebSockets API** が必須
