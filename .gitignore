@@ -9,3 +9,5 @@ docs/*.pdf
 fc1200-wasm/src/
 fc1200-wasm/Cargo.toml
 fc1200-wasm/Cargo.lock
+fc1200-wasm/tests/
+fc1200-wasm/target/
