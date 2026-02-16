@@ -124,18 +124,30 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
     <header class="w-full max-w-md text-center py-6">
       <h1 class="text-2xl font-bold text-gray-800">アルコールチェッカー</h1>
       <!-- ステップインジケーター -->
-      <div class="flex justify-center gap-2 mt-3">
-        <span
-          v-for="(s, i) in steps"
-          :key="i"
-          class="px-2 py-1 rounded-full text-xs font-medium"
-          :class="{
-            'bg-blue-600 text-white': i === currentStepIndex,
-            'bg-gray-200 text-gray-500': i !== currentStepIndex,
-          }"
-        >
-          {{ s }}
-        </span>
+      <div class="flex items-center justify-center mt-3">
+        <template v-for="(s, i) in steps" :key="i">
+          <div
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
+            :class="{
+              'bg-blue-600 text-white': i === currentStepIndex,
+              'bg-green-500 text-white': i < currentStepIndex,
+              'bg-gray-200 text-gray-400': i > currentStepIndex,
+            }"
+          >
+            <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {{ s }}
+          </div>
+          <svg
+            v-if="i < steps.length - 1"
+            class="w-4 h-4 mx-1 shrink-0"
+            :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </template>
       </div>
     </header>
 
