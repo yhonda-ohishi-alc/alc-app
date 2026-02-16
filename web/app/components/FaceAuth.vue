@@ -55,6 +55,10 @@ function startLoop() {
         const result = await detect(videoRef.value)
         updateChecks(result)
         drawOverlay(result)
+        if (allChecksPassed.value) {
+          doAuth()
+          return
+        }
       }
       catch { /* ignore frame errors */ }
     }
@@ -247,16 +251,6 @@ function retry() {
     <p v-else-if="status === 'detecting'" class="text-lg font-medium text-gray-600">
       検出中...
     </p>
-
-    <!-- Auth button (enabled only when all checks pass) -->
-    <button
-      v-if="status === 'checking'"
-      :disabled="!allChecksPassed"
-      class="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
-      @click="doAuth"
-    >
-      {{ mode === 'register' ? '顔を登録' : '認証する' }}
-    </button>
 
     <!-- Retry button -->
     <button
