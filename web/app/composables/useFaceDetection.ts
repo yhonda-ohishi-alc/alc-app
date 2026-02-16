@@ -2,11 +2,11 @@ import Human from '@vladmandic/human'
 import { humanConfig } from '~/utils/human-config'
 
 let humanInstance: Human | null = null
+const isReady = ref(false)
+const isLoading = ref(false)
+const error = ref<string | null>(null)
 
 export function useFaceDetection() {
-  const isReady = ref(false)
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
 
   async function load() {
     if (humanInstance && isReady.value) return humanInstance

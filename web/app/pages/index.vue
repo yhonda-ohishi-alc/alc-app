@@ -18,13 +18,11 @@ const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflin
 
 // 認証 + API 初期化
 const { accessToken, deviceTenantId, isDeviceActivated } = useAuth()
-onMounted(() => {
-  initApi(
-    config.public.apiBase as string,
-    () => accessToken.value,
-    () => deviceTenantId.value,
-  )
-})
+initApi(
+  config.public.apiBase as string,
+  () => accessToken.value,
+  () => deviceTenantId.value,
+)
 
 // 手動入力フォールバック
 const manualIdInput = ref('')

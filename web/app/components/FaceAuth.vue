@@ -12,9 +12,11 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load } = useFaceDetection()
 
 const status = ref<'idle' | 'detecting' | 'success' | 'fail'>('idle')
+
+onMounted(() => { load() })
 const similarity = ref(0)
 const videoEl = ref<HTMLVideoElement | null>(null)
 const cameraActive = ref(true)
@@ -79,7 +81,7 @@ const statusColor = computed(() => {
     </p>
 
     <button
-      :disabled="!isReady && !isLoading || status === 'detecting'"
+      :disabled="(!isReady && !isLoading) || status === 'detecting'"
       class="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
       @click="doAuth"
     >

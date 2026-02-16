@@ -5,10 +5,10 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:3001',
-      signalingUrl: 'http://localhost:8787',
-      tenantId: 'default',
-      googleClientId: '',
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3001',
+      signalingUrl: process.env.NUXT_PUBLIC_SIGNALING_URL || 'http://localhost:8787',
+      tenantId: process.env.NUXT_PUBLIC_TENANT_ID || 'default',
+      googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
     },
   },
 
@@ -41,9 +41,7 @@ export default defineNuxtConfig({
       ],
     },
     workbox: {
-      // ナビゲーションリクエストのオフラインフォールバック
-      navigateFallback: '/',
-      navigateFallbackDenylist: [/^\/api\//],
+      navigateFallback: null,
       // ランタイムキャッシュ戦略
       runtimeCaching: [
         {
