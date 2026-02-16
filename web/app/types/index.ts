@@ -128,6 +128,29 @@ export interface MeasurementFilter {
   per_page?: number
 }
 
+/** 認証ユーザー */
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  tenant_id: string
+  role: 'admin' | 'viewer'
+}
+
+/** ログインレスポンス */
+export interface AuthResponse {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  user: AuthUser
+}
+
+/** リフレッシュレスポンス */
+export interface RefreshResponse {
+  access_token: string
+  expires_in: number
+}
+
 /** シグナリングメッセージ (クライアント → サーバー) */
 export interface SignalingOutMessage {
   type: 'sdp_offer' | 'sdp_answer' | 'ice_candidate' | 'ping'

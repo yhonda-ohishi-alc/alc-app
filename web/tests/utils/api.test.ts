@@ -7,7 +7,8 @@ const mockFetch = vi.fn()
 describe('api', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', mockFetch)
-    initApi('https://api.example.com')
+    // キオスクモード: tenant getter でテナントIDを返す
+    initApi('https://api.example.com', undefined, () => 'test-tenant')
     mockFetch.mockReset()
   })
 
@@ -163,6 +164,58 @@ describe('api', () => {
         expect.objectContaining({ method: 'POST' }),
       )
       expect(result.name).toBe('鈴木一郎')
+    })
+  })
+
+  describe('authentication headers', () => {
+    it('should send Authorization header when JWT is available', async () => {
+      initApi('https://api.example.com', () => 'jwt-token-123', () => 'test-tenant')
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      })
+
+      await getEmployees()
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/employees',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer jwt-token-123',
+          }),
+        }),
+      )
+      // JWT 優先のため X-Tenant-ID は送信されない
+      const headers = mockFetch.mock.calls[0][1].headers
+      expect(headers['X-Tenant-ID']).toBeUndefined()
+    })
+
+    it('should fall back to X-Tenant-ID when no JWT is available', async () => {
+      initApi('https://api.example.com', () => null, () => 'kiosk-tenant-id')
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      })
+
+      await getEmployees()
+
+      const headers = mockFetch.mock.calls[0][1].headers
+      expect(headers['X-Tenant-ID']).toBe('kiosk-tenant-id')
+      expect(headers['Authorization']).toBeUndefined()
+    })
+
+    it('should send no auth headers when both getters return null', async () => {
+      initApi('https://api.example.com', () => null, () => null)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      })
+
+      await getEmployees()
+
+      const headers = mockFetch.mock.calls[0][1].headers
+      expect(headers['X-Tenant-ID']).toBeUndefined()
+      expect(headers['Authorization']).toBeUndefined()
     })
   })
 

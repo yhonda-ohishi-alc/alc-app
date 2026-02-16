@@ -8,6 +8,7 @@ export default defineNuxtConfig({
       apiBase: 'http://localhost:3001',
       signalingUrl: 'http://localhost:8787',
       tenantId: 'default',
+      googleClientId: '',
     },
   },
 

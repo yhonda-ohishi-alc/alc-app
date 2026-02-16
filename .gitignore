@@ -15,3 +15,6 @@ fc1200-wasm/Cargo.toml
 fc1200-wasm/Cargo.lock
 fc1200-wasm/tests/
 fc1200-wasm/target/
+
+# Rust ビルド成果物
+target/

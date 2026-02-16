@@ -3,9 +3,14 @@ import { initApi } from '~/utils/api'
 
 const config = useRuntimeConfig()
 
-// API 初期化
+// 認証 + API 初期化
+const { accessToken, deviceTenantId, user, logout: authLogout } = useAuth()
 onMounted(() => {
-  initApi(config.public.apiBase as string)
+  initApi(
+    config.public.apiBase as string,
+    () => accessToken.value,
+    () => deviceTenantId.value,
+  )
 })
 
 // WebRTC (admin として接続)
@@ -35,9 +40,18 @@ const activeTab = ref<'history' | 'camera'>('history')
     <header class="bg-white shadow-sm">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
         <h1 class="text-xl font-bold text-gray-800">管理者ダッシュボード</h1>
-        <NuxtLink to="/" class="text-blue-600 hover:underline text-sm">
-          測定画面へ
-        </NuxtLink>
+        <div class="flex items-center gap-4">
+          <span v-if="user" class="text-sm text-gray-500">{{ user.email }}</span>
+          <button
+            class="text-sm text-red-600 hover:underline"
+            @click="authLogout().then(() => navigateTo('/login'))"
+          >
+            ログアウト
+          </button>
+          <NuxtLink to="/" class="text-blue-600 hover:underline text-sm">
+            測定画面へ
+          </NuxtLink>
+        </div>
       </div>
     </header>
 

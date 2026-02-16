@@ -1,18 +1,45 @@
 import type { ApiMeasurement, ApiEmployee, MeasurementsResponse, MeasurementFilter, MeasurementResult } from '~/types'
 
 let apiBase = ''
+let getAccessToken: (() => string | null) | null = null
+let getDeviceTenantId: (() => string | null) | null = null
 
-export function initApi(baseUrl: string) {
+export function initApi(
+  baseUrl: string,
+  tokenGetter?: () => string | null,
+  tenantGetter?: () => string | null,
+) {
   apiBase = baseUrl.replace(/\/$/, '')
+  getAccessToken = tokenGetter || null
+  getDeviceTenantId = tenantGetter || null
+}
+
+/** 認証ヘッダーを構築 */
+function buildAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {}
+
+  // JWT 優先
+  const token = getAccessToken?.()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+    return headers
+  }
+
+  // フォールバック: キオスクモード (X-Tenant-ID)
+  const tenantId = getDeviceTenantId?.()
+  if (tenantId) {
+    headers['X-Tenant-ID'] = tenantId
+  }
+
+  return headers
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!apiBase) throw new Error('API 未初期化: initApi() を呼んでください')
 
-  const config = useRuntimeConfig()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Tenant-ID': config.public.tenantId as string || 'default',
+    ...buildAuthHeaders(),
     ...(options.headers as Record<string, string> || {}),
   }
 
@@ -84,12 +111,10 @@ export async function uploadFacePhoto(blob: Blob): Promise<string> {
 
   if (!apiBase) throw new Error('API 未初期化')
 
-  const config = useRuntimeConfig()
+  const authHeaders = buildAuthHeaders()
   const res = await fetch(`${apiBase}/api/upload/face-photo`, {
     method: 'POST',
-    headers: {
-      'X-Tenant-ID': config.public.tenantId as string || 'default',
-    },
+    headers: authHeaders,
     body: formData,
   })
 

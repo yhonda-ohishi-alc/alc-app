@@ -16,9 +16,14 @@ const saveStatus = ref<'saved' | 'queued' | null>(null)
 // オフライン同期
 const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflineSync()
 
-// API 初期化
+// 認証 + API 初期化
+const { accessToken, deviceTenantId, isDeviceActivated } = useAuth()
 onMounted(() => {
-  initApi(config.public.apiBase as string)
+  initApi(
+    config.public.apiBase as string,
+    () => accessToken.value,
+    () => deviceTenantId.value,
+  )
 })
 
 // 手動入力フォールバック
@@ -89,6 +94,13 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 
 <template>
   <div class="flex flex-col items-center min-h-screen p-4">
+    <!-- 端末未アクティベート警告 -->
+    <div
+      v-if="!isDeviceActivated"
+      class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
+    >
+      端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
+    </div>
     <!-- オフラインバナー -->
     <div
       v-if="!isOnline"

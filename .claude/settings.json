@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(npx nuxt build:*)",
+      "Bash(rustup target list:*)",
+      "Bash(wasm-pack build:*)",
+      "Bash(cargo init:*)",
+      "Bash(cargo test:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx vitest run:*)"
+    ]
+  }
+}

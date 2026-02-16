@@ -16,7 +16,9 @@ const {
   updateDeviceDate,
 } = useFc1200Serial()
 
+const { deactivateDevice, isDeviceActivated, deviceTenantId } = useAuth()
 const isMemoryReading = ref(false)
+const showDeactivateConfirm = ref(false)
 
 async function handleConnect() {
   await connect()
@@ -196,6 +198,42 @@ function formatSeconds(totalSeconds: number): string {
         </template>
       </template>
     </main>
+
+    <!-- 端末管理 -->
+    <div class="w-full max-w-lg mt-4">
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">端末管理</h2>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-500">テナントID</p>
+            <p class="text-sm font-mono text-gray-700">
+              {{ isDeviceActivated ? deviceTenantId : '未登録' }}
+            </p>
+          </div>
+          <button
+            v-if="isDeviceActivated && !showDeactivateConfirm"
+            class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+            @click="showDeactivateConfirm = true"
+          >
+            端末登録解除
+          </button>
+          <div v-if="showDeactivateConfirm" class="flex gap-2">
+            <button
+              class="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+              @click="deactivateDevice(); showDeactivateConfirm = false"
+            >
+              解除する
+            </button>
+            <button
+              class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"
+              @click="showDeactivateConfirm = false"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ナビゲーション -->
     <footer class="w-full max-w-lg py-4">

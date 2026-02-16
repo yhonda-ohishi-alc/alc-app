@@ -40,8 +40,20 @@ Object.assign(globalThis, {
     apiBase: 'http://localhost:3001',
     signalingUrl: 'http://localhost:8787',
     tenantId: 'test-tenant',
+    googleClientId: 'test-google-client-id',
   },
 })
 
 // Mock import.meta.client (Nuxt SSR guard)
 ;(import.meta as any).client = true
+
+// Mock navigateTo (Nuxt auto-import)
+;(globalThis as any).navigateTo = () => Promise.resolve()
+
+// Mock useNuxtApp (Nuxt auto-import)
+;(globalThis as any).useNuxtApp = () => ({
+  $googleAuthReady: Promise.resolve(false),
+})
+
+// Mock defineNuxtRouteMiddleware (Nuxt auto-import)
+;(globalThis as any).defineNuxtRouteMiddleware = (fn: any) => fn
