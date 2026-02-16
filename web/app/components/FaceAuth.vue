@@ -12,40 +12,170 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect } = useFaceDetection()
+const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = useCamera()
 
-const status = ref<'idle' | 'detecting' | 'success' | 'fail'>('idle')
-
-onMounted(() => { load() })
+const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
-const videoEl = ref<HTMLVideoElement | null>(null)
-const cameraActive = ref(true)
+const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 
-function onCameraReady(video: HTMLVideoElement) {
-  videoEl.value = video
+// --- Face detection checks ---
+const checks = reactive({
+  faceCount: { label: '顔検出', status: false, val: '' },
+  faceConfidence: { label: '信頼度', status: false, val: '' },
+  faceSize: { label: '顔サイズ', status: false, val: '' },
+  facingCenter: { label: '正面向き', status: false, val: '' },
+  lookingCenter: { label: '視線', status: false, val: '' },
+  descriptor: { label: '特徴量', status: false, val: '' },
+})
+
+const allChecksPassed = computed(() =>
+  Object.values(checks).every(c => c.status),
+)
+
+// --- Detection loop ---
+let animFrameId: number | null = null
+let detecting = false
+
+onMounted(async () => {
+  await start()
+  load()
+  startLoop()
+})
+
+onUnmounted(() => {
+  stopLoop()
+  stop()
+})
+
+function startLoop() {
+  const loop = async () => {
+    if (videoRef.value && isReady.value && !detecting && status.value === 'checking') {
+      detecting = true
+      try {
+        const result = await detect(videoRef.value)
+        updateChecks(result)
+        drawOverlay(result)
+      }
+      catch { /* ignore frame errors */ }
+      detecting = false
+    }
+    animFrameId = requestAnimationFrame(loop)
+  }
+  animFrameId = requestAnimationFrame(loop)
 }
 
-async function doAuth() {
-  if (!videoEl.value) return
+function stopLoop() {
+  if (animFrameId != null) {
+    cancelAnimationFrame(animFrameId)
+    animFrameId = null
+  }
+}
 
+// --- Check evaluation ---
+function updateChecks(result: any) {
+  const faceCount = result.face?.length ?? 0
+  checks.faceCount.status = faceCount === 1
+  checks.faceCount.val = `${faceCount}`
+
+  const face = result.face?.[0]
+  if (!face) {
+    checks.faceConfidence.status = false
+    checks.faceConfidence.val = ''
+    checks.faceSize.status = false
+    checks.faceSize.val = ''
+    checks.facingCenter.status = false
+    checks.facingCenter.val = ''
+    checks.lookingCenter.status = false
+    checks.lookingCenter.val = ''
+    checks.descriptor.status = false
+    checks.descriptor.val = ''
+    return
+  }
+
+  const score = face.score ?? 0
+  checks.faceConfidence.status = score >= 0.5
+  checks.faceConfidence.val = `${(score * 100).toFixed(0)}%`
+
+  const size = Math.max(face.box?.[2] ?? 0, face.box?.[3] ?? 0)
+  checks.faceSize.status = size >= 100
+  checks.faceSize.val = `${size.toFixed(0)}px`
+
+  const gestures: any[] = result.gesture ?? []
+  const facing = gestures.find((g: any) => g.gesture?.startsWith('facing'))
+  checks.facingCenter.status = facing?.gesture === 'facing center'
+  checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
+
+  const looking = gestures.find((g: any) => g.gesture?.startsWith('looking'))
+  checks.lookingCenter.status = looking?.gesture === 'looking center'
+  checks.lookingCenter.val = looking?.gesture?.replace('looking ', '') ?? '-'
+
+  const hasDesc = (face.embedding?.length ?? 0) > 0
+  checks.descriptor.status = hasDesc
+  checks.descriptor.val = hasDesc ? `${face.embedding.length}d` : '-'
+}
+
+// --- Canvas overlay ---
+function drawOverlay(result: any) {
+  const canvas = overlayCanvas.value
+  const video = videoRef.value
+  if (!canvas || !video) return
+
+  const w = video.clientWidth
+  const h = video.clientHeight
+  canvas.width = w
+  canvas.height = h
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0, 0, w, h)
+
+  const face = result.face?.[0]
+  if (!face?.box) return
+
+  const sx = w / (video.videoWidth || w)
+  const sy = h / (video.videoHeight || h)
+  const [bx, by, bw, bh] = face.box
+  const color = allChecksPassed.value ? '#22c55e' : '#ef4444'
+
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.strokeRect(bx * sx, by * sy, bw * sx, bh * sy)
+
+  if (face.mesh) {
+    ctx.fillStyle = color + '40'
+    for (const pt of face.mesh) {
+      ctx.beginPath()
+      ctx.arc(pt[0] * sx, pt[1] * sy, 1, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}
+
+// --- Auth action ---
+async function doAuth() {
+  if (!videoRef.value) return
   status.value = 'detecting'
+  stopLoop()
 
   try {
     if (props.mode === 'register') {
-      const ok = await register(props.employeeId, videoEl.value)
-      if (ok) {
+      const ok = await register(props.employeeId, videoRef.value)
+      status.value = ok ? 'success' : 'fail'
+      if (ok) emit('registered')
+    }
+    else {
+      const result = await verify(props.employeeId, videoRef.value)
+      similarity.value = result.similarity
+      if (result.verified) {
+        const snapshot = await takeSnapshotAsync()
         status.value = 'success'
-        emit('registered')
+        emit('result', { ...result, snapshot: snapshot ?? undefined })
       }
       else {
         status.value = 'fail'
+        emit('result', result)
       }
-    }
-    else {
-      const result = await verify(props.employeeId, videoEl.value)
-      similarity.value = result.similarity
-      status.value = result.verified ? 'success' : 'fail'
-      emit('result', result)
     }
   }
   catch {
@@ -53,39 +183,82 @@ async function doAuth() {
   }
 }
 
-const statusText = computed(() => {
-  if (isLoading.value) return 'モデル読み込み中...'
-  switch (status.value) {
-    case 'idle': return props.mode === 'register' ? '顔を登録してください' : '顔認証を開始してください'
-    case 'detecting': return '検出中...'
-    case 'success': return props.mode === 'register' ? '登録完了' : `認証成功 (${(similarity.value * 100).toFixed(0)}%)`
-    case 'fail': return props.mode === 'register' ? '顔が検出できません' : '認証失敗'
-  }
-})
-
-const statusColor = computed(() => {
-  switch (status.value) {
-    case 'success': return 'text-green-600'
-    case 'fail': return 'text-red-600'
-    default: return 'text-gray-600'
-  }
-})
+function retry() {
+  status.value = 'checking'
+  startLoop()
+}
 </script>
 
 <template>
   <div class="flex flex-col items-center gap-4">
-    <CameraPreview :active="cameraActive" @ready="onCameraReady" />
+    <!-- Camera + canvas overlay -->
+    <div class="relative overflow-hidden rounded-2xl bg-black aspect-[4/3] w-full">
+      <video
+        ref="videoRef"
+        autoplay
+        playsinline
+        muted
+        class="w-full h-full object-cover"
+      />
+      <canvas
+        ref="overlayCanvas"
+        class="absolute inset-0 w-full h-full pointer-events-none"
+      />
+      <div
+        v-if="!isCameraActive"
+        class="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-400"
+      >
+        <span>カメラ待機中...</span>
+      </div>
+      <div
+        v-if="isLoading"
+        class="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded"
+      >
+        モデル読み込み中...
+      </div>
+    </div>
 
-    <p :class="['text-lg font-medium', statusColor]">
-      {{ statusText }}
+    <!-- Check status grid -->
+    <div class="w-full grid grid-cols-2 gap-1.5">
+      <div
+        v-for="(check, key) in checks"
+        :key="key"
+        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+        :class="check.status ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+      >
+        <span class="text-sm leading-none">{{ check.status ? '\u2713' : '\u2717' }}</span>
+        <span class="truncate">{{ check.label }}: {{ check.val || (check.status ? 'ok' : 'fail') }}</span>
+      </div>
+    </div>
+
+    <!-- Status messages -->
+    <p v-if="status === 'success'" class="text-lg font-medium text-green-600">
+      {{ mode === 'register' ? '登録完了' : `認証成功 (${(similarity * 100).toFixed(0)}%)` }}
+    </p>
+    <p v-else-if="status === 'fail'" class="text-lg font-medium text-red-600">
+      {{ mode === 'register' ? '顔が検出できません' : '認証失敗' }}
+    </p>
+    <p v-else-if="status === 'detecting'" class="text-lg font-medium text-gray-600">
+      検出中...
     </p>
 
+    <!-- Auth button (enabled only when all checks pass) -->
     <button
-      :disabled="(!isReady && !isLoading) || status === 'detecting'"
-      class="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+      v-if="status === 'checking'"
+      :disabled="!allChecksPassed"
+      class="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
       @click="doAuth"
     >
-      {{ isLoading ? '読み込み中...' : mode === 'register' ? '顔を登録' : '認証する' }}
+      {{ mode === 'register' ? '顔を登録' : '認証する' }}
+    </button>
+
+    <!-- Retry button -->
+    <button
+      v-if="status === 'fail'"
+      class="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
+      @click="retry"
+    >
+      やり直す
     </button>
 
     <p v-if="modelError" class="text-red-500 text-sm">

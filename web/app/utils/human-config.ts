@@ -34,7 +34,7 @@ export const humanConfig: Partial<Config> = {
 
   body: { enabled: false },
   hand: { enabled: false },
-  gesture: { enabled: false },
+  gesture: { enabled: true },
   object: { enabled: false },
   segmentation: { enabled: false },
 }
