@@ -33,9 +33,8 @@ const allChecksPassed = computed(() =>
   Object.values(checks).every(c => c.status),
 )
 
-// --- Detection loop ---
-let animFrameId: number | null = null
-let detecting = false
+// --- Detection loop (throttled to ~3-5fps) ---
+let loopTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(async () => {
   await start()
@@ -50,25 +49,24 @@ onUnmounted(() => {
 
 function startLoop() {
   const loop = async () => {
-    if (videoRef.value && isReady.value && !detecting && status.value === 'checking') {
-      detecting = true
+    if (status.value !== 'checking') return
+    if (videoRef.value && isReady.value) {
       try {
         const result = await detect(videoRef.value)
         updateChecks(result)
         drawOverlay(result)
       }
       catch { /* ignore frame errors */ }
-      detecting = false
     }
-    animFrameId = requestAnimationFrame(loop)
+    loopTimer = setTimeout(loop, 200)
   }
-  animFrameId = requestAnimationFrame(loop)
+  loop()
 }
 
 function stopLoop() {
-  if (animFrameId != null) {
-    cancelAnimationFrame(animFrameId)
-    animFrameId = null
+  if (loopTimer != null) {
+    clearTimeout(loopTimer)
+    loopTimer = null
   }
 }
 
@@ -116,6 +114,8 @@ function updateChecks(result: any) {
 }
 
 // --- Canvas overlay ---
+let cachedCtx: CanvasRenderingContext2D | null = null
+
 function drawOverlay(result: any) {
   const canvas = overlayCanvas.value
   const video = videoRef.value
@@ -123,10 +123,13 @@ function drawOverlay(result: any) {
 
   const w = video.clientWidth
   const h = video.clientHeight
-  canvas.width = w
-  canvas.height = h
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w
+    canvas.height = h
+    cachedCtx = null
+  }
 
-  const ctx = canvas.getContext('2d')
+  const ctx = cachedCtx ?? (cachedCtx = canvas.getContext('2d'))
   if (!ctx) return
   ctx.clearRect(0, 0, w, h)
 
@@ -138,15 +141,18 @@ function drawOverlay(result: any) {
   const [bx, by, bw, bh] = face.box
   const color = allChecksPassed.value ? '#22c55e' : '#ef4444'
 
+  // Bounding box
   ctx.strokeStyle = color
   ctx.lineWidth = 2
   ctx.strokeRect(bx * sx, by * sy, bw * sx, bh * sy)
 
+  // Mesh points (every 8th point for performance)
   if (face.mesh) {
-    ctx.fillStyle = color + '40'
-    for (const pt of face.mesh) {
+    ctx.fillStyle = color + '50'
+    for (let i = 0; i < face.mesh.length; i += 8) {
+      const pt = face.mesh[i]
       ctx.beginPath()
-      ctx.arc(pt[0] * sx, pt[1] * sy, 1, 0, Math.PI * 2)
+      ctx.arc(pt[0] * sx, pt[1] * sy, 1.5, 0, Math.PI * 2)
       ctx.fill()
     }
   }

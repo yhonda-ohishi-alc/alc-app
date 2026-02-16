@@ -5,26 +5,31 @@ export const humanConfig: Partial<Config> = {
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   wasmPath: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/',
   debug: false,
-  cacheSensitivity: 0.75,
+  cacheSensitivity: 0.9,
+  filter: { enabled: true, flip: false },
 
   face: {
     enabled: true,
     detector: {
       enabled: true,
-      modelPath: 'blazeface-back.json',
+      modelPath: 'blazeface.json',
       rotation: false,
       maxDetected: 1,
       minConfidence: 0.5,
+      iouThreshold: 0.1,
       return: false,
+      skipFrames: 10,
     },
     mesh: {
       enabled: true,
       modelPath: 'facemesh.json',
+      keepInvalid: false,
     },
     description: {
       enabled: true,
       modelPath: 'faceres.json',
       minConfidence: 0.1,
+      skipFrames: 15,
     },
     iris: { enabled: false },
     emotion: { enabled: false },
