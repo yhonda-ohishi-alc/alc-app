@@ -1,7 +1,7 @@
 import type { Config } from '@vladmandic/human'
 
 export const humanConfig: Partial<Config> = {
-  backend: 'webgl',
+  backend: 'humangl',
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   wasmPath: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/',
   debug: false,
