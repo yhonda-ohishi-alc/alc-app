@@ -31,7 +31,7 @@ export const humanConfig: Partial<Config> = {
       minConfidence: 0.1,
       skipFrames: 15,
     },
-    iris: { enabled: false },
+    iris: { enabled: true },
     emotion: { enabled: false },
     antispoof: { enabled: false },
     liveness: { enabled: false },

@@ -8,7 +8,7 @@ export function useCamera() {
     error.value = null
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       })
       stream.value = mediaStream
