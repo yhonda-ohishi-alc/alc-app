@@ -32,6 +32,10 @@
 - **cf-alc-signaling (Cloudflare Workers)**: `cd cf-alc-signaling && wrangler deploy`
 - **rust-alc-api (GCP Cloud Run)**: 別リポジトリで管理
 
+## バージョニング
+
+- **semver patch のみ** — バージョンアップは常に patch (例: 0.2.1 → 0.2.2)。minor/major は上げない。
+
 ## 重要な注意事項
 
 - **リポジトリは public** — 機密情報のコミットに注意
