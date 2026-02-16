@@ -5,13 +5,11 @@ const config = useRuntimeConfig()
 
 // 認証 + API 初期化
 const { accessToken, deviceTenantId, user, logout: authLogout } = useAuth()
-onMounted(() => {
-  initApi(
-    config.public.apiBase as string,
-    () => accessToken.value,
-    () => deviceTenantId.value,
-  )
-})
+initApi(
+  config.public.apiBase as string,
+  () => accessToken.value,
+  () => deviceTenantId.value,
+)
 
 // WebRTC (admin として接続)
 const { isConnected, isPeerConnected, remoteStream, error: rtcError, connect, disconnect } = useWebRtc('admin')
@@ -33,6 +31,7 @@ function disconnectRtc() {
 
 // タブ管理
 const activeTab = ref<'history' | 'camera'>('history')
+const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
 
 <template>
@@ -129,8 +128,17 @@ const activeTab = ref<'history' | 'camera'>('history')
           <p v-if="rtcError" class="mt-2 text-xs text-red-600">{{ rtcError }}</p>
         </div>
 
+        <!-- ローカルカメラ -->
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <h3 class="text-sm font-medium text-gray-700 mb-2">ローカルカメラ</h3>
+          <CameraPreview :active="cameraActive" />
+        </div>
+
         <!-- リモートカメラ映像 -->
-        <RemoteCamera :stream="remoteStream" />
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <h3 class="text-sm font-medium text-gray-700 mb-2">リモートカメラ</h3>
+          <RemoteCamera :stream="remoteStream" />
+        </div>
       </div>
     </main>
   </div>
