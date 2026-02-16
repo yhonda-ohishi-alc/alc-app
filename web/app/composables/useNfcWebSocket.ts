@@ -8,6 +8,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
   const isConnected = ref(false)
   const error = ref<string | null>(null)
   const readers = ref<string[]>([])
+  const bridgeVersion = ref<string | null>(null)
 
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -49,10 +50,14 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
             readCallbacks.forEach(cb => cb(data))
             break
           case 'nfc_error':
+            if (data.error === 'no_readers') {
+              readers.value = []
+            }
             errorCallbacks.forEach(cb => cb(data))
             break
           case 'status':
             readers.value = data.readers
+            bridgeVersion.value = data.version ?? null
             break
         }
       }
@@ -63,6 +68,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
 
     ws.onclose = () => {
       isConnected.value = false
+      bridgeVersion.value = null
       ws = null
       if (!intentionalClose) {
         scheduleReconnect()
@@ -125,6 +131,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
     isConnected: readonly(isConnected),
     error: readonly(error),
     readers: readonly(readers),
+    bridgeVersion: readonly(bridgeVersion),
     connect,
     disconnect,
     onRead,

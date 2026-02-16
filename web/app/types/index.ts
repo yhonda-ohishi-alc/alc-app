@@ -32,6 +32,7 @@ export interface NfcStatusEvent {
   type: 'status'
   readers: string[]
   connected: boolean
+  version?: string
 }
 
 export type NfcEvent = NfcReadEvent | NfcErrorEvent

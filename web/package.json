@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "deploy": "nuxt build && wrangler pages deploy dist --project-name=alc-app --commit-dirty=true",
     "test": "vitest run",
     "test:watch": "vitest"
   },

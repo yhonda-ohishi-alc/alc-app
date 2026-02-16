@@ -5,10 +5,25 @@ const emit = defineEmits<{
   read: [employeeId: string]
 }>()
 
-const { isConnected, error, readers, connect, onRead } = useNfcWebSocket()
+const { isConnected, error, readers, bridgeVersion, connect, onRead } = useNfcWebSocket()
+const { latestVersion, checkLatestVersion, isUpdateAvailable } = useNfcBridgeUpdate()
 
 const lastReadId = ref<string | null>(null)
 const readAnimation = ref(false)
+
+const showUpdateBanner = computed(() => {
+  if (!isConnected.value || !latestVersion.value) return false
+  // version 未送信（旧ブリッジ）→ 常にアップデート促す
+  if (!bridgeVersion.value) return true
+  return isUpdateAvailable(bridgeVersion.value)
+})
+
+// 接続したら最新バージョンをチェック
+watch(isConnected, async (connected) => {
+  if (connected) {
+    await checkLatestVersion()
+  }
+})
 
 onMounted(() => {
   connect()
@@ -65,6 +80,29 @@ const statusText = computed(() => {
         読み取り: {{ lastReadId }}
       </p>
     </div>
+
+    <!-- NFC ブリッジ未接続時のダウンロードリンク -->
+    <p v-if="!isConnected" class="text-sm text-center text-gray-500">
+      NFC ブリッジがインストールされていない場合は
+      <a
+        href="https://github.com/yhonda-ohishi-alc/rust-nfc-bridge/releases/latest"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-blue-600 underline hover:text-blue-800"
+      >こちらからダウンロード</a>
+    </p>
+
+    <!-- NFC ブリッジ更新通知 -->
+    <p v-if="showUpdateBanner" class="text-sm text-center text-amber-600">
+      NFC ブリッジの新しいバージョン (v{{ latestVersion }}) があります。
+      <a
+        href="https://github.com/yhonda-ohishi-alc/rust-nfc-bridge/releases/latest"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-blue-600 underline hover:text-blue-800"
+      >こちらからアップデート</a>
+      <span v-if="bridgeVersion" class="text-gray-400 text-xs ml-1">(現在: v{{ bridgeVersion }})</span>
+    </p>
 
     <!-- エラー表示 -->
     <p v-if="error" class="text-red-500 text-sm text-center">

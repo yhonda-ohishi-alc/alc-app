@@ -26,6 +26,12 @@
 - **データベース**: PostgreSQL + Row Level Security
 - **ストレージ**: GCP Cloud Storage (顔写真)
 
+## デプロイ
+
+- **web (Cloudflare Pages)**: `cd web && npm run deploy` — ビルド + `wrangler pages deploy dist` (プロジェクト名: `alc-app`)
+- **cf-alc-signaling (Cloudflare Workers)**: `cd cf-alc-signaling && wrangler deploy`
+- **rust-alc-api (GCP Cloud Run)**: 別リポジトリで管理
+
 ## 重要な注意事項
 
 - **リポジトリは public** — 機密情報のコミットに注意
