@@ -1,6 +1,7 @@
 # 別リポジトリ管理
 rust-nfc-bridge/
 rust-alc-api/
+menkyo_go_ref/
 
 # 機密ドキュメント (Tanita Confidential)
 docs/*.pdf

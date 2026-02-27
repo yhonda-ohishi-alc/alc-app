@@ -21,6 +21,23 @@ export interface NfcReadEvent {
   employee_id: string
 }
 
+/** NFC 免許証読み取りイベント */
+export interface NfcLicenseReadEvent {
+  type: 'nfc_license_read'
+  card_id: string
+  card_type: 'driver_license' | 'car_inspection' | 'other'
+  atr: string
+  expiry_date?: string
+  remain_count?: number
+  felica_uid?: string
+}
+
+/** NFC デバッグイベント (APDU ステップログ) */
+export interface NfcDebugEvent {
+  type: 'nfc_debug'
+  message: string
+}
+
 /** NFC エラーイベント */
 export interface NfcErrorEvent {
   type: 'nfc_error'
@@ -38,7 +55,7 @@ export interface NfcStatusEvent {
 export type NfcEvent = NfcReadEvent | NfcErrorEvent
 
 /** NFC WebSocket イベント (全種別) */
-export type NfcWebSocketEvent = NfcReadEvent | NfcErrorEvent | NfcStatusEvent
+export type NfcWebSocketEvent = NfcReadEvent | NfcLicenseReadEvent | NfcDebugEvent | NfcErrorEvent | NfcStatusEvent
 
 /** FC-1200 測定状態 */
 export type Fc1200State =

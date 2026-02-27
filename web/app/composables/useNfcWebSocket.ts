@@ -1,4 +1,4 @@
-import type { NfcWebSocketEvent, NfcReadEvent, NfcErrorEvent } from '~/types'
+import type { NfcWebSocketEvent, NfcReadEvent, NfcLicenseReadEvent, NfcErrorEvent } from '~/types'
 
 const DEFAULT_URL = 'ws://127.0.0.1:9876'
 const RECONNECT_DELAY_MS = 3000
@@ -16,6 +16,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
   let intentionalClose = false
 
   const readCallbacks: Array<(event: NfcReadEvent) => void> = []
+  const licenseReadCallbacks: Array<(event: NfcLicenseReadEvent) => void> = []
   const errorCallbacks: Array<(event: NfcErrorEvent) => void> = []
 
   function connect() {
@@ -48,6 +49,15 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
         switch (data.type) {
           case 'nfc_read':
             readCallbacks.forEach(cb => cb(data))
+            break
+          case 'nfc_license_read':
+            console.log('[NFC] License read:', data)
+            // Forward as NfcReadEvent for backward compatibility
+            readCallbacks.forEach(cb => cb({ type: 'nfc_read', employee_id: data.card_id }))
+            licenseReadCallbacks.forEach(cb => cb(data))
+            break
+          case 'nfc_debug':
+            console.log('[NFC]', data.message)
             break
           case 'nfc_error':
             if (data.error === 'no_readers') {
@@ -117,6 +127,14 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
     }
   }
 
+  function onLicenseRead(callback: (event: NfcLicenseReadEvent) => void) {
+    licenseReadCallbacks.push(callback)
+    return () => {
+      const idx = licenseReadCallbacks.indexOf(callback)
+      if (idx >= 0) licenseReadCallbacks.splice(idx, 1)
+    }
+  }
+
   function onError(callback: (event: NfcErrorEvent) => void) {
     errorCallbacks.push(callback)
     return () => {
@@ -135,6 +153,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
     connect,
     disconnect,
     onRead,
+    onLicenseRead,
     onError,
   }
 }
