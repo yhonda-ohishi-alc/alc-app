@@ -5,6 +5,7 @@ menkyo_go_ref/
 
 # 機密ドキュメント (Tanita Confidential)
 docs/*.pdf
+fc1200-wasm/*.pdf
 
 # 共通
 node_modules/
