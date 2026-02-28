@@ -1,17 +1,21 @@
 import type { MeasurementResult } from '~/types'
+import type { PendingMeasurement } from '~/utils/offline-queue'
 import { saveMeasurement } from '~/utils/api'
-import { enqueue, flush, pendingCount } from '~/utils/offline-queue'
+import { enqueue, flush, getAll, remove, clearAll } from '~/utils/offline-queue'
 
 /** オフライン時のキューイング + オンライン復帰時の自動同期 */
 export function useOfflineSync() {
   const isOnline = ref(true)
   const pending = ref(0)
+  const queueItems = ref<PendingMeasurement[]>([])
   const isSyncing = ref(false)
   const lastSyncResult = ref<{ sent: number; failed: number } | null>(null)
 
-  async function refreshPending() {
+  async function refreshQueue() {
     try {
-      pending.value = await pendingCount()
+      const items = await getAll()
+      queueItems.value = items
+      pending.value = items.length
     } catch {
       // IndexedDB エラーは無視
     }
@@ -21,7 +25,7 @@ export function useOfflineSync() {
   async function save(result: MeasurementResult, facePhotoBlob?: Blob): Promise<'saved' | 'queued'> {
     if (!isOnline.value) {
       await enqueue(result, facePhotoBlob)
-      await refreshPending()
+      await refreshQueue()
       return 'queued'
     }
     try {
@@ -30,7 +34,7 @@ export function useOfflineSync() {
     } catch {
       // API 失敗時もキューに退避
       await enqueue(result, facePhotoBlob)
-      await refreshPending()
+      await refreshQueue()
       return 'queued'
     }
   }
@@ -42,10 +46,22 @@ export function useOfflineSync() {
     try {
       const result = await flush(saveMeasurement)
       lastSyncResult.value = result
-      await refreshPending()
+      await refreshQueue()
     } finally {
       isSyncing.value = false
     }
+  }
+
+  /** キューから 1 件削除 */
+  async function removeItem(id: number) {
+    await remove(id)
+    await refreshQueue()
+  }
+
+  /** キューを全件削除 */
+  async function clearQueue() {
+    await clearAll()
+    await refreshQueue()
   }
 
   if (import.meta.client) {
@@ -62,7 +78,7 @@ export function useOfflineSync() {
     onMounted(() => {
       window.addEventListener('online', handleOnline)
       window.addEventListener('offline', handleOffline)
-      refreshPending()
+      refreshQueue()
     })
 
     onUnmounted(() => {
@@ -74,9 +90,13 @@ export function useOfflineSync() {
   return {
     isOnline: readonly(isOnline),
     pending: readonly(pending),
+    queueItems: readonly(queueItems),
     isSyncing: readonly(isSyncing),
     lastSyncResult: readonly(lastSyncResult),
     save,
     syncQueue,
+    removeItem,
+    clearQueue,
+    refreshQueue,
   }
 }

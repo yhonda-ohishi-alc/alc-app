@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   result: [result: FaceAuthResult]
-  registered: []
+  registered: [snapshot: Blob | null]
 }>()
 
 const { verify, register } = useFaceAuth()
@@ -114,7 +114,7 @@ function updateChecks(result: any) {
 
   const hasDesc = (face.embedding?.length ?? 0) > 0
   checks.descriptor.status = hasDesc
-  checks.descriptor.val = hasDesc ? `${face.embedding.length}d` : '-'
+  checks.descriptor.val = hasDesc ? `${face.embedding?.length ?? 0}d` : '-'
 }
 
 // --- Canvas overlay ---
@@ -172,7 +172,10 @@ async function doAuth() {
     if (props.mode === 'register') {
       const ok = await register(props.employeeId, videoRef.value)
       status.value = ok ? 'success' : 'fail'
-      if (ok) emit('registered')
+      if (ok) {
+        const snapshot = await takeSnapshotAsync()
+        emit('registered', snapshot)
+      }
     }
     else {
       const result = await verify(props.employeeId, videoRef.value)

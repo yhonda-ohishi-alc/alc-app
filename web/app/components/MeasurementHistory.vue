@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { ApiMeasurement, MeasurementFilter } from '~/types'
-import { getMeasurements } from '~/utils/api'
+import type { ApiMeasurement, ApiEmployee, MeasurementFilter } from '~/types'
+import { getMeasurements, getEmployees } from '~/utils/api'
 
 const measurements = ref<ApiMeasurement[]>([])
 const total = ref(0)
@@ -8,6 +8,18 @@ const page = ref(1)
 const perPage = 20
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+
+// 従業員名ルックアップ
+const employeeMap = ref<Record<string, string>>({})
+async function loadEmployees() {
+  try {
+    const employees = await getEmployees()
+    employeeMap.value = Object.fromEntries(employees.map(e => [e.id, e.name]))
+  } catch {}
+}
+function employeeName(id: string) {
+  return employeeMap.value[id] || id.slice(0, 8)
+}
 
 // フィルタ
 const filterEmployeeId = ref('')
@@ -75,7 +87,10 @@ function resultColor(type: string) {
   }
 }
 
-onMounted(() => fetchData())
+onMounted(() => {
+  loadEmployees()
+  fetchData()
+})
 </script>
 
 <template>
@@ -134,7 +149,7 @@ onMounted(() => fetchData())
           <thead class="bg-gray-50 text-gray-600">
             <tr>
               <th class="px-4 py-3 text-left font-medium">日時</th>
-              <th class="px-4 py-3 text-left font-medium">乗務員ID</th>
+              <th class="px-4 py-3 text-left font-medium">乗務員</th>
               <th class="px-4 py-3 text-right font-medium">アルコール値</th>
               <th class="px-4 py-3 text-center font-medium">結果</th>
             </tr>
@@ -142,7 +157,7 @@ onMounted(() => fetchData())
           <tbody class="divide-y divide-gray-100">
             <tr v-for="m in measurements" :key="m.id" class="hover:bg-gray-50">
               <td class="px-4 py-3 text-gray-700">{{ formatDate(m.measured_at) }}</td>
-              <td class="px-4 py-3 text-gray-700 font-mono">{{ m.employee_id }}</td>
+              <td class="px-4 py-3 text-gray-700">{{ employeeName(m.employee_id) }}</td>
               <td class="px-4 py-3 text-right text-gray-700">{{ m.alcohol_value.toFixed(3) }} mg/L</td>
               <td class="px-4 py-3 text-center">
                 <span

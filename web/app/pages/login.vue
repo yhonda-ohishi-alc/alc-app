@@ -2,10 +2,11 @@
 const { loginWithGoogle, isAuthenticated, isLoading } = useAuth()
 const loginError = ref<string | null>(null)
 const isSubmitting = ref(false)
+const route = useRoute()
 
-// 認証済みならダッシュボードへリダイレクト
+// 認証済みならリダイレクト (redirect クエリがあればそちらへ、なければ dashboard)
 watch(isAuthenticated, (val) => {
-  if (val) navigateTo('/dashboard')
+  if (val) navigateTo((route.query.redirect as string) || '/dashboard')
 }, { immediate: true })
 
 async function handleGoogleLogin() {

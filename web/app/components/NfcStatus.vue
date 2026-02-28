@@ -42,7 +42,7 @@ onRead((event: NfcReadEvent) => {
 const statusText = computed(() => {
   if (error.value) return error.value
   if (!isConnected.value) return 'NFC ブリッジ未接続'
-  if (readers.value.length === 0) return 'NFC リーダー未検出'
+  if ((readers.value?.length ?? 0) === 0) return 'NFC リーダー未検出'
   return 'NFC 待機中'
 })
 </script>
@@ -55,8 +55,8 @@ const statusText = computed(() => {
         class="w-3 h-3 rounded-full"
         :class="{
           'bg-red-500': !isConnected,
-          'bg-yellow-500': isConnected && readers.length === 0,
-          'bg-green-500': isConnected && readers.length > 0,
+          'bg-yellow-500': isConnected && (readers.value?.length ?? 0) === 0,
+          'bg-green-500': isConnected && (readers.value?.length ?? 0) > 0,
         }"
       />
       <span class="text-gray-600">{{ statusText }}</span>

@@ -4,11 +4,12 @@ import { initApi } from '~/utils/api'
 const config = useRuntimeConfig()
 
 // 認証 + API 初期化
-const { accessToken, deviceTenantId, user, logout: authLogout } = useAuth()
+const { accessToken, deviceTenantId, user, isLoading, isAuthenticated, logout: authLogout, refreshAccessToken } = useAuth()
 initApi(
   config.public.apiBase as string,
   () => accessToken.value,
   () => deviceTenantId.value,
+  () => refreshAccessToken(),
 )
 
 // WebRTC (admin として接続)
@@ -29,8 +30,11 @@ function disconnectRtc() {
   isRtcActive.value = false
 }
 
+// 顔データ同期 (ローカル ↔ サーバー)
+useFaceSync()
+
 // タブ管理
-const activeTab = ref<'history' | 'camera'>('history')
+const activeTab = ref<'history' | 'camera' | 'queue' | 'employees' | 'device'>('history')
 const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
 
@@ -47,6 +51,9 @@ const cameraActive = computed(() => activeTab.value === 'camera')
           >
             ログアウト
           </button>
+          <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
+            顔登録
+          </NuxtLink>
           <NuxtLink to="/" class="text-blue-600 hover:underline text-sm">
             測定画面へ
           </NuxtLink>
@@ -54,7 +61,12 @@ const cameraActive = computed(() => activeTab.value === 'camera')
       </div>
     </header>
 
-    <main class="max-w-6xl mx-auto px-4 py-6">
+    <!-- 認証初期化待ち -->
+    <div v-if="isLoading" class="max-w-6xl mx-auto px-4 py-12 text-center text-gray-500">
+      読み込み中...
+    </div>
+
+    <main v-else class="max-w-6xl mx-auto px-4 py-6">
       <!-- タブ -->
       <div class="flex gap-1 mb-6 bg-gray-200 rounded-lg p-1 w-fit">
         <button
@@ -70,6 +82,27 @@ const cameraActive = computed(() => activeTab.value === 'camera')
           @click="activeTab = 'camera'"
         >
           リモートカメラ
+        </button>
+        <button
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          :class="activeTab === 'queue' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
+          @click="activeTab = 'queue'"
+        >
+          送信キュー
+        </button>
+        <button
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          :class="activeTab === 'employees' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
+          @click="activeTab = 'employees'"
+        >
+          乗務員
+        </button>
+        <button
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          :class="activeTab === 'device' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
+          @click="activeTab = 'device'"
+        >
+          デバイス
         </button>
       </div>
 
@@ -139,6 +172,21 @@ const cameraActive = computed(() => activeTab.value === 'camera')
           <h3 class="text-sm font-medium text-gray-700 mb-2">リモートカメラ</h3>
           <RemoteCamera :stream="remoteStream" />
         </div>
+      </div>
+
+      <!-- 送信キュータブ -->
+      <div v-if="activeTab === 'queue'">
+        <OfflineQueue />
+      </div>
+
+      <!-- 乗務員タブ -->
+      <div v-if="activeTab === 'employees'">
+        <EmployeeList />
+      </div>
+
+      <!-- デバイスタブ -->
+      <div v-if="activeTab === 'device'">
+        <DeviceManager />
       </div>
     </main>
   </div>

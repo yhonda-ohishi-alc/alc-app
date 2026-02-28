@@ -5,7 +5,7 @@ const DB_VERSION = 1
 const STORE_NAME = 'pending-measurements'
 
 /** キューに保存する際、measuredAt を ISO 文字列化したもの */
-interface SerializedResult {
+export interface SerializedResult {
   employeeId: string
   alcoholValue: number
   resultType: 'normal' | 'over' | 'error'
@@ -119,6 +119,17 @@ async function incrementRetry(id: number): Promise<void> {
         store.put(entry)
       }
     }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** キューを全件削除 */
+export async function clearAll(): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    tx.objectStore(STORE_NAME).clear()
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })

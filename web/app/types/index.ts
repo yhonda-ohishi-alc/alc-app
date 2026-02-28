@@ -70,7 +70,8 @@ export type Fc1200State =
 /** FC-1200 WASM イベント (feed() が返す JSON 配列の要素) */
 export interface Fc1200Event {
   type: 'state_changed' | 'measurement_result' | 'usage_time' | 'memory_data' | 'date_update_response' | 'error'
-  state?: Fc1200State
+  from?: string
+  to?: Fc1200State
   alcohol_value?: number
   result_type?: 'normal' | 'over' | 'error'
   use_count?: number
@@ -123,9 +124,20 @@ export interface ApiMeasurement {
 export interface ApiEmployee {
   id: string
   tenant_id: string
-  nfc_id: string
+  code?: string | null
+  nfc_id?: string | null
   name: string
+  face_photo_url?: string | null
+  face_embedding_at?: string | null
   created_at: string
+  updated_at: string
+}
+
+/** 顔特徴量同期用データ */
+export interface FaceDataEntry {
+  id: string
+  face_embedding: number[]
+  face_embedding_at: string
 }
 
 /** API: 測定結果一覧レスポンス */

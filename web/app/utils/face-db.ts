@@ -62,6 +62,38 @@ export async function getAllDescriptors(): Promise<{ employeeId: string; descrip
   })
 }
 
+export async function getAllDescriptorsWithTimestamp(): Promise<FaceRecord[]> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const request = tx.objectStore(STORE_NAME).getAll()
+    request.onsuccess = () => {
+      resolve(request.result as FaceRecord[])
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export async function bulkSaveFaceDescriptors(
+  records: { employeeId: string; descriptor: number[]; updatedAt: number }[],
+): Promise<void> {
+  if (records.length === 0) return
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    for (const r of records) {
+      store.put({
+        employeeId: r.employeeId,
+        descriptor: new Float32Array(r.descriptor),
+        updatedAt: r.updatedAt,
+      } satisfies FaceRecord)
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
 export async function deleteFaceDescriptor(employeeId: string): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {

@@ -30,6 +30,49 @@ export function useFc1200Serial() {
     return typeof navigator !== 'undefined' && 'serial' in navigator
   }
 
+  /** 許可済みポートに自動接続（ダイアログなし） */
+  async function autoConnect(): Promise<boolean> {
+    error.value = null
+
+    if (!isWebSerialSupported()) return false
+
+    try {
+      const ports = await navigator.serial.getPorts()
+      if (ports.length === 0) return false
+
+      // USB Vendor ID があるポート（実デバイス）を優先、なければ先頭
+      port = ports.find(p => p.getInfo().usbVendorId !== undefined) ?? ports[0] ?? null
+      if (!port) return false
+
+      await initFc1200Wasm()
+      isWasmReady.value = true
+
+      await port.open(SERIAL_OPTIONS)
+
+      session = createFc1200Session()
+      state.value = session.state() as Fc1200State
+
+      if (port.readable && port.writable) {
+        reader = port.readable.getReader()
+        writer = port.writable.getWriter()
+        isConnected.value = true
+        startReadLoop()
+        return true
+      }
+      else {
+        throw new Error('シリアルポートの読み書きストリームが取得できません')
+      }
+    }
+    catch (e) {
+      // デバイス未接続 or 別タブで使用中 → 静かに失敗
+      if (e instanceof DOMException && (e.name === 'NetworkError' || e.name === 'InvalidStateError')) {
+        console.warn('[FC-1200] autoConnect failed:', e.name)
+      }
+      await cleanup()
+      return false
+    }
+  }
+
   async function connect(): Promise<void> {
     error.value = null
 
@@ -83,10 +126,14 @@ export function useFc1200Serial() {
         if (!value || !session) break
 
         // 受信バイト列を WASM に投入
+        const raw = new TextDecoder().decode(value)
+        console.log('[FC-1200 RX]', raw.replace(/\r\n/g, '\\r\\n'))
+
         const events: Fc1200Event[] = session.feed(value)
 
         if (Array.isArray(events)) {
           for (const event of events) {
+            console.log('[FC-1200 Event]', event)
             processEvent(event)
           }
         }
@@ -108,8 +155,8 @@ export function useFc1200Serial() {
   function processEvent(event: Fc1200Event): void {
     switch (event.type) {
       case 'state_changed':
-        if (event.state) {
-          state.value = event.state
+        if (event.to) {
+          state.value = event.to
         }
         break
 
@@ -297,6 +344,7 @@ export function useFc1200Serial() {
     memoryRecords: readonly(memoryRecords),
     dateUpdateSuccess: readonly(dateUpdateSuccess),
     isWebSerialSupported,
+    autoConnect,
     connect,
     disconnect,
     startMeasurement,

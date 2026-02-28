@@ -7,9 +7,13 @@ const DEVICE_TENANT_KEY = 'alc_device_tenant_id'
 const user = ref<AuthUser | null>(null)
 const accessToken = ref<string | null>(null)
 const isLoading = ref(true)
-const deviceTenantId = ref<string | null>(null)
+// モジュールロード時に即座に復元 (子コンポーネントの onMounted が app.vue の init() より先に走るため)
+const deviceTenantId = ref<string | null>(
+  typeof window !== 'undefined' ? localStorage.getItem(DEVICE_TENANT_KEY) : null,
+)
 
 let initialized = false
+let refreshTimerId: ReturnType<typeof setTimeout> | null = null
 
 export function useAuth() {
   const config = useRuntimeConfig()
@@ -23,10 +27,7 @@ export function useAuth() {
     if (initialized) return
     initialized = true
 
-    // Device tenant を復元
-    if (typeof window !== 'undefined') {
-      deviceTenantId.value = localStorage.getItem(DEVICE_TENANT_KEY)
-    }
+    // deviceTenantId はモジュールスコープで既に復元済み
 
     // Refresh token があれば自動ログイン試行
     const refreshToken = typeof window !== 'undefined'
@@ -123,6 +124,8 @@ export function useAuth() {
     } catch {
       // デコード失敗してもログイン状態は維持
     }
+
+    scheduleAutoRefresh()
   }
 
   /** トークンをセットして state を更新 */
@@ -138,10 +141,53 @@ export function useAuth() {
     if (data.user.tenant_id) {
       activateDevice(data.user.tenant_id)
     }
+
+    scheduleAutoRefresh()
+  }
+
+  /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール */
+  function scheduleAutoRefresh() {
+    if (refreshTimerId) {
+      clearTimeout(refreshTimerId)
+      refreshTimerId = null
+    }
+
+    const token = accessToken.value
+    if (!token) return
+
+    try {
+      const parts = token.split('.')
+      if (!parts[1]) return
+      const payload = JSON.parse(atob(parts[1]))
+      if (!payload.exp) return
+
+      const expiresAt = payload.exp * 1000
+      const now = Date.now()
+      // 期限の60秒前にリフレッシュ
+      const refreshIn = expiresAt - now - 60_000
+
+      if (refreshIn <= 0) {
+        // 既に期限切れ or 間もなく切れる → 即リフレッシュ
+        refreshAccessToken().catch(() => {})
+        return
+      }
+
+      refreshTimerId = setTimeout(() => {
+        refreshAccessToken().catch(() => {})
+      }, refreshIn)
+    } catch {
+      // JWT デコードエラー
+    }
   }
 
   /** ログアウト (端末の tenant_id は保持) */
   async function logout() {
+    // タイマーをクリア
+    if (refreshTimerId) {
+      clearTimeout(refreshTimerId)
+      refreshTimerId = null
+    }
+
     // バックエンドの refresh token を無効化
     if (accessToken.value) {
       try {

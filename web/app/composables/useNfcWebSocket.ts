@@ -66,7 +66,7 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
             errorCallbacks.forEach(cb => cb(data))
             break
           case 'status':
-            readers.value = data.readers
+            readers.value = data.readers ?? []
             bridgeVersion.value = data.version ?? null
             break
         }

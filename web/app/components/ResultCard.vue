@@ -4,6 +4,7 @@ import type { MeasurementResult } from '~/types'
 const props = defineProps<{
   result: MeasurementResult
   facePhotoBlob?: Blob | null
+  employeeName?: string
 }>()
 
 const emit = defineEmits<{
@@ -84,8 +85,8 @@ const timeDisplay = computed(() => {
 
       <div class="flex-1 space-y-2">
         <div class="flex justify-between">
-          <span class="text-sm text-gray-500">乗務員ID</span>
-          <span class="font-mono font-medium">{{ result.employeeId }}</span>
+          <span class="text-sm text-gray-500">乗務員</span>
+          <span class="font-medium">{{ employeeName || result.employeeId }}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-sm text-gray-500">アルコール濃度</span>

@@ -13,7 +13,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'cloudflare_pages',
+    preset: 'cloudflare_module',
   },
 
   modules: [
@@ -24,6 +24,9 @@ export default defineNuxtConfig({
   vite: {
     optimizeDeps: {
       exclude: ['fc1200-wasm'],
+    },
+    build: {
+      sourcemap: 'hidden',
     },
   },
 

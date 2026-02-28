@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FaceAuthResult, MeasurementResult } from '~/types'
-import { initApi } from '~/utils/api'
+import { initApi, getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
 
 const config = useRuntimeConfig()
 const step = ref<'nfc' | 'face_auth' | 'measuring' | 'result'>('nfc')
@@ -17,28 +17,47 @@ const saveStatus = ref<'saved' | 'queued' | null>(null)
 const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflineSync()
 
 // 認証 + API 初期化
-const { accessToken, deviceTenantId, isDeviceActivated } = useAuth()
+const { accessToken, deviceTenantId, isDeviceActivated, refreshAccessToken } = useAuth()
 initApi(
   config.public.apiBase as string,
   () => accessToken.value,
   () => deviceTenantId.value,
+  () => refreshAccessToken(),
 )
+
+// 顔データ同期
+const { isSyncing: isFaceSyncing } = useFaceSync()
 
 // 手動入力フォールバック
 const manualIdInput = ref('')
 const useManualInput = ref(false)
 
-// NFC 読み取り
-function onNfcRead(id: string) {
-  employeeId.value = id
-  step.value = 'face_auth'
+// NFC 読み取り → employee UUID を解決
+const employeeName = ref('')
+async function onNfcRead(nfcId: string) {
+  try {
+    const emp = await getEmployeeByNfcId(nfcId)
+    employeeId.value = emp.id
+    employeeName.value = emp.name
+    step.value = 'face_auth'
+  } catch {
+    console.error(`乗務員が見つかりません (NFC ID: ${nfcId})`)
+  }
 }
 
-// 手動ID入力
-function onManualSubmit() {
-  if (manualIdInput.value.trim()) {
-    employeeId.value = manualIdInput.value.trim()
+// 手動入力 (社員番号で検索)
+const manualError = ref<string | null>(null)
+async function onManualSubmit() {
+  const input = manualIdInput.value.trim()
+  if (!input) return
+  manualError.value = null
+  try {
+    const emp = await getEmployeeByCode(input)
+    employeeId.value = emp.id
+    employeeName.value = emp.name
     step.value = 'face_auth'
+  } catch {
+    manualError.value = `社員番号「${input}」の乗務員が見つかりません`
   }
 }
 
@@ -75,7 +94,9 @@ async function onMeasurementResult(result: MeasurementResult) {
 function reset() {
   step.value = 'nfc'
   employeeId.value = ''
+  employeeName.value = ''
   manualIdInput.value = ''
+  manualError.value = null
   useManualInput.value = false
   authResult.value = null
   measurementResult.value = null
@@ -119,6 +140,12 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
       class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700"
     >
       同期中...
+    </div>
+    <div
+      v-if="isFaceSyncing"
+      class="w-full max-w-md bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700"
+    >
+      顔データ同期中...
     </div>
 
     <header class="w-full max-w-md text-center py-6">
@@ -170,14 +197,15 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 
           <!-- 手動入力モード -->
           <div v-else>
-            <p class="text-sm text-gray-500 mb-4">乗務員IDを入力してください</p>
+            <p class="text-sm text-gray-500 mb-4">社員番号を入力してください</p>
             <input
               v-model="manualIdInput"
               type="text"
-              placeholder="乗務員ID (例: AABBCCDD)"
+              placeholder="社員番号 (例: 001)"
               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               @keyup.enter="onManualSubmit"
             >
+            <p v-if="manualError" class="mt-2 text-sm text-red-600">{{ manualError }}</p>
             <button
               :disabled="!manualIdInput.trim()"
               class="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
@@ -199,7 +227,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
       <div v-if="step === 'face_auth'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">顔認証</h2>
-          <p class="text-sm text-gray-500 mb-4">ID: {{ employeeId }}</p>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <FaceAuth
             :employee-id="employeeId"
             mode="verify"
@@ -212,7 +240,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
       <div v-if="step === 'measuring'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
-          <p class="text-sm text-gray-500 mb-4">ID: {{ employeeId }}</p>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <AlcMeasurement
             :employee-id="employeeId"
             @result="onMeasurementResult"
@@ -225,6 +253,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         <ResultCard
           :result="measurementResult"
           :face-photo-blob="faceSnapshot"
+          :employee-name="employeeName"
           @reset="reset"
         />
         <!-- API 保存状態 -->
