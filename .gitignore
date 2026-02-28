@@ -2,21 +2,14 @@
 rust-nfc-bridge/
 rust-alc-api/
 menkyo_go_ref/
+fc1200-wasm
 
 # 機密ドキュメント (Tanita Confidential)
 docs/*.pdf
-fc1200-wasm/*.pdf
 
 # 共通
 node_modules/
 .wrangler/
-
-# FC-1200 WASM ソース (プロトコル秘匿)
-fc1200-wasm/src/
-fc1200-wasm/Cargo.toml
-fc1200-wasm/Cargo.lock
-fc1200-wasm/tests/
-fc1200-wasm/target/
 
 # Rust ビルド成果物
 target/
