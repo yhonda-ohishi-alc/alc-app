@@ -52,9 +52,16 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
             break
           case 'nfc_license_read':
             console.log('[NFC] License read:', data)
-            // Forward as NfcReadEvent for backward compatibility
-            readCallbacks.forEach(cb => cb({ type: 'nfc_read', employee_id: data.card_id }))
+            // Fire license-specific callbacks first so expiry data is available
             licenseReadCallbacks.forEach(cb => cb(data))
+            // 運転免許証: EF 2F01 hex から交付年月日+有効期限 (chars 10-25) を employee_id に使用
+            // その他: card_id をそのまま使用
+            {
+              const employeeId = data.card_type === 'driver_license' && data.card_id.length >= 26
+                ? data.card_id.substring(10, 26)
+                : data.card_id
+              readCallbacks.forEach(cb => cb({ type: 'nfc_read', employee_id: employeeId }))
+            }
             break
           case 'nfc_debug':
             console.log('[NFC]', data.message)

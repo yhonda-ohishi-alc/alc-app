@@ -1,6 +1,6 @@
 import type { MeasurementResult } from '~/types'
 import type { PendingMeasurement } from '~/utils/offline-queue'
-import { saveMeasurement } from '~/utils/api'
+import { saveMeasurement, updateMeasurement } from '~/utils/api'
 import { enqueue, flush, getAll, remove, clearAll } from '~/utils/offline-queue'
 
 /** オフライン時のキューイング + オンライン復帰時の自動同期 */
@@ -22,9 +22,9 @@ export function useOfflineSync() {
   }
 
   /** 測定結果を保存 (オフラインならキュー、オンラインなら直接 API) */
-  async function save(result: MeasurementResult, facePhotoBlob?: Blob): Promise<'saved' | 'queued'> {
+  async function save(result: MeasurementResult, facePhotoBlob?: Blob, activeMeasurementId?: string): Promise<'saved' | 'queued'> {
     if (!isOnline.value) {
-      await enqueue(result, facePhotoBlob)
+      await enqueue(result, facePhotoBlob, activeMeasurementId)
       await refreshQueue()
       return 'queued'
     }
@@ -33,7 +33,7 @@ export function useOfflineSync() {
       return 'saved'
     } catch {
       // API 失敗時もキューに退避
-      await enqueue(result, facePhotoBlob)
+      await enqueue(result, facePhotoBlob, activeMeasurementId)
       await refreshQueue()
       return 'queued'
     }
@@ -44,7 +44,7 @@ export function useOfflineSync() {
     if (isSyncing.value || !isOnline.value) return
     isSyncing.value = true
     try {
-      const result = await flush(saveMeasurement)
+      const result = await flush(saveMeasurement, updateMeasurement)
       lastSyncResult.value = result
       await refreshQueue()
     } finally {

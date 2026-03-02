@@ -34,7 +34,9 @@ function disconnectRtc() {
 useFaceSync()
 
 // タブ管理
-const activeTab = ref<'history' | 'camera' | 'queue' | 'employees' | 'device'>('history')
+type TabKey = 'history' | 'camera' | 'queue' | 'employees' | 'license' | 'device'
+  | 'tenko' | 'schedules' | 'records' | 'webhooks' | 'baselines' | 'failures'
+const activeTab = ref<TabKey>('history')
 const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
 
@@ -54,6 +56,9 @@ const cameraActive = computed(() => activeTab.value === 'camera')
           <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
             顔登録
           </NuxtLink>
+          <NuxtLink to="/?tab=tenko" class="text-blue-600 hover:underline text-sm">
+            点呼キオスク
+          </NuxtLink>
           <NuxtLink to="/" class="text-blue-600 hover:underline text-sm">
             測定画面へ
           </NuxtLink>
@@ -67,43 +72,35 @@ const cameraActive = computed(() => activeTab.value === 'camera')
     </div>
 
     <main v-else class="max-w-6xl mx-auto px-4 py-6">
-      <!-- タブ -->
-      <div class="flex gap-1 mb-6 bg-gray-200 rounded-lg p-1 w-fit">
-        <button
+      <!-- タブ: 基本 -->
+      <div class="flex flex-wrap gap-1 mb-2 bg-gray-200 rounded-lg p-1 w-fit">
+        <button v-for="tab in [
+          { key: 'history', label: '測定履歴' },
+          { key: 'camera', label: 'リモートカメラ' },
+          { key: 'queue', label: '送信キュー' },
+          { key: 'employees', label: '乗務員' },
+          { key: 'license', label: '免許証' },
+          { key: 'device', label: 'デバイス' },
+        ]" :key="tab.key"
           class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          :class="activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
-          @click="activeTab = 'history'"
-        >
-          測定履歴
-        </button>
-        <button
+          :class="activeTab === tab.key ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
+          @click="activeTab = tab.key as TabKey"
+        >{{ tab.label }}</button>
+      </div>
+      <!-- タブ: 点呼管理 -->
+      <div class="flex flex-wrap gap-1 mb-6 bg-blue-100 rounded-lg p-1 w-fit">
+        <button v-for="tab in [
+          { key: 'tenko', label: '点呼' },
+          { key: 'schedules', label: '予定管理' },
+          { key: 'records', label: '点呼記録' },
+          { key: 'baselines', label: '健康基準' },
+          { key: 'failures', label: '故障記録' },
+          { key: 'webhooks', label: 'Webhook' },
+        ]" :key="tab.key"
           class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          :class="activeTab === 'camera' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
-          @click="activeTab = 'camera'"
-        >
-          リモートカメラ
-        </button>
-        <button
-          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          :class="activeTab === 'queue' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
-          @click="activeTab = 'queue'"
-        >
-          送信キュー
-        </button>
-        <button
-          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          :class="activeTab === 'employees' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
-          @click="activeTab = 'employees'"
-        >
-          乗務員
-        </button>
-        <button
-          class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          :class="activeTab === 'device' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
-          @click="activeTab = 'device'"
-        >
-          デバイス
-        </button>
+          :class="activeTab === tab.key ? 'bg-white text-blue-800 shadow-sm' : 'text-blue-700 hover:text-blue-900'"
+          @click="activeTab = tab.key as TabKey"
+        >{{ tab.label }}</button>
       </div>
 
       <!-- 測定履歴タブ -->
@@ -184,9 +181,46 @@ const cameraActive = computed(() => activeTab.value === 'camera')
         <EmployeeList />
       </div>
 
+      <!-- 免許証タブ -->
+      <div v-if="activeTab === 'license'">
+        <LicenseRegistration />
+      </div>
+
       <!-- デバイスタブ -->
       <div v-if="activeTab === 'device'">
         <DeviceManager />
+      </div>
+
+      <!-- 点呼タブ (サマリ + セッション監視) -->
+      <div v-if="activeTab === 'tenko'" class="space-y-4">
+        <TenkoDashboardSummary />
+        <h2 class="text-sm font-medium text-gray-700">進行中セッション</h2>
+        <TenkoSessionMonitor />
+      </div>
+
+      <!-- 予定管理タブ -->
+      <div v-if="activeTab === 'schedules'">
+        <TenkoScheduleManager />
+      </div>
+
+      <!-- 点呼記録タブ -->
+      <div v-if="activeTab === 'records'">
+        <TenkoRecordViewer />
+      </div>
+
+      <!-- 健康基準タブ -->
+      <div v-if="activeTab === 'baselines'">
+        <HealthBaselineManager />
+      </div>
+
+      <!-- 故障記録タブ -->
+      <div v-if="activeTab === 'failures'">
+        <EquipmentFailureManager />
+      </div>
+
+      <!-- Webhookタブ -->
+      <div v-if="activeTab === 'webhooks'">
+        <WebhookConfigManager />
       </div>
     </main>
   </div>

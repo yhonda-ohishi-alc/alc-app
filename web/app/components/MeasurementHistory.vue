@@ -87,6 +87,21 @@ function resultColor(type: string) {
   }
 }
 
+function statusLabel(m: ApiMeasurement) {
+  if (m.status === 'completed') return '完了'
+  if (m.face_photo_url) return '顔認証済'
+  return '開始'
+}
+
+function statusColor(m: ApiMeasurement) {
+  if (m.status === 'completed') return 'bg-green-100 text-green-800'
+  if (m.face_photo_url) return 'bg-blue-100 text-blue-800'
+  return 'bg-gray-100 text-gray-600'
+}
+
+// 詳細モーダル
+const selectedMeasurement = ref<ApiMeasurement | null>(null)
+
 onMounted(() => {
   loadEmployees()
   fetchData()
@@ -150,6 +165,8 @@ onMounted(() => {
             <tr>
               <th class="px-4 py-3 text-left font-medium">日時</th>
               <th class="px-4 py-3 text-left font-medium">乗務員</th>
+              <th class="px-4 py-3 text-center font-medium">状態</th>
+              <th class="px-4 py-3 text-center font-medium">顔認証</th>
               <th class="px-4 py-3 text-right font-medium">アルコール値</th>
               <th class="px-4 py-3 text-center font-medium">結果</th>
               <th class="px-4 py-3 text-right font-medium">体温</th>
@@ -157,17 +174,44 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="m in measurements" :key="m.id" class="hover:bg-gray-50">
+            <tr v-for="m in measurements" :key="m.id" class="hover:bg-gray-50 cursor-pointer" @click="selectedMeasurement = m">
               <td class="px-4 py-3 text-gray-700">{{ formatDate(m.measured_at) }}</td>
               <td class="px-4 py-3 text-gray-700">{{ employeeName(m.employee_id) }}</td>
-              <td class="px-4 py-3 text-right text-gray-700">{{ m.alcohol_value.toFixed(3) }} mg/L</td>
               <td class="px-4 py-3 text-center">
                 <span
+                  class="inline-block px-2 py-1 rounded-full text-xs font-medium"
+                  :class="statusColor(m)"
+                >
+                  {{ statusLabel(m) }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span
+                  v-if="m.face_verified === true"
+                  class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                >
+                  済
+                </span>
+                <span
+                  v-else-if="m.face_verified === false"
+                  class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                >
+                  スキップ
+                </span>
+                <span v-else class="text-gray-400 text-xs">-</span>
+              </td>
+              <td class="px-4 py-3 text-right text-gray-700">
+                {{ m.alcohol_value != null ? m.alcohol_value.toFixed(3) + ' mg/L' : '-' }}
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span
+                  v-if="m.result_type"
                   class="inline-block px-2 py-1 rounded-full text-xs font-medium"
                   :class="resultColor(m.result_type)"
                 >
                   {{ resultLabel(m.result_type) }}
                 </span>
+                <span v-else class="text-gray-400 text-xs">-</span>
               </td>
               <td class="px-4 py-3 text-right text-gray-700">
                 {{ m.temperature != null ? m.temperature.toFixed(1) + ' ℃' : '-' }}
@@ -208,5 +252,13 @@ onMounted(() => {
     <div v-else class="text-center py-8 text-gray-500">
       測定履歴がありません
     </div>
+
+    <!-- 詳細モーダル -->
+    <MeasurementDetail
+      v-if="selectedMeasurement"
+      :measurement="selectedMeasurement"
+      :employee-name="employeeName(selectedMeasurement.employee_id)"
+      @close="selectedMeasurement = null"
+    />
   </div>
 </template>

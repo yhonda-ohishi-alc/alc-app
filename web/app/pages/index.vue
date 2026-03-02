@@ -1,23 +1,11 @@
 <script setup lang="ts">
-import type { FaceAuthResult, MeasurementResult } from '~/types'
-import { initApi, getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
+import { initApi } from '~/utils/api'
 
 const config = useRuntimeConfig()
-const step = ref<'nfc' | 'face_auth' | 'medical' | 'measuring' | 'result'>('nfc')
-const employeeId = ref('')
-const authResult = ref<FaceAuthResult | null>(null)
-const measurementResult = ref<MeasurementResult | null>(null)
-const faceSnapshot = ref<Blob | null>(null)
+const route = useRoute()
 
-const saveError = ref<string | null>(null)
-const isSaving = ref(false)
-const saveStatus = ref<'saved' | 'queued' | null>(null)
-
-// オフライン同期
-const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflineSync()
-
-// 認証 + API 初期化
-const { accessToken, deviceTenantId, isDeviceActivated, refreshAccessToken } = useAuth()
+// Auth + API init (全タブ共通)
+const { accessToken, deviceTenantId, refreshAccessToken } = useAuth()
 initApi(
   config.public.apiBase as string,
   () => accessToken.value,
@@ -25,317 +13,98 @@ initApi(
   () => refreshAccessToken(),
 )
 
-// 顔データ同期
-const { isSyncing: isFaceSyncing } = useFaceSync()
+// 顔データ同期 (singleton)
+useFaceSync()
 
-// 手動入力フォールバック
-const manualIdInput = ref('')
-const useManualInput = ref(false)
+// --- ロールタブ ---
+type RoleTab = 'driver' | 'manager' | 'admin'
+const roleTabOptions: RoleTab[] = ['driver', 'manager', 'admin']
+const activeRole = ref<RoleTab>(
+  roleTabOptions.includes(route.query.role as RoleTab)
+    ? (route.query.role as RoleTab)
+    : 'driver',
+)
 
-// NFC 読み取り → employee UUID を解決
-const employeeName = ref('')
-async function onNfcRead(nfcId: string) {
-  try {
-    const emp = await getEmployeeByNfcId(nfcId)
-    employeeId.value = emp.id
-    employeeName.value = emp.name
-    step.value = 'face_auth'
-  } catch {
-    console.error(`乗務員が見つかりません (NFC ID: ${nfcId})`)
-  }
+// --- 運行者サブタブ ---
+type DriverSubTab = 'normal' | 'tenko'
+const driverSubTab = ref<DriverSubTab>(
+  route.query.tab === 'tenko' ? 'tenko' : 'normal',
+)
+
+// URL クエリ同期
+watch(activeRole, (role) => {
+  const query: Record<string, string> = {}
+  if (role !== 'driver') query.role = role
+  navigateTo({ path: '/', query }, { replace: true })
+})
+
+watch(driverSubTab, (tab) => {
+  if (activeRole.value !== 'driver') return
+  const query: Record<string, string> = {}
+  if (tab === 'tenko') query.tab = 'tenko'
+  navigateTo({ path: '/', query }, { replace: true })
+})
+
+const roleLabels: Record<RoleTab, string> = {
+  driver: '運行者',
+  manager: '運行管理者',
+  admin: 'システム管理者',
 }
-
-// 手動入力 (社員番号で検索)
-const manualError = ref<string | null>(null)
-async function onManualSubmit() {
-  const input = manualIdInput.value.trim()
-  if (!input) return
-  manualError.value = null
-  try {
-    const emp = await getEmployeeByCode(input)
-    employeeId.value = emp.id
-    employeeName.value = emp.name
-    step.value = 'face_auth'
-  } catch {
-    manualError.value = `社員番号「${input}」の乗務員が見つかりません`
-  }
-}
-
-// BLE Medical Gateway
-const {
-  latestTemperature: bleTemperature,
-  latestBloodPressure: bleBloodPressure,
-} = useBleGateway()
-
-// 顔認証結果
-function onFaceAuthResult(result: FaceAuthResult) {
-  authResult.value = result
-  if (result.verified) {
-    if (result.snapshot) {
-      faceSnapshot.value = result.snapshot
-    }
-    step.value = 'medical'
-  }
-}
-
-// BLE ステップ → 次へ or スキップ
-function onMedicalNext() {
-  step.value = 'measuring'
-}
-function onMedicalSkip() {
-  step.value = 'measuring'
-}
-
-// FC-1200 測定結果 → BLE 医療データをマージ → API に保存
-async function onMeasurementResult(result: MeasurementResult) {
-  // BLE Medical Gateway のデータをマージ
-  if (bleTemperature.value) {
-    result.temperature = bleTemperature.value.value
-  }
-  if (bleBloodPressure.value) {
-    result.systolic = bleBloodPressure.value.systolic
-    result.diastolic = bleBloodPressure.value.diastolic
-    result.pulse = bleBloodPressure.value.pulse
-  }
-  if (bleTemperature.value || bleBloodPressure.value) {
-    const times = [
-      bleTemperature.value?.measuredAt,
-      bleBloodPressure.value?.measuredAt,
-    ].filter((t): t is Date => t !== undefined)
-    if (times.length > 0) {
-      result.medicalMeasuredAt = times.sort((a, b) => b.getTime() - a.getTime())[0]
-    }
-  }
-
-  measurementResult.value = result
-  step.value = 'result'
-
-  isSaving.value = true
-  saveError.value = null
-  saveStatus.value = null
-  try {
-    saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined)
-  } catch (e) {
-    saveError.value = e instanceof Error ? e.message : '保存エラー'
-    console.warn('測定結果の保存に失敗:', e)
-  } finally {
-    isSaving.value = false
-  }
-}
-
-// リセット
-function reset() {
-  step.value = 'nfc'
-  employeeId.value = ''
-  employeeName.value = ''
-  manualIdInput.value = ''
-  manualError.value = null
-  useManualInput.value = false
-  authResult.value = null
-  measurementResult.value = null
-  faceSnapshot.value = null
-  saveError.value = null
-  saveStatus.value = null
-  isSaving.value = false
-}
-
-const steps = ['NFC', '顔認証', '体温・血圧', '測定', '結果'] as const
-const stepKeys = ['nfc', 'face_auth', 'medical', 'measuring', 'result'] as const
-const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 </script>
 
 <template>
-  <div class="flex flex-col items-center min-h-screen p-4">
-    <!-- 端末未アクティベート警告 (ClientOnly: localStorage は SSR で使えないため) -->
-    <ClientOnly>
-      <div
-        v-if="!isDeviceActivated"
-        class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
-      >
-        端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
-      </div>
-    </ClientOnly>
-    <!-- オフラインバナー -->
-    <div
-      v-if="!isOnline"
-      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
-    >
-      オフライン — 測定結果はローカルに保存されます
-    </div>
-    <!-- 未送信キュー通知 -->
-    <div
-      v-if="pending > 0 && isOnline && !isSyncing"
-      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 flex items-center justify-between text-sm"
-    >
-      <span class="text-blue-700">未送信の測定結果: {{ pending }}件</span>
-      <button class="text-blue-600 font-medium hover:underline" @click="syncQueue">同期する</button>
-    </div>
-    <div
-      v-if="isSyncing"
-      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700"
-    >
-      同期中...
-    </div>
-    <div
-      v-if="isFaceSyncing"
-      class="w-full max-w-md bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700"
-    >
-      顔データ同期中...
-    </div>
-
-    <header class="w-full max-w-md text-center py-6">
-      <h1 class="text-2xl font-bold text-gray-800">アルコールチェッカー</h1>
-      <!-- ステップインジケーター -->
-      <div class="flex items-center justify-center mt-3">
-        <template v-for="(s, i) in steps" :key="i">
-          <div
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
-            :class="{
-              'bg-blue-600 text-white': i === currentStepIndex,
-              'bg-green-500 text-white': i < currentStepIndex,
-              'bg-gray-200 text-gray-400': i > currentStepIndex,
-            }"
-          >
-            <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {{ s }}
-          </div>
-          <svg
-            v-if="i < steps.length - 1"
-            class="w-4 h-4 mx-1 shrink-0"
-            :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </template>
-      </div>
-    </header>
-
-    <main class="w-full max-w-md flex-1">
-      <!-- Step 1: NFC / 手動入力 -->
-      <div v-if="step === 'nfc'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
-
-          <!-- NFC モード -->
-          <div v-if="!useManualInput">
-            <NfcStatus @read="onNfcRead" />
-            <button
-              class="w-full mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
-              @click="useManualInput = true"
-            >
-              手動でIDを入力する
-            </button>
-          </div>
-
-          <!-- 手動入力モード -->
-          <div v-else>
-            <p class="text-sm text-gray-500 mb-4">社員番号を入力してください</p>
-            <input
-              v-model="manualIdInput"
-              type="text"
-              placeholder="社員番号 (例: 001)"
-              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              @keyup.enter="onManualSubmit"
-            >
-            <p v-if="manualError" class="mt-2 text-sm text-red-600">{{ manualError }}</p>
-            <button
-              :disabled="!manualIdInput.trim()"
-              class="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
-              @click="onManualSubmit"
-            >
-              次へ
-            </button>
-            <button
-              class="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
-              @click="useManualInput = false"
-            >
-              NFC で読み取る
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 2: 顔認証 -->
-      <div v-if="step === 'face_auth'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">顔認証</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
-          <FaceAuth
-            :employee-id="employeeId"
-            mode="verify"
-            @result="onFaceAuthResult"
-          />
-        </div>
-      </div>
-
-      <!-- Step 3: 体温・血圧 (BLE Medical Gateway) -->
-      <div v-if="step === 'medical'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">体温・血圧</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
-          <BleStatus
-            @next="onMedicalNext"
-            @skip="onMedicalSkip"
-          />
-        </div>
-      </div>
-
-      <!-- Step 4: FC-1200 測定 -->
-      <div v-if="step === 'measuring'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
-          <AlcMeasurement
-            :employee-id="employeeId"
-            @result="onMeasurementResult"
-          />
-        </div>
-      </div>
-
-      <!-- Step 5: 結果表示 -->
-      <div v-if="step === 'result' && measurementResult" class="flex flex-col gap-4">
-        <ResultCard
-          :result="measurementResult"
-          :face-photo-blob="faceSnapshot"
-          :employee-name="employeeName"
-          @reset="reset"
-        />
-        <!-- API 保存状態 -->
-        <div v-if="isSaving" class="text-center text-sm text-gray-500">
-          保存中...
-        </div>
-        <div v-else-if="saveStatus === 'queued'" class="text-center text-sm text-amber-600">
-          オフラインのためローカルに保存しました (オンライン復帰時に自動送信)
-        </div>
-        <div v-else-if="saveError" class="text-center text-sm text-red-500">
-          保存失敗: {{ saveError }}
-        </div>
-      </div>
-    </main>
-
-    <!-- ナビゲーション -->
-    <footer class="w-full max-w-md py-4">
-      <div class="flex justify-center gap-4">
+  <div class="flex flex-col h-full">
+    <!-- ロールタブ -->
+    <div class="w-full max-w-lg mx-auto px-4 pt-3">
+      <div class="flex gap-1 bg-gray-200 rounded-lg p-1">
         <button
-          v-if="step !== 'nfc'"
-          class="text-gray-500 hover:text-gray-700 text-sm"
-          @click="reset"
+          v-for="role in roleTabOptions"
+          :key="role"
+          class="flex-1 px-3 py-2.5 rounded-md text-sm font-medium transition-colors"
+          :class="activeRole === role
+            ? 'bg-white text-gray-800 shadow-sm'
+            : 'text-gray-600 hover:text-gray-800'"
+          @click="activeRole = role"
         >
-          最初からやり直す
+          {{ roleLabels[role] }}
         </button>
-        <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
-          顔登録
-        </NuxtLink>
-        <NuxtLink to="/dashboard" class="text-blue-600 hover:underline text-sm">
-          管理画面
-        </NuxtLink>
-        <NuxtLink to="/maintenance" class="text-blue-600 hover:underline text-sm">
-          メンテナンス
-        </NuxtLink>
       </div>
-    </footer>
+    </div>
+
+    <!-- 運行者タブ -->
+    <template v-if="activeRole === 'driver'">
+      <!-- 通常点呼 / 自動点呼 サブタブ -->
+      <div class="w-full max-w-lg mx-auto px-4 mt-2">
+        <div class="flex gap-1 bg-blue-100 rounded-lg p-1">
+          <button
+            v-for="tab in ([
+              { key: 'normal' as const, label: '通常点呼' },
+              { key: 'tenko' as const, label: '自動点呼' },
+            ])"
+            :key="tab.key"
+            class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+            :class="driverSubTab === tab.key
+              ? 'bg-white text-blue-800 shadow-sm'
+              : 'text-blue-700 hover:text-blue-900'"
+            @click="driverSubTab = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+      </div>
+
+      <NormalMeasurement v-if="driverSubTab === 'normal'" class="flex-1 min-h-0" />
+      <TenkoKiosk v-if="driverSubTab === 'tenko'" class="flex-1 min-h-0" />
+    </template>
+
+    <!-- 運行管理者タブ -->
+    <RoleAuthGate v-if="activeRole === 'manager'" required-role="manager" class="flex-1 min-h-0">
+      <ManagerDashboard />
+    </RoleAuthGate>
+
+    <!-- システム管理者タブ -->
+    <RoleAuthGate v-if="activeRole === 'admin'" required-role="admin" class="flex-1 min-h-0">
+      <AdminDashboard />
+    </RoleAuthGate>
   </div>
 </template>

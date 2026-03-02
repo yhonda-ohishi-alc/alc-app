@@ -1,0 +1,477 @@
+<script setup lang="ts">
+import type { FaceAuthResult, MeasurementResult } from '~/types'
+import { getEmployeeByNfcId, getEmployeeByCode, startMeasurement, updateMeasurement, uploadFacePhoto } from '~/utils/api'
+import { checkLicenseExpiry, formatExpiryDate, type LicenseExpiryStatus } from '~/utils/license'
+
+const step = ref<'nfc' | 'face_auth' | 'medical' | 'measuring' | 'result'>('nfc')
+const employeeId = ref('')
+const authResult = ref<FaceAuthResult | null>(null)
+const measurementResult = ref<MeasurementResult | null>(null)
+const faceSnapshot = ref<Blob | null>(null)
+
+const saveError = ref<string | null>(null)
+const isSaving = ref(false)
+const saveStatus = ref<'saved' | 'queued' | null>(null)
+
+// 免許証有効期限
+const licenseExpiryDate = ref<Date | null>(null)
+const licenseExpiryStatus = ref<LicenseExpiryStatus | null>(null)
+
+// オフライン同期
+const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflineSync()
+
+// シングルトン再呼出で共有状態取得
+const { isDeviceActivated } = useAuth()
+const { isSyncing: isFaceSyncing } = useFaceSync()
+
+// 手動入力フォールバック
+const manualIdInput = ref('')
+const useManualInput = ref(false)
+
+// 測定レコード早期作成
+const activeMeasurementId = ref<string | null>(null)
+const facePhotoUploaded = ref(false)
+const faceVerified = ref<boolean | null>(null)
+
+/** 測定開始レコードを作成 (best-effort: 失敗しても測定フローは続行) */
+async function tryStartMeasurement(empId: string) {
+  console.log('[Measurement] tryStartMeasurement called, empId:', empId, 'isOnline:', isOnline.value)
+  if (!isOnline.value) return
+  try {
+    const m = await startMeasurement(empId)
+    activeMeasurementId.value = m.id
+    console.log('[Measurement] startMeasurement success, id:', m.id)
+  } catch (e) {
+    console.warn('[Measurement] startMeasurement failed:', e)
+    activeMeasurementId.value = null
+  }
+}
+
+// NFC 読み取り → employee UUID を解決
+const employeeName = ref('')
+async function onNfcRead(nfcId: string, expiryDate?: Date) {
+  if (expiryDate) {
+    licenseExpiryDate.value = expiryDate
+    licenseExpiryStatus.value = checkLicenseExpiry(expiryDate)
+  }
+  try {
+    const emp = await getEmployeeByNfcId(nfcId)
+    employeeId.value = emp.id
+    employeeName.value = emp.name
+    await tryStartMeasurement(emp.id)
+    step.value = 'face_auth'
+  } catch {
+    console.error(`乗務員が見つかりません (NFC ID: ${nfcId})`)
+  }
+}
+
+// 手動入力 (社員番号で検索)
+const manualError = ref<string | null>(null)
+async function onManualSubmit() {
+  const input = manualIdInput.value.trim()
+  if (!input) return
+  manualError.value = null
+  try {
+    const emp = await getEmployeeByCode(input)
+    employeeId.value = emp.id
+    employeeName.value = emp.name
+    await tryStartMeasurement(emp.id)
+    step.value = 'face_auth'
+  } catch {
+    manualError.value = `社員番号「${input}」の乗務員が見つかりません`
+  }
+}
+
+// BLE Medical Gateway
+const {
+  latestTemperature: bleTemperature,
+  latestBloodPressure: bleBloodPressure,
+} = useBleGateway()
+
+// 顔認証結果
+function onFaceAuthResult(result: FaceAuthResult) {
+  authResult.value = result
+  if (result.verified) {
+    faceVerified.value = true
+    if (result.snapshot) {
+      faceSnapshot.value = result.snapshot
+    }
+    step.value = 'medical'
+
+    // 顔写真 + face_verified を started レコードに記録（best-effort）
+    console.log('[Measurement] onFaceAuth: activeMeasurementId:', activeMeasurementId.value, 'hasSnapshot:', !!result.snapshot)
+    if (activeMeasurementId.value) {
+      if (result.snapshot) {
+        uploadFacePhoto(result.snapshot)
+          .then(url => {
+            console.log('[Measurement] face photo uploaded:', url)
+            facePhotoUploaded.value = true
+            return updateMeasurement(activeMeasurementId.value!, { face_photo_url: url, face_verified: true })
+          })
+          .then(() => console.log('[Measurement] face photo + face_verified saved to record'))
+          .catch(e => console.error('[Measurement] face photo upload/save failed:', e))
+      } else {
+        updateMeasurement(activeMeasurementId.value, { face_verified: true })
+          .catch(e => console.error('[Measurement] face_verified update failed:', e))
+      }
+    }
+  }
+}
+
+// 顔認証スキップ
+function onFaceAuthSkip() {
+  faceVerified.value = false
+  step.value = 'medical'
+
+  // face_verified = false を started レコードに記録（best-effort）
+  if (activeMeasurementId.value) {
+    updateMeasurement(activeMeasurementId.value, { face_verified: false })
+      .catch(e => console.error('[Measurement] face_verified skip update failed:', e))
+  }
+}
+
+// BLE 体温・血圧を取得時に即レコード更新（best-effort）
+watch(bleTemperature, (t) => {
+  console.log('[Measurement] bleTemperature changed:', t?.value, 'activeMeasurementId:', activeMeasurementId.value)
+  if (t && activeMeasurementId.value) {
+    updateMeasurement(activeMeasurementId.value, {
+      temperature: t.value,
+      medical_measured_at: t.measuredAt.toISOString(),
+    })
+      .then(() => console.log('[Measurement] temperature saved'))
+      .catch(e => console.error('[Measurement] temperature update failed:', e))
+  }
+})
+
+watch(bleBloodPressure, (bp) => {
+  console.log('[Measurement] bleBloodPressure changed:', bp, 'activeMeasurementId:', activeMeasurementId.value)
+  if (bp && activeMeasurementId.value) {
+    updateMeasurement(activeMeasurementId.value, {
+      systolic: bp.systolic,
+      diastolic: bp.diastolic,
+      pulse: bp.pulse,
+      medical_measured_at: bp.measuredAt.toISOString(),
+    })
+      .then(() => console.log('[Measurement] blood pressure saved'))
+      .catch(e => console.error('[Measurement] blood pressure update failed:', e))
+  }
+})
+
+// BLE ステップ → 次へ or スキップ
+function onMedicalNext() {
+  step.value = 'measuring'
+}
+function onMedicalSkip() {
+  step.value = 'measuring'
+}
+
+// FC-1200 測定結果 → BLE 医療データをマージ → API に保存
+async function onMeasurementResult(result: MeasurementResult) {
+  // BLE Medical Gateway のデータをマージ
+  if (bleTemperature.value) {
+    result.temperature = bleTemperature.value.value
+  }
+  if (bleBloodPressure.value) {
+    result.systolic = bleBloodPressure.value.systolic
+    result.diastolic = bleBloodPressure.value.diastolic
+    result.pulse = bleBloodPressure.value.pulse
+  }
+  if (bleTemperature.value || bleBloodPressure.value) {
+    const times = [
+      bleTemperature.value?.measuredAt,
+      bleBloodPressure.value?.measuredAt,
+    ].filter((t): t is Date => t !== undefined)
+    if (times.length > 0) {
+      result.medicalMeasuredAt = times.sort((a, b) => b.getTime() - a.getTime())[0]
+    }
+  }
+
+  measurementResult.value = result
+  step.value = 'result'
+
+  isSaving.value = true
+  saveError.value = null
+  saveStatus.value = null
+  try {
+    console.log('[Measurement] activeMeasurementId:', activeMeasurementId.value, 'isOnline:', isOnline.value)
+    if (activeMeasurementId.value && isOnline.value) {
+      // started レコードを completed に更新
+      let facePhotoUrl: string | undefined
+      if (faceSnapshot.value && !facePhotoUploaded.value) {
+        facePhotoUrl = await uploadFacePhoto(faceSnapshot.value)
+      }
+      const updateData = {
+        status: 'completed',
+        alcohol_value: result.alcoholValue,
+        result_type: result.resultType,
+        device_use_count: result.deviceUseCount,
+        face_photo_url: facePhotoUrl || result.facePhotoUrl,
+        measured_at: result.measuredAt.toISOString(),
+        temperature: result.temperature,
+        systolic: result.systolic,
+        diastolic: result.diastolic,
+        pulse: result.pulse,
+        medical_measured_at: result.medicalMeasuredAt?.toISOString(),
+        face_verified: faceVerified.value,
+      }
+      console.log('[Measurement] updateMeasurement PUT data:', JSON.stringify(updateData))
+      await updateMeasurement(activeMeasurementId.value, updateData)
+      console.log('[Measurement] updateMeasurement success')
+      saveStatus.value = 'saved'
+    } else {
+      // オフラインまたは activeMeasurementId なし → 従来のフロー
+      console.log('[Measurement] fallback to offlineSave')
+      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined)
+    }
+  } catch (e) {
+    // 更新失敗時はオフラインキューにフォールバック
+    console.error('[Measurement] updateMeasurement failed:', e)
+    try {
+      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined)
+    } catch (e2) {
+      saveError.value = e2 instanceof Error ? e2.message : '保存エラー'
+      console.warn('測定結果の保存に失敗:', e2)
+    }
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// リセット
+function reset() {
+  step.value = 'nfc'
+  employeeId.value = ''
+  employeeName.value = ''
+  manualIdInput.value = ''
+  manualError.value = null
+  useManualInput.value = false
+  authResult.value = null
+  measurementResult.value = null
+  faceSnapshot.value = null
+  saveError.value = null
+  saveStatus.value = null
+  isSaving.value = false
+  licenseExpiryDate.value = null
+  licenseExpiryStatus.value = null
+  activeMeasurementId.value = null
+  facePhotoUploaded.value = false
+  faceVerified.value = null
+}
+
+const steps = ['NFC', '顔認証', '体温・血圧', '測定', '結果'] as const
+const stepKeys = ['nfc', 'face_auth', 'medical', 'measuring', 'result'] as const
+const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
+</script>
+
+<template>
+  <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
+    <!-- 端末未アクティベート警告 -->
+    <ClientOnly>
+      <div
+        v-if="!isDeviceActivated"
+        class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
+      >
+        端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
+      </div>
+    </ClientOnly>
+    <!-- オフラインバナー -->
+    <div
+      v-if="!isOnline"
+      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
+    >
+      オフライン — 測定結果はローカルに保存されます
+    </div>
+    <!-- 未送信キュー通知 -->
+    <div
+      v-if="pending > 0 && isOnline && !isSyncing"
+      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 flex items-center justify-between text-sm"
+    >
+      <span class="text-blue-700">未送信の測定結果: {{ pending }}件</span>
+      <button class="text-blue-600 font-medium hover:underline" @click="syncQueue">同期する</button>
+    </div>
+    <div
+      v-if="isSyncing"
+      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700"
+    >
+      同期中...
+    </div>
+    <div
+      v-if="isFaceSyncing"
+      class="w-full max-w-md bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700"
+    >
+      顔データ同期中...
+    </div>
+
+    <!-- 免許証有効期限切れ警告 -->
+    <div
+      v-if="licenseExpiryStatus === 'expired' && licenseExpiryDate"
+      class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
+    >
+      免許証の有効期限が切れています ({{ formatExpiryDate(licenseExpiryDate) }})
+    </div>
+    <div
+      v-if="licenseExpiryStatus === 'expiring_soon' && licenseExpiryDate"
+      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
+    >
+      免許証の有効期限が近づいています ({{ formatExpiryDate(licenseExpiryDate) }})
+    </div>
+
+    <header class="w-full max-w-md text-center py-6">
+      <h1 class="text-2xl font-bold text-gray-800">アルコールチェッカー</h1>
+      <!-- ステップインジケーター -->
+      <div class="flex items-center justify-center mt-3">
+        <template v-for="(s, i) in steps" :key="i">
+          <div
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
+            :class="{
+              'bg-blue-600 text-white': i === currentStepIndex,
+              'bg-green-500 text-white': i < currentStepIndex,
+              'bg-gray-200 text-gray-400': i > currentStepIndex,
+            }"
+          >
+            <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {{ s }}
+          </div>
+          <svg
+            v-if="i < steps.length - 1"
+            class="w-4 h-4 mx-1 shrink-0"
+            :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </template>
+      </div>
+    </header>
+
+    <main class="w-full max-w-md flex-1">
+      <!-- Step 1: NFC / 手動入力 -->
+      <div v-if="step === 'nfc'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
+
+          <!-- NFC モード -->
+          <div v-if="!useManualInput">
+            <NfcStatus @read="onNfcRead" />
+            <button
+              class="w-full mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
+              @click="useManualInput = true"
+            >
+              手動でIDを入力する
+            </button>
+          </div>
+
+          <!-- 手動入力モード -->
+          <div v-else>
+            <p class="text-sm text-gray-500 mb-4">社員番号を入力してください</p>
+            <input
+              v-model="manualIdInput"
+              type="text"
+              placeholder="社員番号 (例: 001)"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              @keyup.enter="onManualSubmit"
+            >
+            <p v-if="manualError" class="mt-2 text-sm text-red-600">{{ manualError }}</p>
+            <button
+              :disabled="!manualIdInput.trim()"
+              class="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
+              @click="onManualSubmit"
+            >
+              次へ
+            </button>
+            <button
+              class="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
+              @click="useManualInput = false"
+            >
+              NFC で読み取る
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: 顔認証 -->
+      <div v-if="step === 'face_auth'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-gray-700 mb-4">顔認証</h2>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+          <FaceAuth
+            :employee-id="employeeId"
+            mode="verify"
+            @result="onFaceAuthResult"
+          />
+          <button
+            class="w-full mt-4 px-4 py-2 border border-gray-300 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+            @click="onFaceAuthSkip"
+          >
+            顔認証をスキップ
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 3: 体温・血圧 (BLE Medical Gateway) -->
+      <div v-if="step === 'medical'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-gray-700 mb-4">体温・血圧</h2>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+          <BleStatus
+            @next="onMedicalNext"
+            @skip="onMedicalSkip"
+          />
+        </div>
+      </div>
+
+      <!-- Step 4: FC-1200 測定 -->
+      <div v-if="step === 'measuring'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+          <AlcMeasurement
+            :employee-id="employeeId"
+            @result="onMeasurementResult"
+          />
+        </div>
+      </div>
+
+      <!-- Step 5: 結果表示 -->
+      <div v-if="step === 'result' && measurementResult" class="flex flex-col gap-4">
+        <ResultCard
+          :result="measurementResult"
+          :face-photo-blob="faceSnapshot"
+          :employee-name="employeeName"
+          @reset="reset"
+        />
+        <!-- API 保存状態 -->
+        <div v-if="isSaving" class="text-center text-sm text-gray-500">
+          保存中...
+        </div>
+        <div v-else-if="saveStatus === 'queued'" class="text-center text-sm text-amber-600">
+          オフラインのためローカルに保存しました (オンライン復帰時に自動送信)
+        </div>
+        <div v-else-if="saveError" class="text-center text-sm text-red-500">
+          保存失敗: {{ saveError }}
+        </div>
+      </div>
+    </main>
+
+    <!-- ナビゲーション -->
+    <footer class="w-full max-w-md py-4">
+      <div class="flex justify-center gap-4">
+        <button
+          v-if="step !== 'nfc'"
+          class="text-gray-500 hover:text-gray-700 text-sm"
+          @click="reset"
+        >
+          最初からやり直す
+        </button>
+        <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
+          顔登録
+        </NuxtLink>
+        <NuxtLink to="/maintenance" class="text-blue-600 hover:underline text-sm">
+          メンテナンス
+        </NuxtLink>
+      </div>
+    </footer>
+  </div>
+</template>

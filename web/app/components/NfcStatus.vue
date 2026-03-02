@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import type { NfcReadEvent } from '~/types'
+import type { NfcReadEvent, NfcLicenseReadEvent } from '~/types'
+import { parseLicenseExpiryDate, checkLicenseExpiry, formatExpiryDate, type LicenseExpiryStatus } from '~/utils/license'
 
 const emit = defineEmits<{
-  read: [employeeId: string]
+  read: [employeeId: string, expiryDate?: Date]
 }>()
 
-const { isConnected, error, readers, bridgeVersion, connect, onRead } = useNfcWebSocket()
+const { isConnected, error, readers, bridgeVersion, connect, onRead, onLicenseRead } = useNfcWebSocket()
 const { latestVersion, checkLatestVersion, isUpdateAvailable } = useNfcBridgeUpdate()
 
 const lastReadId = ref<string | null>(null)
 const readAnimation = ref(false)
+const licenseExpiryDate = ref<Date | null>(null)
+const licenseExpiryStatus = ref<LicenseExpiryStatus | null>(null)
 
 const showUpdateBanner = computed(() => {
   if (!isConnected.value || !latestVersion.value) return false
@@ -29,10 +32,21 @@ onMounted(() => {
   connect()
 })
 
+onLicenseRead((event: NfcLicenseReadEvent) => {
+  if (event.expiry_date && event.card_type === 'driver_license') {
+    const expiry = parseLicenseExpiryDate(event.expiry_date)
+    licenseExpiryDate.value = expiry
+    licenseExpiryStatus.value = expiry ? checkLicenseExpiry(expiry) : null
+  } else {
+    licenseExpiryDate.value = null
+    licenseExpiryStatus.value = null
+  }
+})
+
 onRead((event: NfcReadEvent) => {
   lastReadId.value = event.employee_id
   readAnimation.value = true
-  emit('read', event.employee_id)
+  emit('read', event.employee_id, licenseExpiryDate.value ?? undefined)
 
   setTimeout(() => {
     readAnimation.value = false
@@ -79,6 +93,24 @@ const statusText = computed(() => {
       <p v-if="lastReadId" class="mt-2 text-green-600 font-mono text-sm">
         読み取り: {{ lastReadId }}
       </p>
+      <!-- 免許証有効期限 -->
+      <div v-if="licenseExpiryDate" class="mt-2 text-sm">
+        <p class="text-gray-600">
+          免許証有効期限: {{ formatExpiryDate(licenseExpiryDate) }}
+        </p>
+        <p
+          v-if="licenseExpiryStatus === 'expired'"
+          class="mt-1 px-3 py-1 bg-red-100 text-red-700 rounded-lg font-medium"
+        >
+          免許証の有効期限が切れています
+        </p>
+        <p
+          v-if="licenseExpiryStatus === 'expiring_soon'"
+          class="mt-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-lg font-medium"
+        >
+          免許証の有効期限が近づいています
+        </p>
+      </div>
     </div>
 
     <!-- NFC ブリッジ未接続時のダウンロードリンク -->

@@ -6,6 +6,7 @@ const STORE_NAME = 'pending-measurements'
 
 /** キューに保存する際、measuredAt を ISO 文字列化したもの */
 export interface SerializedResult {
+  activeMeasurementId?: string
   employeeId: string
   alcoholValue: number
   resultType: 'normal' | 'over' | 'error'
@@ -65,9 +66,10 @@ function base64ToBlob(base64: string): Blob {
 }
 
 /** オフライン測定結果をキューに追加 */
-export async function enqueue(result: MeasurementResult, facePhotoBlob?: Blob): Promise<void> {
+export async function enqueue(result: MeasurementResult, facePhotoBlob?: Blob, activeMeasurementId?: string): Promise<void> {
   const db = await openDb()
   const serialized: SerializedResult = {
+    activeMeasurementId,
     employeeId: result.employeeId,
     alcoholValue: result.alcoholValue,
     resultType: result.resultType,
@@ -162,6 +164,7 @@ const MAX_RETRIES = 5
 /** キュー内の測定結果を順次 API 送信 (オンライン復帰時に呼ぶ) */
 export async function flush(
   saveFn: (result: MeasurementResult, blob?: Blob) => Promise<unknown>,
+  updateFn?: (id: string, data: Record<string, unknown>) => Promise<unknown>,
 ): Promise<{ sent: number; failed: number }> {
   const entries = await getAll()
   let sent = 0
@@ -173,15 +176,54 @@ export async function flush(
       continue
     }
     try {
-      const result: MeasurementResult = {
-        ...entry.result,
-        measuredAt: new Date(entry.result.measuredAt),
-        medicalMeasuredAt: entry.result.medicalMeasuredAt
-          ? new Date(entry.result.medicalMeasuredAt)
-          : undefined,
+      if (entry.result.activeMeasurementId && updateFn) {
+        // 既存の started レコードを completed に更新
+        let facePhotoUrl: string | undefined
+        if (entry.facePhotoBase64) {
+          const blob = base64ToBlob(entry.facePhotoBase64)
+          // uploadFacePhoto は saveFn 経由では呼べないため、facePhotoUrl があればそれを使う
+          facePhotoUrl = entry.result.facePhotoUrl
+          // blob がある場合はフォールバックで saveFn を使う
+          if (!facePhotoUrl) {
+            // 写真アップロード付きの場合は従来の POST パスにフォールバック
+            const result: MeasurementResult = {
+              ...entry.result,
+              measuredAt: new Date(entry.result.measuredAt),
+              medicalMeasuredAt: entry.result.medicalMeasuredAt
+                ? new Date(entry.result.medicalMeasuredAt)
+                : undefined,
+            }
+            await saveFn(result, blob)
+            await remove(entry.id)
+            sent++
+            continue
+          }
+        }
+        await updateFn(entry.result.activeMeasurementId, {
+          status: 'completed',
+          alcohol_value: entry.result.alcoholValue,
+          result_type: entry.result.resultType,
+          device_use_count: entry.result.deviceUseCount,
+          face_photo_url: facePhotoUrl || entry.result.facePhotoUrl,
+          measured_at: entry.result.measuredAt,
+          temperature: entry.result.temperature,
+          systolic: entry.result.systolic,
+          diastolic: entry.result.diastolic,
+          pulse: entry.result.pulse,
+          medical_measured_at: entry.result.medicalMeasuredAt,
+        })
+      } else {
+        // 従来の POST パス
+        const result: MeasurementResult = {
+          ...entry.result,
+          measuredAt: new Date(entry.result.measuredAt),
+          medicalMeasuredAt: entry.result.medicalMeasuredAt
+            ? new Date(entry.result.medicalMeasuredAt)
+            : undefined,
+        }
+        const blob = entry.facePhotoBase64 ? base64ToBlob(entry.facePhotoBase64) : undefined
+        await saveFn(result, blob)
       }
-      const blob = entry.facePhotoBase64 ? base64ToBlob(entry.facePhotoBase64) : undefined
-      await saveFn(result, blob)
       await remove(entry.id)
       sent++
     } catch {
