@@ -3,7 +3,7 @@ import type { FaceAuthResult, MeasurementResult } from '~/types'
 import { initApi, getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
 
 const config = useRuntimeConfig()
-const step = ref<'nfc' | 'face_auth' | 'measuring' | 'result'>('nfc')
+const step = ref<'nfc' | 'face_auth' | 'medical' | 'measuring' | 'result'>('nfc')
 const employeeId = ref('')
 const authResult = ref<FaceAuthResult | null>(null)
 const measurementResult = ref<MeasurementResult | null>(null)
@@ -61,6 +61,12 @@ async function onManualSubmit() {
   }
 }
 
+// BLE Medical Gateway
+const {
+  latestTemperature: bleTemperature,
+  latestBloodPressure: bleBloodPressure,
+} = useBleGateway()
+
 // 顔認証結果
 function onFaceAuthResult(result: FaceAuthResult) {
   authResult.value = result
@@ -68,12 +74,39 @@ function onFaceAuthResult(result: FaceAuthResult) {
     if (result.snapshot) {
       faceSnapshot.value = result.snapshot
     }
-    step.value = 'measuring'
+    step.value = 'medical'
   }
 }
 
-// FC-1200 測定結果 → API に保存 (オフライン時はキューに退避)
+// BLE ステップ → 次へ or スキップ
+function onMedicalNext() {
+  step.value = 'measuring'
+}
+function onMedicalSkip() {
+  step.value = 'measuring'
+}
+
+// FC-1200 測定結果 → BLE 医療データをマージ → API に保存
 async function onMeasurementResult(result: MeasurementResult) {
+  // BLE Medical Gateway のデータをマージ
+  if (bleTemperature.value) {
+    result.temperature = bleTemperature.value.value
+  }
+  if (bleBloodPressure.value) {
+    result.systolic = bleBloodPressure.value.systolic
+    result.diastolic = bleBloodPressure.value.diastolic
+    result.pulse = bleBloodPressure.value.pulse
+  }
+  if (bleTemperature.value || bleBloodPressure.value) {
+    const times = [
+      bleTemperature.value?.measuredAt,
+      bleBloodPressure.value?.measuredAt,
+    ].filter((t): t is Date => t !== undefined)
+    if (times.length > 0) {
+      result.medicalMeasuredAt = times.sort((a, b) => b.getTime() - a.getTime())[0]
+    }
+  }
+
   measurementResult.value = result
   step.value = 'result'
 
@@ -106,8 +139,8 @@ function reset() {
   isSaving.value = false
 }
 
-const steps = ['NFC', '顔認証', '測定', '結果'] as const
-const stepKeys = ['nfc', 'face_auth', 'measuring', 'result'] as const
+const steps = ['NFC', '顔認証', '体温・血圧', '測定', '結果'] as const
+const stepKeys = ['nfc', 'face_auth', 'medical', 'measuring', 'result'] as const
 const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 </script>
 
@@ -238,7 +271,19 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </div>
       </div>
 
-      <!-- Step 3: FC-1200 測定 -->
+      <!-- Step 3: 体温・血圧 (BLE Medical Gateway) -->
+      <div v-if="step === 'medical'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-gray-700 mb-4">体温・血圧</h2>
+          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+          <BleStatus
+            @next="onMedicalNext"
+            @skip="onMedicalSkip"
+          />
+        </div>
+      </div>
+
+      <!-- Step 4: FC-1200 測定 -->
       <div v-if="step === 'measuring'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
@@ -250,7 +295,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </div>
       </div>
 
-      <!-- Step 4: 結果表示 -->
+      <!-- Step 5: 結果表示 -->
       <div v-if="step === 'result' && measurementResult" class="flex flex-col gap-4">
         <ResultCard
           :result="measurementResult"

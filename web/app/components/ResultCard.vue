@@ -52,6 +52,10 @@ const alcoholDisplay = computed(() => {
   return `${props.result.alcoholValue.toFixed(2)} mg/L`
 })
 
+const hasMedicalData = computed(() =>
+  props.result.temperature != null || props.result.systolic != null,
+)
+
 const timeDisplay = computed(() => {
   return props.result.measuredAt.toLocaleString('ja-JP', {
     year: 'numeric',
@@ -99,6 +103,25 @@ const timeDisplay = computed(() => {
         <div class="flex justify-between">
           <span class="text-sm text-gray-500">測定日時</span>
           <span class="text-sm">{{ timeDisplay }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 医療データ -->
+    <div v-if="hasMedicalData" class="border-t border-gray-200 mt-4 pt-3">
+      <p class="text-xs text-gray-400 mb-2">医療データ</p>
+      <div class="space-y-1">
+        <div v-if="result.temperature != null" class="flex justify-between">
+          <span class="text-sm text-gray-500">体温</span>
+          <span class="font-mono font-medium">{{ result.temperature.toFixed(1) }} &#8451;</span>
+        </div>
+        <div v-if="result.systolic != null" class="flex justify-between">
+          <span class="text-sm text-gray-500">血圧</span>
+          <span class="font-mono font-medium">{{ result.systolic }}/{{ result.diastolic }}</span>
+        </div>
+        <div v-if="result.pulse != null" class="flex justify-between">
+          <span class="text-sm text-gray-500">脈拍</span>
+          <span class="font-mono font-medium">{{ result.pulse }} bpm</span>
         </div>
       </div>
     </div>

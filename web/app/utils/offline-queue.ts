@@ -12,6 +12,12 @@ export interface SerializedResult {
   deviceUseCount: number
   facePhotoUrl?: string
   measuredAt: string
+  // Medical data (BLE Medical Gateway)
+  temperature?: number
+  systolic?: number
+  diastolic?: number
+  pulse?: number
+  medicalMeasuredAt?: string
 }
 
 export interface PendingMeasurement {
@@ -68,6 +74,11 @@ export async function enqueue(result: MeasurementResult, facePhotoBlob?: Blob): 
     deviceUseCount: result.deviceUseCount,
     facePhotoUrl: result.facePhotoUrl,
     measuredAt: result.measuredAt.toISOString(),
+    temperature: result.temperature,
+    systolic: result.systolic,
+    diastolic: result.diastolic,
+    pulse: result.pulse,
+    medicalMeasuredAt: result.medicalMeasuredAt?.toISOString(),
   }
   const entry: Omit<PendingMeasurement, 'id'> = {
     result: serialized,
@@ -165,6 +176,9 @@ export async function flush(
       const result: MeasurementResult = {
         ...entry.result,
         measuredAt: new Date(entry.result.measuredAt),
+        medicalMeasuredAt: entry.result.medicalMeasuredAt
+          ? new Date(entry.result.medicalMeasuredAt)
+          : undefined,
       }
       const blob = entry.facePhotoBase64 ? base64ToBlob(entry.facePhotoBase64) : undefined
       await saveFn(result, blob)

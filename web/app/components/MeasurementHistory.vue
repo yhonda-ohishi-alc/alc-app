@@ -152,6 +152,8 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium">乗務員</th>
               <th class="px-4 py-3 text-right font-medium">アルコール値</th>
               <th class="px-4 py-3 text-center font-medium">結果</th>
+              <th class="px-4 py-3 text-right font-medium">体温</th>
+              <th class="px-4 py-3 text-right font-medium">血圧</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -166,6 +168,12 @@ onMounted(() => {
                 >
                   {{ resultLabel(m.result_type) }}
                 </span>
+              </td>
+              <td class="px-4 py-3 text-right text-gray-700">
+                {{ m.temperature != null ? m.temperature.toFixed(1) + ' ℃' : '-' }}
+              </td>
+              <td class="px-4 py-3 text-right text-gray-700">
+                {{ m.systolic != null ? `${m.systolic}/${m.diastolic}` : '-' }}
               </td>
             </tr>
           </tbody>

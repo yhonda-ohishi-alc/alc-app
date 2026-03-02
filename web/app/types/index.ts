@@ -13,6 +13,12 @@ export interface MeasurementResult {
   deviceUseCount: number
   facePhotoUrl?: string
   measuredAt: Date
+  // Medical data (BLE Medical Gateway)
+  temperature?: number
+  systolic?: number
+  diastolic?: number
+  pulse?: number
+  medicalMeasuredAt?: Date
 }
 
 /** NFC 読み取りイベント */
@@ -118,6 +124,12 @@ export interface ApiMeasurement {
   face_photo_url?: string
   measured_at: string
   created_at: string
+  // Medical data (BLE Medical Gateway)
+  temperature?: number | null
+  systolic?: number | null
+  diastolic?: number | null
+  pulse?: number | null
+  medical_measured_at?: string | null
 }
 
 /** API: 乗務員 */
@@ -196,3 +208,36 @@ export interface SignalingInMessage {
   role?: 'device' | 'admin'
   message?: string
 }
+
+// --- BLE Medical Gateway ---
+
+/** BLE Medical Gateway デバイス種別 */
+export type BleDeviceType = 'thermometer' | 'blood_pressure'
+
+/** 体温測定結果 */
+export interface TemperatureReading {
+  value: number
+  unit: 'celsius'
+  measuredAt: Date
+}
+
+/** 血圧測定結果 */
+export interface BloodPressureReading {
+  systolic: number
+  diastolic: number
+  pulse?: number
+  unit: 'mmHg'
+  measuredAt: Date
+}
+
+/** BLE Gateway から受信する JSON メッセージ */
+export type BleGatewayMessage =
+  | { type: 'ready'; device: string; version: string }
+  | { type: 'scan'; name: string; address: string; rssi: number }
+  | { type: 'found'; device: BleDeviceType }
+  | { type: 'connecting'; device: BleDeviceType }
+  | { type: 'connected'; device: BleDeviceType }
+  | { type: 'disconnected'; device: BleDeviceType }
+  | { type: 'temperature'; value: number; unit: 'celsius' }
+  | { type: 'blood_pressure'; systolic: number; diastolic: number; pulse?: number; unit: 'mmHg' }
+  | { type: 'error'; message: string }

@@ -101,6 +101,11 @@ export async function saveMeasurement(result: MeasurementResult, facePhotoBlob?:
       device_use_count: result.deviceUseCount,
       face_photo_url: facePhotoUrl || result.facePhotoUrl,
       measured_at: result.measuredAt.toISOString(),
+      temperature: result.temperature,
+      systolic: result.systolic,
+      diastolic: result.diastolic,
+      pulse: result.pulse,
+      medical_measured_at: result.medicalMeasuredAt?.toISOString(),
     }),
   })
 }
