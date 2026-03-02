@@ -118,12 +118,15 @@ export interface ApiMeasurement {
   id: string
   tenant_id: string
   employee_id: string
-  alcohol_value: number
-  result_type: 'normal' | 'over' | 'error'
+  alcohol_value: number | null
+  result_type: string | null
   device_use_count: number
   face_photo_url?: string
   measured_at: string
   created_at: string
+  updated_at: string
+  status: 'started' | 'completed'
+  face_verified?: boolean | null
   // Medical data (BLE Medical Gateway)
   temperature?: number | null
   systolic?: number | null
@@ -141,6 +144,9 @@ export interface ApiEmployee {
   name: string
   face_photo_url?: string | null
   face_embedding_at?: string | null
+  license_issue_date?: string | null
+  license_expiry_date?: string | null
+  role: 'driver' | 'manager' | 'admin'
   created_at: string
   updated_at: string
 }
@@ -168,6 +174,7 @@ export interface MeasurementFilter {
   date_to?: string
   page?: number
   per_page?: number
+  status?: string
 }
 
 /** 認証ユーザー */
@@ -241,3 +248,398 @@ export type BleGatewayMessage =
   | { type: 'temperature'; value: number; unit: 'celsius' }
   | { type: 'blood_pressure'; systolic: number; diastolic: number; pulse?: number; unit: 'mmHg' }
   | { type: 'error'; message: string }
+
+// --- 自動点呼 (Tenko) ---
+
+export type TenkoType = 'pre_operation' | 'post_operation'
+
+export type TenkoSessionStatus =
+  | 'identity_verified'
+  | 'alcohol_testing'
+  | 'medical_pending'
+  | 'self_declaration_pending'
+  | 'safety_judgment_pending'
+  | 'daily_inspection_pending'
+  | 'instruction_pending'
+  | 'report_pending'
+  | 'interrupted'
+  | 'completed'
+  | 'cancelled'
+
+/** 点呼スケジュール */
+export interface TenkoSchedule {
+  id: string
+  tenant_id: string
+  employee_id: string
+  tenko_type: TenkoType
+  responsible_manager_name: string
+  scheduled_at: string
+  instruction: string | null
+  consumed: boolean
+  consumed_by_session_id: string | null
+  overdue_notified_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateTenkoSchedule {
+  employee_id: string
+  tenko_type: TenkoType
+  responsible_manager_name: string
+  scheduled_at: string
+  instruction?: string
+}
+
+export interface UpdateTenkoSchedule {
+  responsible_manager_name?: string
+  scheduled_at?: string
+  instruction?: string
+}
+
+export interface TenkoScheduleFilter {
+  employee_id?: string
+  tenko_type?: TenkoType
+  consumed?: boolean
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export interface TenkoSchedulesResponse {
+  schedules: TenkoSchedule[]
+  total: number
+  page: number
+  per_page: number
+}
+
+/** 自己申告 (JSONB) */
+export interface SelfDeclaration {
+  illness: boolean
+  fatigue: boolean
+  sleep_deprivation: boolean
+  declared_at: string
+}
+
+/** 医療差分 */
+export interface MedicalDiffs {
+  systolic_diff: number | null
+  diastolic_diff: number | null
+  temperature_diff: number | null
+}
+
+/** 安全判定 (JSONB) */
+export interface SafetyJudgment {
+  status: string
+  failed_items: string[]
+  judged_at: string
+  medical_diffs: MedicalDiffs | null
+}
+
+/** 日常点検 (JSONB) */
+export interface DailyInspection {
+  brakes: string
+  tires: string
+  lights: string
+  steering: string
+  wipers: string
+  mirrors: string
+  horn: string
+  seatbelts: string
+  inspected_at: string
+}
+
+/** 点呼セッション */
+export interface TenkoSession {
+  id: string
+  tenant_id: string
+  employee_id: string
+  schedule_id: string
+  tenko_type: TenkoType
+  status: TenkoSessionStatus
+  identity_verified_at: string | null
+  identity_face_photo_url: string | null
+  measurement_id: string | null
+  alcohol_result: string | null
+  alcohol_value: number | null
+  alcohol_tested_at: string | null
+  alcohol_face_photo_url: string | null
+  temperature: number | null
+  systolic: number | null
+  diastolic: number | null
+  pulse: number | null
+  medical_measured_at: string | null
+  instruction_confirmed_at: string | null
+  report_vehicle_road_status: string | null
+  report_driver_alternation: string | null
+  report_no_report: boolean | null
+  report_submitted_at: string | null
+  location: string | null
+  responsible_manager_name: string
+  cancel_reason: string | null
+  interrupted_at: string | null
+  resumed_at: string | null
+  resume_reason: string | null
+  resumed_by_user_id: string | null
+  self_declaration: SelfDeclaration | null
+  safety_judgment: SafetyJudgment | null
+  daily_inspection: DailyInspection | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StartTenkoSession {
+  schedule_id: string
+  employee_id: string
+  identity_face_photo_url?: string
+  location?: string
+}
+
+export interface SubmitAlcoholResult {
+  measurement_id?: string
+  alcohol_result: string
+  alcohol_value: number
+  alcohol_face_photo_url?: string
+}
+
+export interface SubmitMedicalData {
+  temperature?: number
+  systolic?: number
+  diastolic?: number
+  pulse?: number
+  medical_measured_at?: string
+}
+
+export interface SubmitSelfDeclaration {
+  illness: boolean
+  fatigue: boolean
+  sleep_deprivation: boolean
+}
+
+export interface SubmitDailyInspection {
+  brakes: string
+  tires: string
+  lights: string
+  steering: string
+  wipers: string
+  mirrors: string
+  horn: string
+  seatbelts: string
+}
+
+export interface SubmitOperationReport {
+  vehicle_road_status: string
+  driver_alternation: string
+  vehicle_road_audio_url?: string
+  driver_alternation_audio_url?: string
+}
+
+export interface CancelTenkoSession {
+  reason: string
+}
+
+export interface InterruptSession {
+  reason?: string
+}
+
+export interface ResumeSession {
+  reason: string
+}
+
+export interface TenkoSessionFilter {
+  employee_id?: string
+  status?: string
+  tenko_type?: TenkoType
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export interface TenkoSessionsResponse {
+  sessions: TenkoSession[]
+  total: number
+  page: number
+  per_page: number
+}
+
+/** 点呼記録 (不変アーカイブ) */
+export interface TenkoRecord {
+  id: string
+  tenant_id: string
+  session_id: string
+  employee_id: string
+  tenko_type: TenkoType
+  status: string
+  record_data: unknown
+  employee_name: string
+  responsible_manager_name: string
+  tenko_method: string
+  location: string | null
+  alcohol_result: string | null
+  alcohol_value: number | null
+  alcohol_has_face_photo: boolean
+  temperature: number | null
+  systolic: number | null
+  diastolic: number | null
+  pulse: number | null
+  instruction: string | null
+  instruction_confirmed_at: string | null
+  report_vehicle_road_status: string | null
+  report_driver_alternation: string | null
+  report_no_report: boolean | null
+  started_at: string | null
+  completed_at: string | null
+  recorded_at: string
+  record_hash: string
+  self_declaration: SelfDeclaration | null
+  safety_judgment: SafetyJudgment | null
+  daily_inspection: DailyInspection | null
+  interrupted_at: string | null
+  resumed_at: string | null
+  resume_reason: string | null
+}
+
+export interface TenkoRecordFilter {
+  employee_id?: string
+  tenko_type?: TenkoType
+  status?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export interface TenkoRecordsResponse {
+  records: TenkoRecord[]
+  total: number
+  page: number
+  per_page: number
+}
+
+/** Webhook 設定 */
+export interface WebhookConfig {
+  id: string
+  tenant_id: string
+  event_type: string
+  url: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateWebhookConfig {
+  event_type: string
+  url: string
+  secret?: string
+  enabled?: boolean
+}
+
+/** Webhook 配信履歴 */
+export interface WebhookDelivery {
+  id: string
+  tenant_id: string
+  config_id: string
+  event_type: string
+  payload: unknown
+  status_code: number | null
+  response_body: string | null
+  attempt: number
+  delivered_at: string | null
+  created_at: string
+  success: boolean
+}
+
+/** 点呼ダッシュボード集計 */
+export interface TenkoDashboard {
+  pending_schedules: number
+  active_sessions: number
+  completed_today: number
+  cancelled_today: number
+  overdue_schedules: TenkoSchedule[]
+}
+
+/** 健康基準値 */
+export interface EmployeeHealthBaseline {
+  id: string
+  tenant_id: string
+  employee_id: string
+  baseline_systolic: number
+  baseline_diastolic: number
+  baseline_temperature: number
+  systolic_tolerance: number
+  diastolic_tolerance: number
+  temperature_tolerance: number
+  measurement_validity_minutes: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateHealthBaseline {
+  employee_id: string
+  baseline_systolic?: number
+  baseline_diastolic?: number
+  baseline_temperature?: number
+  systolic_tolerance?: number
+  diastolic_tolerance?: number
+  temperature_tolerance?: number
+  measurement_validity_minutes?: number
+}
+
+export interface UpdateHealthBaseline {
+  baseline_systolic?: number
+  baseline_diastolic?: number
+  baseline_temperature?: number
+  systolic_tolerance?: number
+  diastolic_tolerance?: number
+  temperature_tolerance?: number
+  measurement_validity_minutes?: number
+}
+
+/** 機器故障記録 */
+export interface EquipmentFailure {
+  id: string
+  tenant_id: string
+  failure_type: string
+  description: string
+  affected_device: string | null
+  detected_at: string
+  detected_by: string | null
+  resolved_at: string | null
+  resolution_notes: string | null
+  session_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateEquipmentFailure {
+  failure_type: string
+  description: string
+  affected_device?: string
+  detected_at?: string
+  detected_by?: string
+  session_id?: string
+}
+
+export interface UpdateEquipmentFailure {
+  resolution_notes?: string
+}
+
+export interface EquipmentFailureFilter {
+  failure_type?: string
+  resolved?: boolean
+  session_id?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export interface EquipmentFailuresResponse {
+  failures: EquipmentFailure[]
+  total: number
+  page: number
+  per_page: number
+}

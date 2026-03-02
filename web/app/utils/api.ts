@@ -1,4 +1,16 @@
-import type { ApiMeasurement, ApiEmployee, MeasurementsResponse, MeasurementFilter, MeasurementResult, FaceDataEntry } from '~/types'
+import type {
+  ApiMeasurement, ApiEmployee, MeasurementsResponse, MeasurementFilter, MeasurementResult, FaceDataEntry,
+  // Tenko
+  TenkoSchedule, CreateTenkoSchedule, UpdateTenkoSchedule, TenkoScheduleFilter, TenkoSchedulesResponse,
+  TenkoSession, StartTenkoSession, SubmitAlcoholResult, SubmitMedicalData, SubmitSelfDeclaration,
+  SubmitDailyInspection, SubmitOperationReport, CancelTenkoSession, InterruptSession, ResumeSession,
+  TenkoSessionFilter, TenkoSessionsResponse,
+  TenkoRecord, TenkoRecordFilter, TenkoRecordsResponse,
+  WebhookConfig, CreateWebhookConfig, WebhookDelivery,
+  TenkoDashboard,
+  EmployeeHealthBaseline, CreateHealthBaseline, UpdateHealthBaseline,
+  EquipmentFailure, CreateEquipmentFailure, UpdateEquipmentFailure, EquipmentFailureFilter, EquipmentFailuresResponse,
+} from '~/types'
 
 let apiBase = ''
 let getAccessToken: (() => string | null) | null = null
@@ -110,6 +122,22 @@ export async function saveMeasurement(result: MeasurementResult, facePhotoBlob?:
   })
 }
 
+/** 測定を開始 (status: started) */
+export async function startMeasurement(employeeId: string): Promise<ApiMeasurement> {
+  return request<ApiMeasurement>('/api/measurements/start', {
+    method: 'POST',
+    body: JSON.stringify({ employee_id: employeeId }),
+  })
+}
+
+/** 測定レコードを更新 */
+export async function updateMeasurement(id: string, data: Record<string, unknown>): Promise<ApiMeasurement> {
+  return request<ApiMeasurement>(`/api/measurements/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
 /** 測定履歴を取得 */
 export async function getMeasurements(filter: MeasurementFilter = {}): Promise<MeasurementsResponse> {
   const params = new URLSearchParams()
@@ -119,6 +147,7 @@ export async function getMeasurements(filter: MeasurementFilter = {}): Promise<M
   if (filter.date_to) params.set('date_to', filter.date_to)
   if (filter.page) params.set('page', String(filter.page))
   if (filter.per_page) params.set('per_page', String(filter.per_page))
+  if (filter.status) params.set('status', filter.status)
 
   const qs = params.toString()
   return request<MeasurementsResponse>(`/api/measurements${qs ? '?' + qs : ''}`)
@@ -195,6 +224,39 @@ export async function updateEmployeeNfcId(id: string, nfcId: string): Promise<Ap
   })
 }
 
+/** 乗務員の免許証情報を更新 */
+export async function updateEmployeeLicense(
+  id: string,
+  licenseIssueDate?: string | null,
+  licenseExpiryDate?: string | null,
+): Promise<ApiEmployee> {
+  return request<ApiEmployee>(`/api/employees/${id}/license`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      license_issue_date: licenseIssueDate ?? null,
+      license_expiry_date: licenseExpiryDate ?? null,
+    }),
+  })
+}
+
+/** 測定の顔写真を取得 (認証付きプロキシ経由) */
+export async function fetchFacePhoto(measurementId: string): Promise<string | null> {
+  if (!apiBase) return null
+
+  const authHeaders = buildAuthHeaders()
+  try {
+    const res = await fetch(`${apiBase}/api/measurements/${measurementId}/face-photo`, {
+      headers: authHeaders,
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
 /** 顔写真をアップロード */
 export async function uploadFacePhoto(blob: Blob): Promise<string> {
   const formData = new FormData()
@@ -212,4 +274,275 @@ export async function uploadFacePhoto(blob: Blob): Promise<string> {
   if (!res.ok) throw new Error(`アップロード失敗 (${res.status})`)
   const data = await res.json()
   return data.url
+}
+
+/** 運行報告の音声をアップロード */
+export async function uploadReportAudio(blob: Blob): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', blob, 'report.webm')
+
+  if (!apiBase) throw new Error('API 未初期化')
+
+  const authHeaders = buildAuthHeaders()
+  const res = await fetch(`${apiBase}/api/upload/report-audio`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: formData,
+  })
+
+  if (!res.ok) throw new Error(`音声アップロード失敗 (${res.status})`)
+  const data = await res.json()
+  return data.url
+}
+
+// ============================================================
+// 自動点呼 (Tenko) API
+// ============================================================
+
+/** フィルタを URLSearchParams に変換 */
+function toParams(filter: object): string {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filter)) {
+    if (v != null && v !== '') params.set(k, String(v))
+  }
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+/** CSV ダウンロード (blob → ブラウザ保存) */
+async function downloadCsv(path: string, filename: string): Promise<void> {
+  if (!apiBase) throw new Error('API 未初期化')
+  const headers = buildAuthHeaders()
+  const res = await fetch(`${apiBase}${path}`, { headers })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`CSV ダウンロード失敗 (${res.status}): ${body || res.statusText}`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// --- スケジュール ---
+
+export async function createSchedule(data: CreateTenkoSchedule): Promise<TenkoSchedule> {
+  return request<TenkoSchedule>('/api/tenko/schedules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function batchCreateSchedules(schedules: CreateTenkoSchedule[]): Promise<TenkoSchedule[]> {
+  return request<TenkoSchedule[]>('/api/tenko/schedules/batch', {
+    method: 'POST',
+    body: JSON.stringify({ schedules }),
+  })
+}
+
+export async function listSchedules(filter: TenkoScheduleFilter = {}): Promise<TenkoSchedulesResponse> {
+  return request<TenkoSchedulesResponse>(`/api/tenko/schedules${toParams(filter)}`)
+}
+
+export async function getSchedule(id: string): Promise<TenkoSchedule> {
+  return request<TenkoSchedule>(`/api/tenko/schedules/${id}`)
+}
+
+export async function updateSchedule(id: string, data: UpdateTenkoSchedule): Promise<TenkoSchedule> {
+  return request<TenkoSchedule>(`/api/tenko/schedules/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  await request<void>(`/api/tenko/schedules/${id}`, { method: 'DELETE' })
+}
+
+export async function getPendingSchedules(employeeId: string): Promise<TenkoSchedule[]> {
+  return request<TenkoSchedule[]>(`/api/tenko/schedules/pending/${employeeId}`)
+}
+
+// --- セッション (キオスク) ---
+
+export async function startTenkoSession(data: StartTenkoSession): Promise<TenkoSession> {
+  return request<TenkoSession>('/api/tenko/sessions/start', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getTenkoSession(id: string): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${id}`)
+}
+
+export async function submitAlcohol(sessionId: string, data: SubmitAlcoholResult): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/alcohol`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function submitMedical(sessionId: string, data: SubmitMedicalData): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/medical`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function submitSelfDeclaration(sessionId: string, data: SubmitSelfDeclaration): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/self-declaration`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function submitDailyInspection(sessionId: string, data: SubmitDailyInspection): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/daily-inspection`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function confirmInstruction(sessionId: string): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/instruction-confirm`, {
+    method: 'PUT',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function submitReport(sessionId: string, data: SubmitOperationReport): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/report`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function cancelTenkoSession(sessionId: string, data: CancelTenkoSession): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// --- セッション (管理者) ---
+
+export async function listTenkoSessions(filter: TenkoSessionFilter = {}): Promise<TenkoSessionsResponse> {
+  return request<TenkoSessionsResponse>(`/api/tenko/sessions${toParams(filter)}`)
+}
+
+export async function getTenkoDashboard(): Promise<TenkoDashboard> {
+  return request<TenkoDashboard>('/api/tenko/dashboard')
+}
+
+export async function interruptTenkoSession(sessionId: string, data: InterruptSession = {}): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/interrupt`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function resumeTenkoSession(sessionId: string, data: ResumeSession): Promise<TenkoSession> {
+  return request<TenkoSession>(`/api/tenko/sessions/${sessionId}/resume`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// --- レコード ---
+
+export async function listTenkoRecords(filter: TenkoRecordFilter = {}): Promise<TenkoRecordsResponse> {
+  return request<TenkoRecordsResponse>(`/api/tenko/records${toParams(filter)}`)
+}
+
+export async function getTenkoRecord(id: string): Promise<TenkoRecord> {
+  return request<TenkoRecord>(`/api/tenko/records/${id}`)
+}
+
+export async function downloadTenkoRecordsCsv(filter: TenkoRecordFilter = {}): Promise<void> {
+  await downloadCsv(`/api/tenko/records/csv${toParams(filter)}`, 'tenko-records.csv')
+}
+
+// --- Webhook ---
+
+export async function createWebhook(data: CreateWebhookConfig): Promise<WebhookConfig> {
+  return request<WebhookConfig>('/api/tenko/webhooks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function listWebhooks(): Promise<WebhookConfig[]> {
+  return request<WebhookConfig[]>('/api/tenko/webhooks')
+}
+
+export async function getWebhook(id: string): Promise<WebhookConfig> {
+  return request<WebhookConfig>(`/api/tenko/webhooks/${id}`)
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  await request<void>(`/api/tenko/webhooks/${id}`, { method: 'DELETE' })
+}
+
+export async function getWebhookDeliveries(configId: string): Promise<WebhookDelivery[]> {
+  return request<WebhookDelivery[]>(`/api/tenko/webhooks/${configId}/deliveries`)
+}
+
+// --- 健康基準値 ---
+
+export async function createBaseline(data: CreateHealthBaseline): Promise<EmployeeHealthBaseline> {
+  return request<EmployeeHealthBaseline>('/api/tenko/health-baselines', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function listBaselines(): Promise<EmployeeHealthBaseline[]> {
+  return request<EmployeeHealthBaseline[]>('/api/tenko/health-baselines')
+}
+
+export async function getBaseline(employeeId: string): Promise<EmployeeHealthBaseline> {
+  return request<EmployeeHealthBaseline>(`/api/tenko/health-baselines/${employeeId}`)
+}
+
+export async function updateBaseline(employeeId: string, data: UpdateHealthBaseline): Promise<EmployeeHealthBaseline> {
+  return request<EmployeeHealthBaseline>(`/api/tenko/health-baselines/${employeeId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteBaseline(employeeId: string): Promise<void> {
+  await request<void>(`/api/tenko/health-baselines/${employeeId}`, { method: 'DELETE' })
+}
+
+// --- 機器故障記録 ---
+
+export async function createFailure(data: CreateEquipmentFailure): Promise<EquipmentFailure> {
+  return request<EquipmentFailure>('/api/tenko/equipment-failures', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function listFailures(filter: EquipmentFailureFilter = {}): Promise<EquipmentFailuresResponse> {
+  return request<EquipmentFailuresResponse>(`/api/tenko/equipment-failures${toParams(filter)}`)
+}
+
+export async function getFailure(id: string): Promise<EquipmentFailure> {
+  return request<EquipmentFailure>(`/api/tenko/equipment-failures/${id}`)
+}
+
+export async function resolveFailure(id: string, data: UpdateEquipmentFailure): Promise<EquipmentFailure> {
+  return request<EquipmentFailure>(`/api/tenko/equipment-failures/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function downloadFailuresCsv(filter: EquipmentFailureFilter = {}): Promise<void> {
+  await downloadCsv(`/api/tenko/equipment-failures/csv${toParams(filter)}`, 'equipment-failures.csv')
 }
