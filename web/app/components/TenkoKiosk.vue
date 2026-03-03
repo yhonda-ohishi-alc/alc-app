@@ -2,9 +2,17 @@
 import type { FaceAuthResult, MeasurementResult, SubmitMedicalData } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
 
+const props = defineProps<{
+  demoMode?: boolean
+}>()
+
 // シングルトン再呼出で共有状態取得
 const { isDeviceActivated } = useAuth()
 const { isSyncing: isFaceSyncing } = useFaceSync()
+
+// デモモード (prop 優先、なければ URL クエリ)
+const { isDemoMode: isDemoModeFromUrl } = useDemoMode()
+const isDemoMode = computed(() => props.demoMode || isDemoModeFromUrl.value)
 
 // 点呼キオスク状態管理
 const {
@@ -22,6 +30,12 @@ const {
   latestTemperature: bleTemperature,
   latestBloodPressure: bleBloodPressure,
 } = useBleGateway()
+
+// 医療ステップ: BLE / 手動入力 タブ
+const medicalInputTab = ref<'ble' | 'manual'>('ble')
+watch(isDemoMode, (v) => {
+  if (v) medicalInputTab.value = 'manual'
+}, { immediate: true })
 
 // --- NFC / 手動入力 ---
 const manualIdInput = ref('')
@@ -64,6 +78,7 @@ function onMeasurementResult(result: MeasurementResult) {
 
 // --- BLE 医療データ → 送信 ---
 function onMedicalNext() {
+  medicalInputSource.value = 'ble'
   const data: SubmitMedicalData = {}
   if (bleTemperature.value) {
     data.temperature = bleTemperature.value.value
@@ -81,8 +96,17 @@ function onMedicalNext() {
 }
 
 function onMedicalSkip() {
-  // 医療データなしで送信
+  medicalInputSource.value = null
   onMedicalSubmit({})
+}
+
+// 医療データ入力元トラッキング
+const medicalInputSource = ref<'ble' | 'manual' | null>(null)
+
+// 手動入力からの医療データ送信
+function onManualMedicalSubmit(data: SubmitMedicalData) {
+  medicalInputSource.value = 'manual'
+  onMedicalSubmit(data)
 }
 
 // --- リセット時に手動入力もクリア ---
@@ -91,11 +115,28 @@ function handleReset() {
   manualIdInput.value = ''
   manualError.value = null
   useManualInput.value = false
+  medicalInputSource.value = null
+  medicalInputTab.value = isDemoMode.value ? 'manual' : 'ble'
 }
 </script>
 
 <template>
   <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
+    <!-- デモモードバナー -->
+    <ClientOnly>
+      <div
+        v-if="isDemoMode"
+        class="w-full max-w-md bg-purple-50 border border-purple-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-purple-700 font-medium"
+      >
+        デモモード — 実機不要で点呼フローを体験できます
+      </div>
+    </ClientOnly>
+
+    <!-- デモ用点呼予定作成 (NFCステップのみ表示) -->
+    <ClientOnly>
+      <DemoScheduleCreator v-if="isDemoMode && step === 'nfc'" class="w-full max-w-md mb-4" />
+    </ClientOnly>
+
     <!-- 端末未アクティベート警告 -->
     <ClientOnly>
       <div
@@ -169,7 +210,7 @@ function handleReset() {
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
 
-          <div v-if="!useManualInput">
+          <div v-if="!useManualInput && !isDemoMode">
             <NfcStatus @read="onNfcRead" />
             <button
               class="w-full mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
@@ -180,7 +221,9 @@ function handleReset() {
           </div>
 
           <div v-else>
-            <p class="text-sm text-gray-500 mb-4">社員番号を入力してください</p>
+            <p class="text-sm text-gray-500 mb-4">
+              {{ isDemoMode ? 'デモ: 社員番号を入力してください' : '社員番号を入力してください' }}
+            </p>
             <input
               v-model="manualIdInput"
               type="text"
@@ -197,6 +240,7 @@ function handleReset() {
               次へ
             </button>
             <button
+              v-if="!isDemoMode"
               class="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
               @click="useManualInput = false"
             >
@@ -226,6 +270,7 @@ function handleReset() {
           <FaceAuth
             :employee-id="employeeId"
             mode="verify"
+            :demo-mode="isDemoMode"
             @result="onFaceAuthResult"
           />
         </div>
@@ -238,6 +283,7 @@ function handleReset() {
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <AlcMeasurement
             :employee-id="employeeId"
+            :demo-mode="isDemoMode"
             @result="onMeasurementResult"
           />
         </div>
@@ -246,10 +292,35 @@ function handleReset() {
       <!-- Step 5: 体温・血圧 (業務前のみ) -->
       <div v-else-if="step === 'medical'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">体温・血圧</h2>
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">体温・血圧</h2>
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+
+          <!-- タブ切替 (デモ時は BLE タブ非表示) -->
+          <div v-if="!isDemoMode" class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
+            <button
+              class="flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              :class="medicalInputTab === 'ble' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+              @click="medicalInputTab = 'ble'"
+            >
+              BLE機器
+            </button>
+            <button
+              class="flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              :class="medicalInputTab === 'manual' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+              @click="medicalInputTab = 'manual'"
+            >
+              手動入力
+            </button>
+          </div>
+
           <BleStatus
+            v-if="medicalInputTab === 'ble'"
             @next="onMedicalNext"
+            @skip="onMedicalSkip"
+          />
+          <ManualMedicalInput
+            v-else
+            @submit="onManualMedicalSubmit"
             @skip="onMedicalSkip"
           />
         </div>
@@ -303,6 +374,18 @@ function handleReset() {
             :employee-name="employeeName"
             @reset="handleReset"
           />
+          <!-- 医療データ入力元バッジ (業務前のみ) -->
+          <div
+            v-if="medicalInputSource && isPreOperation && (session.temperature || session.systolic)"
+            class="mt-3 text-center text-xs"
+          >
+            <span
+              class="inline-flex items-center gap-1 px-2 py-1 rounded-full"
+              :class="medicalInputSource === 'manual' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'"
+            >
+              体温・血圧: {{ medicalInputSource === 'manual' ? '手動入力' : 'BLE機器' }}
+            </span>
+          </div>
         </div>
       </div>
 

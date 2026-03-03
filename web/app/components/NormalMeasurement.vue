@@ -3,6 +3,14 @@ import type { FaceAuthResult, MeasurementResult } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode, startMeasurement, updateMeasurement, uploadFacePhoto } from '~/utils/api'
 import { checkLicenseExpiry, formatExpiryDate, type LicenseExpiryStatus } from '~/utils/license'
 
+const { isDemoMode: isDemoModeFromUrl } = useDemoMode()
+
+const props = defineProps<{
+  demoMode?: boolean
+}>()
+
+const isDemoMode = computed(() => props.demoMode || isDemoModeFromUrl.value)
+
 const step = ref<'nfc' | 'face_auth' | 'medical' | 'measuring' | 'result'>('nfc')
 const employeeId = ref('')
 const authResult = ref<FaceAuthResult | null>(null)
@@ -88,6 +96,16 @@ const {
   latestBloodPressure: bleBloodPressure,
 } = useBleGateway()
 
+// 医療ステップ: BLE / 手動入力 タブ
+const medicalInputTab = ref<'ble' | 'manual'>('ble')
+watch(isDemoMode, (v) => {
+  if (v) medicalInputTab.value = 'manual'
+}, { immediate: true })
+
+// 手動入力の医療データ (BLE未接続フォールバック用)
+const manualMedicalData = ref<import('~/types').SubmitMedicalData | null>(null)
+const medicalInputSource = ref<'ble' | 'manual' | null>(null)
+
 // 顔認証結果
 function onFaceAuthResult(result: FaceAuthResult) {
   authResult.value = result
@@ -159,13 +177,22 @@ watch(bleBloodPressure, (bp) => {
 
 // BLE ステップ → 次へ or スキップ
 function onMedicalNext() {
+  medicalInputSource.value = 'ble'
   step.value = 'measuring'
 }
 function onMedicalSkip() {
+  medicalInputSource.value = null
   step.value = 'measuring'
 }
 
-// FC-1200 測定結果 → BLE 医療データをマージ → API に保存
+// 手動入力 → 次へ
+function onManualMedicalSubmit(data: import('~/types').SubmitMedicalData) {
+  manualMedicalData.value = data
+  medicalInputSource.value = 'manual'
+  step.value = 'measuring'
+}
+
+// FC-1200 測定結果 → BLE 医療データ / 手動入力データをマージ → API に保存
 async function onMeasurementResult(result: MeasurementResult) {
   // BLE Medical Gateway のデータをマージ
   if (bleTemperature.value) {
@@ -175,6 +202,18 @@ async function onMeasurementResult(result: MeasurementResult) {
     result.systolic = bleBloodPressure.value.systolic
     result.diastolic = bleBloodPressure.value.diastolic
     result.pulse = bleBloodPressure.value.pulse
+  }
+  // BLE データがない場合は手動入力データをマージ
+  if (!bleTemperature.value && manualMedicalData.value?.temperature !== undefined) {
+    result.temperature = manualMedicalData.value.temperature
+  }
+  if (!bleBloodPressure.value && manualMedicalData.value) {
+    if (manualMedicalData.value.systolic !== undefined) result.systolic = manualMedicalData.value.systolic
+    if (manualMedicalData.value.diastolic !== undefined) result.diastolic = manualMedicalData.value.diastolic
+    if (manualMedicalData.value.pulse !== undefined) result.pulse = manualMedicalData.value.pulse
+  }
+  if (manualMedicalData.value?.medical_measured_at && !bleTemperature.value && !bleBloodPressure.value) {
+    result.medicalMeasuredAt = new Date(manualMedicalData.value.medical_measured_at)
   }
   if (bleTemperature.value || bleBloodPressure.value) {
     const times = [
@@ -213,6 +252,7 @@ async function onMeasurementResult(result: MeasurementResult) {
         pulse: result.pulse,
         medical_measured_at: result.medicalMeasuredAt?.toISOString(),
         face_verified: faceVerified.value,
+        medical_manual_input: medicalInputSource.value === 'manual' ? true : undefined,
       }
       console.log('[Measurement] updateMeasurement PUT data:', JSON.stringify(updateData))
       await updateMeasurement(activeMeasurementId.value, updateData)
@@ -256,6 +296,8 @@ function reset() {
   activeMeasurementId.value = null
   facePhotoUploaded.value = false
   faceVerified.value = null
+  manualMedicalData.value = null
+  medicalInputSource.value = null
 }
 
 const steps = ['NFC', '顔認証', '体温・血圧', '測定', '結果'] as const
@@ -353,7 +395,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
           <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
 
           <!-- NFC モード -->
-          <div v-if="!useManualInput">
+          <div v-if="!useManualInput && !isDemoMode">
             <NfcStatus @read="onNfcRead" />
             <button
               class="w-full mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
@@ -365,7 +407,9 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 
           <!-- 手動入力モード -->
           <div v-else>
-            <p class="text-sm text-gray-500 mb-4">社員番号を入力してください</p>
+            <p class="text-sm text-gray-500 mb-4">
+              {{ isDemoMode ? 'デモ: 社員番号を入力してください' : '社員番号を入力してください' }}
+            </p>
             <input
               v-model="manualIdInput"
               type="text"
@@ -382,6 +426,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
               次へ
             </button>
             <button
+              v-if="!isDemoMode"
               class="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
               @click="useManualInput = false"
             >
@@ -399,9 +444,11 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
           <FaceAuth
             :employee-id="employeeId"
             mode="verify"
+            :demo-mode="isDemoMode"
             @result="onFaceAuthResult"
           />
           <button
+            v-if="!isDemoMode"
             class="w-full mt-4 px-4 py-2 border border-gray-300 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
             @click="onFaceAuthSkip"
           >
@@ -410,13 +457,38 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </div>
       </div>
 
-      <!-- Step 3: 体温・血圧 (BLE Medical Gateway) -->
+      <!-- Step 3: 体温・血圧 (BLE Medical Gateway / 手動入力) -->
       <div v-if="step === 'medical'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">体温・血圧</h2>
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">体温・血圧</h2>
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+
+          <!-- タブ切替 (デモ時は BLE タブ非表示) -->
+          <div v-if="!isDemoMode" class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
+            <button
+              class="flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              :class="medicalInputTab === 'ble' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+              @click="medicalInputTab = 'ble'"
+            >
+              BLE機器
+            </button>
+            <button
+              class="flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              :class="medicalInputTab === 'manual' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+              @click="medicalInputTab = 'manual'"
+            >
+              手動入力
+            </button>
+          </div>
+
           <BleStatus
+            v-if="medicalInputTab === 'ble'"
             @next="onMedicalNext"
+            @skip="onMedicalSkip"
+          />
+          <ManualMedicalInput
+            v-else
+            @submit="onManualMedicalSubmit"
             @skip="onMedicalSkip"
           />
         </div>
@@ -429,6 +501,7 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <AlcMeasurement
             :employee-id="employeeId"
+            :demo-mode="isDemoMode"
             @result="onMeasurementResult"
           />
         </div>
@@ -442,6 +515,18 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
           :employee-name="employeeName"
           @reset="reset"
         />
+        <!-- 医療データ入力元バッジ -->
+        <div
+          v-if="medicalInputSource && (measurementResult.temperature || measurementResult.systolic)"
+          class="text-center text-xs"
+        >
+          <span
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full"
+            :class="medicalInputSource === 'manual' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'"
+          >
+            {{ medicalInputSource === 'manual' ? '手動入力' : 'BLE機器' }}
+          </span>
+        </div>
         <!-- API 保存状態 -->
         <div v-if="isSaving" class="text-center text-sm text-gray-500">
           保存中...

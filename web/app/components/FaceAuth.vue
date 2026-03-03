@@ -4,6 +4,7 @@ import type { FaceAuthResult } from '~/types'
 const props = defineProps<{
   employeeId: string
   mode: 'verify' | 'register'
+  demoMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -168,6 +169,13 @@ async function doAuth() {
   status.value = 'detecting'
   stopLoop()
 
+  if (props.demoMode) {
+    const snapshot = await takeSnapshotAsync()
+    status.value = 'success'
+    emit('result', { verified: true, similarity: 1.0, snapshot: snapshot ?? undefined })
+    return
+  }
+
   try {
     if (props.mode === 'register') {
       const ok = await register(props.employeeId, videoRef.value)
@@ -200,6 +208,7 @@ function retry() {
   status.value = 'checking'
   startLoop()
 }
+
 </script>
 
 <template>
@@ -246,7 +255,7 @@ function retry() {
 
     <!-- Status messages -->
     <p v-if="status === 'success'" class="text-lg font-medium text-green-600">
-      {{ mode === 'register' ? '登録完了' : `認証成功 (${(similarity * 100).toFixed(0)}%)` }}
+      {{ mode === 'register' ? '登録完了' : demoMode ? '認証完了 (デモ)' : `認証成功 (${(similarity * 100).toFixed(0)}%)` }}
     </p>
     <p v-else-if="status === 'fail'" class="text-lg font-medium text-red-600">
       {{ mode === 'register' ? '顔が検出できません' : '認証失敗' }}

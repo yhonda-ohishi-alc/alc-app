@@ -3,6 +3,7 @@ import type { MeasurementResult } from '~/types'
 
 const props = defineProps<{
   employeeId: string
+  demoMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -84,12 +85,64 @@ function handleRetry() {
   resetSession()
   startMeasurement()
 }
+
+// デモモード
+const demoAlcValue = ref(0.00)
+const demoResultType = ref<'normal' | 'over'>('normal')
+
+function emitDemoResult() {
+  emit('result', {
+    employeeId: props.employeeId,
+    alcoholValue: demoAlcValue.value,
+    resultType: demoResultType.value,
+    deviceUseCount: 0,
+    measuredAt: new Date(),
+  })
+}
 </script>
 
 <template>
   <div class="flex flex-col items-center gap-4">
+    <!-- デモモード -->
+    <div v-if="demoMode" class="w-full flex flex-col gap-4">
+      <div class="flex flex-col gap-2">
+        <label class="text-sm font-medium text-gray-700">アルコール値 (mg/L)</label>
+        <input
+          v-model.number="demoAlcValue"
+          type="number"
+          step="0.01"
+          min="0"
+          max="5"
+          class="w-full px-4 py-3 border border-gray-300 rounded-xl text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+      </div>
+      <div class="flex gap-3">
+        <label
+          class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 cursor-pointer transition-colors"
+          :class="demoResultType === 'normal' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500'"
+        >
+          <input v-model="demoResultType" type="radio" value="normal" class="sr-only">
+          <span class="font-medium">正常</span>
+        </label>
+        <label
+          class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 cursor-pointer transition-colors"
+          :class="demoResultType === 'over' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500'"
+        >
+          <input v-model="demoResultType" type="radio" value="over" class="sr-only">
+          <span class="font-medium">超過</span>
+        </label>
+      </div>
+      <button
+        class="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+        @click="emitDemoResult"
+      >
+        デモ送信
+      </button>
+    </div>
+
+    <!-- 通常モード (FC-1200) -->
     <!-- WebSerial 非対応 -->
-    <div v-if="!isWebSerialSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+    <div v-else-if="!isWebSerialSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
       <p class="text-red-700 font-medium">WebSerial API 非対応</p>
       <p class="text-red-500 text-sm mt-1">Chrome または Edge ブラウザをご使用ください</p>
     </div>

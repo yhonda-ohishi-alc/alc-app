@@ -53,13 +53,13 @@ export function useTenkoKiosk() {
   // --- ステップ定義 (点呼タイプ別) ---
   const stepLabels = computed(() => {
     if (isPreOperation.value) {
-      return ['NFC', '予定選択', '顔認証', 'アルコール', '体温・血圧', '自己申告', '日常点検', '指示確認', '完了']
+      return ['NFC', '予定選択', '顔認証', '体温・血圧', '自己申告', '日常点検', 'アルコール', '指示確認', '完了']
     }
     return ['NFC', '予定選択', '顔認証', 'アルコール', '指示確認', '運行報告', '完了']
   })
   const stepKeys = computed<TenkoStep[]>(() => {
     if (isPreOperation.value) {
-      return ['nfc', 'schedule_select', 'face_auth', 'alcohol', 'medical', 'self_declaration', 'daily_inspection', 'instruction', 'completed']
+      return ['nfc', 'schedule_select', 'face_auth', 'medical', 'self_declaration', 'daily_inspection', 'alcohol', 'instruction', 'completed']
     }
     return ['nfc', 'schedule_select', 'face_auth', 'alcohol', 'instruction', 'report', 'completed']
   })
@@ -126,7 +126,7 @@ export function useTenkoKiosk() {
       }
       const s = await startTenkoSession(body)
       session.value = s
-      step.value = 'alcohol'
+      _advanceByStatus(s.status)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'セッション開始に失敗しました'
     } finally {

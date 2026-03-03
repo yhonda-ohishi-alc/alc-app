@@ -133,6 +133,7 @@ export interface ApiMeasurement {
   diastolic?: number | null
   pulse?: number | null
   medical_measured_at?: string | null
+  medical_manual_input?: boolean | null
 }
 
 /** API: 乗務員 */
@@ -369,6 +370,7 @@ export interface TenkoSession {
   diastolic: number | null
   pulse: number | null
   medical_measured_at: string | null
+  medical_manual_input: boolean | null
   instruction_confirmed_at: string | null
   report_vehicle_road_status: string | null
   report_driver_alternation: string | null
@@ -410,6 +412,7 @@ export interface SubmitMedicalData {
   diastolic?: number
   pulse?: number
   medical_measured_at?: string
+  medical_manual_input?: boolean
 }
 
 export interface SubmitSelfDeclaration {

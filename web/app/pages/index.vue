@@ -26,9 +26,11 @@ const activeRole = ref<RoleTab>(
 )
 
 // --- 運行者サブタブ ---
-type DriverSubTab = 'normal' | 'tenko'
+type DriverSubTab = 'normal' | 'tenko' | 'demo'
 const driverSubTab = ref<DriverSubTab>(
-  route.query.tab === 'tenko' ? 'tenko' : 'normal',
+  route.query.tab === 'tenko' ? 'tenko'
+  : route.query.tab === 'demo' ? 'demo'
+  : 'normal',
 )
 
 // URL クエリ同期
@@ -42,6 +44,7 @@ watch(driverSubTab, (tab) => {
   if (activeRole.value !== 'driver') return
   const query: Record<string, string> = {}
   if (tab === 'tenko') query.tab = 'tenko'
+  else if (tab === 'demo') query.tab = 'demo'
   navigateTo({ path: '/', query }, { replace: true })
 })
 
@@ -80,6 +83,7 @@ const roleLabels: Record<RoleTab, string> = {
             v-for="tab in ([
               { key: 'normal' as const, label: '通常点呼' },
               { key: 'tenko' as const, label: '自動点呼' },
+              { key: 'demo' as const, label: 'デモ' },
             ])"
             :key="tab.key"
             class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -95,6 +99,7 @@ const roleLabels: Record<RoleTab, string> = {
 
       <NormalMeasurement v-if="driverSubTab === 'normal'" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'tenko'" class="flex-1 min-h-0" />
+      <TenkoKiosk v-if="driverSubTab === 'demo'" :demo-mode="true" class="flex-1 min-h-0" />
     </template>
 
     <!-- 運行管理者タブ -->

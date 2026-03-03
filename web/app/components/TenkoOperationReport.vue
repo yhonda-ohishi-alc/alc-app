@@ -6,7 +6,6 @@ const emit = defineEmits<{
   submit: [data: SubmitOperationReport]
 }>()
 
-// 各項目の報告有無 (null = 未選択、要件：デフォルト設定不可)
 const vehicleRoadHasReport = ref<boolean | null>(null)
 const driverAlternationHasReport = ref<boolean | null>(null)
 
@@ -14,18 +13,64 @@ const driverAlternationHasReport = ref<boolean | null>(null)
 const vehicleRoadText = ref('')
 const driverAlternationText = ref('')
 
-// 入力方式 ('text' | 'audio')
-const vehicleRoadInputMode = ref<'text' | 'audio'>('text')
-const driverAlternationInputMode = ref<'text' | 'audio'>('text')
+// 入力方式 ('text' | 'audio') - 項目1はデフォルト音声入力
+const vehicleRoadInputMode = ref<'text' | 'audio'>('audio')
+const driverAlternationInputMode = ref<'text' | 'audio'>('audio')
 
 // 音声録音状態
-const vehicleRoadAudioUrl = ref<string>()
+const vehicleRoadAudioUrl = ref<string>()      // アップロード後のR2 URL
 const driverAlternationAudioUrl = ref<string>()
+const vehicleRoadLocalUrl = ref<string>()       // ローカル再生用 ObjectURL
+const driverAlternationLocalUrl = ref<string>()
 const vehicleRoadAudioBlob = ref<Blob>()
 const driverAlternationAudioBlob = ref<Blob>()
 const recordingTarget = ref<'vehicle' | 'driver' | null>(null)
 const mediaRecorder = ref<MediaRecorder | null>(null)
 const isUploading = ref(false)
+
+// 音声レベルメーター
+const audioLevel = ref(0) // 0〜100
+let animFrameId: number | null = null
+let analyser: AnalyserNode | null = null
+
+function startLevelMeter(stream: MediaStream) {
+  const ctx = new AudioContext()
+  analyser = ctx.createAnalyser()
+  analyser.fftSize = 256
+  ctx.createMediaStreamSource(stream).connect(analyser)
+  const buf = new Uint8Array(analyser.frequencyBinCount)
+  const tick = () => {
+    analyser!.getByteFrequencyData(buf)
+    const avg = buf.reduce((s, v) => s + v, 0) / buf.length
+    audioLevel.value = Math.min(100, Math.round(avg * 2.5))
+    animFrameId = requestAnimationFrame(tick)
+  }
+  animFrameId = requestAnimationFrame(tick)
+}
+
+function stopLevelMeter() {
+  if (animFrameId !== null) {
+    cancelAnimationFrame(animFrameId)
+    animFrameId = null
+  }
+  audioLevel.value = 0
+  analyser = null
+}
+
+// 「報告あり」クリック時に音声モードなら録音開始
+function selectHasReport(target: 'vehicle' | 'driver', value: boolean) {
+  if (target === 'vehicle') {
+    vehicleRoadHasReport.value = value
+    if (value && vehicleRoadInputMode.value === 'audio' && !vehicleRoadAudioBlob.value) {
+      startRecording('vehicle')
+    }
+  } else {
+    driverAlternationHasReport.value = value
+    if (value && driverAlternationInputMode.value === 'audio' && !driverAlternationAudioBlob.value) {
+      startRecording('driver')
+    }
+  }
+}
 
 // 各項目の値が決定しているか
 function isItemComplete(hasReport: boolean | null, inputMode: string, text: string, audioBlob?: Blob): boolean {
@@ -52,15 +97,24 @@ async function startRecording(target: 'vehicle' | 'driver') {
     }
 
     recorder.onstop = () => {
+      stopLevelMeter()
       const blob = new Blob(chunks, { type: 'audio/webm' })
       if (target === 'vehicle') {
         vehicleRoadAudioBlob.value = blob
+        vehicleRoadLocalUrl.value = URL.createObjectURL(blob)
+        // 項目2が「報告あり」の場合のみ自動開始
+        if (driverAlternationHasReport.value) {
+          startRecording('driver')
+        }
       } else {
         driverAlternationAudioBlob.value = blob
+        driverAlternationLocalUrl.value = URL.createObjectURL(blob)
       }
       stream.getTracks().forEach(t => t.stop())
       recordingTarget.value = null
     }
+
+    startLevelMeter(stream)
 
     mediaRecorder.value = recorder
     recordingTarget.value = target
@@ -80,10 +134,10 @@ function stopRecording() {
 function clearAudio(target: 'vehicle' | 'driver') {
   if (target === 'vehicle') {
     vehicleRoadAudioBlob.value = undefined
-    vehicleRoadAudioUrl.value = undefined
+    vehicleRoadLocalUrl.value = undefined
   } else {
     driverAlternationAudioBlob.value = undefined
-    driverAlternationAudioUrl.value = undefined
+    driverAlternationLocalUrl.value = undefined
   }
 }
 
@@ -132,7 +186,7 @@ async function handleSubmit() {
           :class="vehicleRoadHasReport === true
             ? 'bg-blue-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-          @click="vehicleRoadHasReport = true"
+          @click="selectHasReport('vehicle', true)"
         >
           報告あり
         </button>
@@ -141,7 +195,7 @@ async function handleSubmit() {
           :class="vehicleRoadHasReport === false
             ? 'bg-green-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-          @click="vehicleRoadHasReport = false"
+          @click="selectHasReport('vehicle', false)"
         >
           報告なし
         </button>
@@ -175,24 +229,35 @@ async function handleSubmit() {
         />
 
         <div v-else class="flex flex-col gap-2">
-          <div v-if="!vehicleRoadAudioBlob" class="flex gap-2">
-            <button
-              v-if="recordingTarget !== 'vehicle'"
-              class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium"
-              @click="startRecording('vehicle')"
-            >
-              録音開始
-            </button>
-            <button
-              v-else
-              class="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium animate-pulse"
-              @click="stopRecording"
-            >
-              録音停止
-            </button>
+          <div v-if="!vehicleRoadAudioBlob" class="flex flex-col gap-2">
+            <div class="flex gap-2">
+              <button
+                v-if="recordingTarget !== 'vehicle'"
+                class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium"
+                @click="startRecording('vehicle')"
+              >
+                録音開始
+              </button>
+              <button
+                v-else
+                class="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium animate-pulse"
+                @click="stopRecording"
+              >
+                録音終了
+              </button>
+            </div>
+            <!-- 音声レベルメーター -->
+            <div v-if="recordingTarget === 'vehicle'" class="flex items-center gap-1 h-5">
+              <div
+                v-for="i in 20" :key="i"
+                class="flex-1 rounded-sm transition-all duration-75"
+                :class="i * 5 <= audioLevel ? 'bg-red-500' : 'bg-gray-200'"
+                style="height: 100%"
+              />
+            </div>
           </div>
           <div v-else class="flex items-center gap-2">
-            <audio :src="URL.createObjectURL(vehicleRoadAudioBlob)" controls class="h-8 flex-1" />
+            <audio :src="vehicleRoadLocalUrl" controls class="h-8 flex-1" />
             <button class="text-xs text-red-500 underline" @click="clearAudio('vehicle')">削除</button>
           </div>
         </div>
@@ -209,7 +274,7 @@ async function handleSubmit() {
           :class="driverAlternationHasReport === true
             ? 'bg-blue-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-          @click="driverAlternationHasReport = true"
+          @click="selectHasReport('driver', true)"
         >
           報告あり
         </button>
@@ -218,7 +283,7 @@ async function handleSubmit() {
           :class="driverAlternationHasReport === false
             ? 'bg-green-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-          @click="driverAlternationHasReport = false"
+          @click="selectHasReport('driver', false)"
         >
           報告なし
         </button>
@@ -252,24 +317,35 @@ async function handleSubmit() {
         />
 
         <div v-else class="flex flex-col gap-2">
-          <div v-if="!driverAlternationAudioBlob" class="flex gap-2">
-            <button
-              v-if="recordingTarget !== 'driver'"
-              class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium"
-              @click="startRecording('driver')"
-            >
-              録音開始
-            </button>
-            <button
-              v-else
-              class="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium animate-pulse"
-              @click="stopRecording"
-            >
-              録音停止
-            </button>
+          <div v-if="!driverAlternationAudioBlob" class="flex flex-col gap-2">
+            <div class="flex gap-2">
+              <button
+                v-if="recordingTarget !== 'driver'"
+                class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium"
+                @click="startRecording('driver')"
+              >
+                録音開始
+              </button>
+              <button
+                v-else
+                class="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium animate-pulse"
+                @click="stopRecording"
+              >
+                録音終了
+              </button>
+            </div>
+            <!-- 音声レベルメーター -->
+            <div v-if="recordingTarget === 'driver'" class="flex items-center gap-1 h-5">
+              <div
+                v-for="i in 20" :key="i"
+                class="flex-1 rounded-sm transition-all duration-75"
+                :class="i * 5 <= audioLevel ? 'bg-red-500' : 'bg-gray-200'"
+                style="height: 100%"
+              />
+            </div>
           </div>
           <div v-else class="flex items-center gap-2">
-            <audio :src="URL.createObjectURL(driverAlternationAudioBlob)" controls class="h-8 flex-1" />
+            <audio :src="driverAlternationLocalUrl" controls class="h-8 flex-1" />
             <button class="text-xs text-red-500 underline" @click="clearAudio('driver')">削除</button>
           </div>
         </div>
