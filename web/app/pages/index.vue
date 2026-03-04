@@ -26,10 +26,11 @@ const activeRole = ref<RoleTab>(
 )
 
 // --- 運行者サブタブ ---
-type DriverSubTab = 'normal' | 'tenko' | 'demo'
+type DriverSubTab = 'normal' | 'tenko' | 'demo' | 'remote'
 const driverSubTab = ref<DriverSubTab>(
   route.query.tab === 'tenko' ? 'tenko'
   : route.query.tab === 'demo' ? 'demo'
+  : route.query.tab === 'remote' ? 'remote'
   : 'normal',
 )
 
@@ -45,6 +46,7 @@ watch(driverSubTab, (tab) => {
   const query: Record<string, string> = {}
   if (tab === 'tenko') query.tab = 'tenko'
   else if (tab === 'demo') query.tab = 'demo'
+  else if (tab === 'remote') query.tab = 'remote'
   navigateTo({ path: '/', query }, { replace: true })
 })
 
@@ -83,6 +85,7 @@ const roleLabels: Record<RoleTab, string> = {
             v-for="tab in ([
               { key: 'normal' as const, label: '通常点呼' },
               { key: 'tenko' as const, label: '自動点呼' },
+              { key: 'remote' as const, label: '遠隔点呼' },
               { key: 'demo' as const, label: 'デモ' },
             ])"
             :key="tab.key"
@@ -99,6 +102,7 @@ const roleLabels: Record<RoleTab, string> = {
 
       <NormalMeasurement v-if="driverSubTab === 'normal'" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'tenko'" class="flex-1 min-h-0" />
+      <TenkoKiosk v-if="driverSubTab === 'remote'" :remote-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'demo'" :demo-mode="true" class="flex-1 min-h-0" />
     </template>
 

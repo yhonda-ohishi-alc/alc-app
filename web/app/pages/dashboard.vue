@@ -35,7 +35,7 @@ useFaceSync()
 
 // タブ管理
 type TabKey = 'history' | 'camera' | 'queue' | 'employees' | 'license' | 'device'
-  | 'tenko' | 'schedules' | 'records' | 'webhooks' | 'baselines' | 'failures'
+  | 'tenko' | 'remote_tenko' | 'schedules' | 'records' | 'webhooks' | 'baselines' | 'failures'
 const activeTab = ref<TabKey>('history')
 const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
@@ -91,6 +91,7 @@ const cameraActive = computed(() => activeTab.value === 'camera')
       <div class="flex flex-wrap gap-1 mb-6 bg-blue-100 rounded-lg p-1 w-fit">
         <button v-for="tab in [
           { key: 'tenko', label: '点呼' },
+          { key: 'remote_tenko', label: '遠隔点呼' },
           { key: 'schedules', label: '予定管理' },
           { key: 'records', label: '点呼記録' },
           { key: 'baselines', label: '健康基準' },
@@ -196,6 +197,11 @@ const cameraActive = computed(() => activeTab.value === 'camera')
         <TenkoDashboardSummary />
         <h2 class="text-sm font-medium text-gray-700">進行中セッション</h2>
         <TenkoSessionMonitor />
+      </div>
+
+      <!-- 遠隔点呼タブ -->
+      <div v-if="activeTab === 'remote_tenko'">
+        <TenkoRemoteAdminView />
       </div>
 
       <!-- 予定管理タブ -->

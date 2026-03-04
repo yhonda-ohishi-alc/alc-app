@@ -4,6 +4,7 @@ import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
 
 const props = defineProps<{
   demoMode?: boolean
+  remoteMode?: boolean
 }>()
 
 // シングルトン再呼出で共有状態取得
@@ -13,6 +14,11 @@ const { isSyncing: isFaceSyncing } = useFaceSync()
 // デモモード (prop 優先、なければ URL クエリ)
 const { isDemoMode: isDemoModeFromUrl } = useDemoMode()
 const isDemoMode = computed(() => props.demoMode || isDemoModeFromUrl.value)
+
+// --- 遠隔点呼 WebRTC (インスタンス生成のみ; watch は useTenkoKiosk 後に設定) ---
+const config = useRuntimeConfig()
+const webRtc = useWebRtc('device')
+const camera = useCamera()
 
 // 点呼キオスク状態管理
 const {
@@ -24,6 +30,23 @@ const {
   onDailyInspectionSubmit, onInstructionConfirm, onReportSubmit,
   reset,
 } = useTenkoKiosk()
+
+// セッション開始後に WebRTC 接続
+watch(
+  () => session.value?.id,
+  async (sessionId) => {
+    if (!props.remoteMode || !sessionId) return
+    try {
+      await camera.start('user')
+      await webRtc.connect(config.public.signalingUrl, sessionId)
+      if (camera.stream.value) {
+        await webRtc.startStreaming(camera.stream.value)
+      }
+    } catch {
+      // カメラ/WebRTC 失敗は点呼フローをブロックしない
+    }
+  }
+)
 
 // BLE Medical Gateway (体温・血圧)
 const {
@@ -117,11 +140,44 @@ function handleReset() {
   useManualInput.value = false
   medicalInputSource.value = null
   medicalInputTab.value = isDemoMode.value ? 'manual' : 'ble'
+  if (props.remoteMode) {
+    webRtc.disconnect()
+    camera.stop()
+  }
 }
+
+onUnmounted(() => {
+  if (props.remoteMode) {
+    webRtc.disconnect()
+    camera.stop()
+  }
+})
 </script>
 
 <template>
   <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
+    <!-- 遠隔点呼 ビデオ通話 -->
+    <ClientOnly>
+      <div v-if="remoteMode && session" class="w-full max-w-md mb-4">
+        <TenkoVideoCall
+          :local-stream="camera.stream.value"
+          :remote-stream="webRtc.remoteStream.value"
+          :is-peer-connected="webRtc.isPeerConnected.value"
+          :is-connected="webRtc.isConnected.value"
+        />
+      </div>
+    </ClientOnly>
+
+    <!-- 遠隔点呼バナー -->
+    <ClientOnly>
+      <div
+        v-if="remoteMode"
+        class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700 font-medium"
+      >
+        遠隔点呼モード — 運行管理者がビデオ通話で確認しています
+      </div>
+    </ClientOnly>
+
     <!-- デモモードバナー -->
     <ClientOnly>
       <div
