@@ -8,7 +8,7 @@
 
 | フォルダ | 説明 | リポジトリ |
 |---------|------|----------|
-| `web/` | Nuxt 4 PWA フロントエンド (Cloudflare Pages) | このリポジトリ |
+| `web/` | Nuxt 4 PWA フロントエンド (Cloudflare Workers) | このリポジトリ |
 | `fc1200-wasm/` | FC-1200 RS232C プロトコル WASM (ソース秘匿) | このリポジトリ |
 | `cf-alc-signaling/` | WebRTC シグナリング (Cloudflare Durable Objects + Hibernatable WS) | このリポジトリ |
 | `~/rust/rust-nfc-bridge/` | NFC リーダー → 仮想シリアルポート (Windows) | 別リポジトリ (symlink: alc-app) |
@@ -24,15 +24,34 @@
 - **NFC ブリッジ**: Rust (tokio, serialport)
 - **バックエンド API**: Rust (Axum), GCP Cloud Run
 - **データベース**: PostgreSQL + Row Level Security
-- **ストレージ**: GCP Cloud Storage (顔写真)
+- **ストレージ**: Cloudflare R2 (顔写真)
 
 ## デプロイ
 
-- **web (Cloudflare Pages)**: `cd web && npm run deploy` — ビルド + `wrangler pages deploy dist` (プロジェクト名: `alc-app`)
+- **web (Cloudflare Workers)**: `cd web && npm run deploy` — `nuxt build && wrangler deploy`
+  - URL: https://alc-app.m-tama-ramu.workers.dev
 - **cf-alc-signaling (Cloudflare Workers)**: `cd cf-alc-signaling && wrangler deploy`
+  - URL: https://alc-signaling.m-tama-ramu.workers.dev
+  - シークレット不要 (現在 STUN P2P のみ。TURN は後日対応予定)
 - **rust-alc-api (GCP Cloud Run)**: 別リポジトリで管理
 - **rust-nfc-bridge**: `v*` タグ push で GitHub Actions が自動リリース (Windows ビルド + MSI 作成 + GitHub Release にアップロード)
   - 手順: `Cargo.toml` の version を上げる → commit & push → `gh release create v0.x.x` → Actions が MSI を追加
+
+## 遠隔点呼 WebRTC (2026-03-04 実装)
+
+運転者キオスク ↔ 運行管理者間の P2P ビデオ通話。STUN のみ (TURN は後日)。
+
+| ファイル | 役割 |
+|---------|------|
+| `web/app/components/TenkoVideoCall.vue` | PiP ビデオ通話 UI (ミュート・カメラOFF ボタン、接続状態バッジ) |
+| `web/app/components/TenkoKiosk.vue` | `remoteMode` prop → セッション開始後 WebRTC 接続 + ビデオオーバーレイ |
+| `web/app/components/TenkoRemoteAdminView.vue` | 管理者側: アクティブセッション一覧 + クリックで通話開始 |
+| `web/app/pages/index.vue` | 「遠隔点呼」タブ追加 (`?tab=remote`) |
+| `web/app/pages/dashboard.vue` | 点呼管理グループに「遠隔点呼」タブ追加 |
+| `web/app/composables/useWebRtc.ts` | `connect(signalingUrl, roomId)` — Room ID = tenko_session_id |
+| `cf-alc-signaling/src/signaling-room.ts` | Durable Object: device/admin 2ピア間で SDP/ICE をリレー |
+
+**接続フロー**: `nuxt.config.ts` の `NUXT_PUBLIC_SIGNALING_URL` に signaling Worker URL を設定。
 
 ## バージョニング
 
