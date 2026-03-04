@@ -1,7 +1,7 @@
 import type { MeasurementResult } from '~/types'
 
 const DB_NAME = 'alc-offline-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'pending-measurements'
 
 /** キューに保存する際、measuredAt を ISO 文字列化したもの */
@@ -27,15 +27,25 @@ export interface PendingMeasurement {
   facePhotoBase64?: string
   createdAt: string
   retryCount: number
+  /** 送信済みの場合に設定される ISO タイムスタンプ */
+  syncedAt?: string
 }
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true })
+      }
+      // v2: syncedAt インデックス追加
+      if ((event.oldVersion || 0) < 2) {
+        const tx = request.transaction!
+        const store = tx.objectStore(STORE_NAME)
+        if (!store.indexNames.contains('syncedAt')) {
+          store.createIndex('syncedAt', 'syncedAt', { unique: false })
+        }
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -66,7 +76,12 @@ function base64ToBlob(base64: string): Blob {
 }
 
 /** オフライン測定結果をキューに追加 */
-export async function enqueue(result: MeasurementResult, facePhotoBlob?: Blob, activeMeasurementId?: string): Promise<void> {
+export async function enqueue(
+  result: MeasurementResult,
+  facePhotoBlob?: Blob,
+  activeMeasurementId?: string,
+  syncedAt?: string,
+): Promise<number> {
   const db = await openDb()
   const serialized: SerializedResult = {
     activeMeasurementId,
@@ -87,17 +102,18 @@ export async function enqueue(result: MeasurementResult, facePhotoBlob?: Blob, a
     facePhotoBase64: facePhotoBlob ? await blobToBase64(facePhotoBlob) : undefined,
     createdAt: new Date().toISOString(),
     retryCount: 0,
+    syncedAt,
   }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).add(entry)
-    tx.oncomplete = () => resolve()
+    const addReq = tx.objectStore(STORE_NAME).add(entry)
+    addReq.onsuccess = () => resolve(addReq.result as number)
     tx.onerror = () => reject(tx.error)
   })
 }
 
-/** キュー内の全件を取得 */
-export async function getAll(): Promise<PendingMeasurement[]> {
+/** 全件取得 (synced/pending 両方) */
+export async function getAllWithStatus(): Promise<PendingMeasurement[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
@@ -107,12 +123,37 @@ export async function getAll(): Promise<PendingMeasurement[]> {
   })
 }
 
+/** 未送信 (syncedAt 未設定) のみ取得 */
+export async function getAll(): Promise<PendingMeasurement[]> {
+  const all = await getAllWithStatus()
+  return all.filter(item => !item.syncedAt)
+}
+
 /** キューから 1 件削除 */
 export async function remove(id: number): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     tx.objectStore(STORE_NAME).delete(id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 送信済みとしてマーク */
+export async function markSynced(id: number): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    const getReq = store.get(id)
+    getReq.onsuccess = () => {
+      const entry = getReq.result as PendingMeasurement | undefined
+      if (entry) {
+        entry.syncedAt = new Date().toISOString()
+        store.put(entry)
+      }
+    }
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -137,12 +178,17 @@ async function incrementRetry(id: number): Promise<void> {
   })
 }
 
-/** キューを全件削除 */
+/** 未送信のみ全件削除 */
 export async function clearAll(): Promise<void> {
+  const pending = await getAll()
+  if (pending.length === 0) return
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).clear()
+    const store = tx.objectStore(STORE_NAME)
+    for (const item of pending) {
+      store.delete(item.id)
+    }
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -150,18 +196,47 @@ export async function clearAll(): Promise<void> {
 
 /** 未送信件数を取得 */
 export async function pendingCount(): Promise<number> {
+  const pending = await getAll()
+  return pending.length
+}
+
+/** 保存期間超過のレコードを削除 */
+export async function cleanupOld(retentionDays: number): Promise<number> {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - retentionDays)
+  const cutoffIso = cutoff.toISOString()
+
+  const all = await getAllWithStatus()
+  const toDelete = all.filter(item =>
+    item.syncedAt && item.syncedAt < cutoffIso,
+  )
+  if (toDelete.length === 0) return 0
+
   const db = await openDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const request = tx.objectStore(STORE_NAME).count()
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    for (const item of toDelete) {
+      store.delete(item.id)
+    }
+    tx.oncomplete = () => resolve(toDelete.length)
+    tx.onerror = () => reject(tx.error)
   })
+}
+
+/** IndexedDB の使用サイズを推定 (全レコードの JSON サイズ合計) */
+export async function estimateDbSize(): Promise<{ totalBytes: number; recordCount: number }> {
+  const all = await getAllWithStatus()
+  let totalBytes = 0
+  for (const item of all) {
+    totalBytes += new Blob([JSON.stringify(item)]).size
+  }
+  return { totalBytes, recordCount: all.length }
 }
 
 const MAX_RETRIES = 5
 
-/** キュー内の測定結果を順次 API 送信 (オンライン復帰時に呼ぶ) */
+/** キュー内の未送信測定結果を順次 API 送信 (オンライン復帰時に呼ぶ) */
 export async function flush(
   saveFn: (result: MeasurementResult, blob?: Blob) => Promise<unknown>,
   updateFn?: (id: string, data: Record<string, unknown>) => Promise<unknown>,
@@ -194,7 +269,7 @@ export async function flush(
                 : undefined,
             }
             await saveFn(result, blob)
-            await remove(entry.id)
+            await markSynced(entry.id)
             sent++
             continue
           }
@@ -224,7 +299,7 @@ export async function flush(
         const blob = entry.facePhotoBase64 ? base64ToBlob(entry.facePhotoBase64) : undefined
         await saveFn(result, blob)
       }
-      await remove(entry.id)
+      await markSynced(entry.id)
       sent++
     } catch {
       await incrementRetry(entry.id)

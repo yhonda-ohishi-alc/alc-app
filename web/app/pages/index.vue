@@ -122,6 +122,8 @@ function onRoleTabClick(role: RoleTab) {
 
       <!-- 画面共有: タブに関係なく常時フローティング表示 -->
       <ScreenShareSender />
+      <!-- 測定ログ: フッターバー (常時表示) -->
+      <MeasurementLog />
     </template>
 
     <!-- 運行管理者タブ -->

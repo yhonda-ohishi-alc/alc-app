@@ -1,21 +1,26 @@
 import type { MeasurementResult } from '~/types'
 import type { PendingMeasurement } from '~/utils/offline-queue'
 import { saveMeasurement, updateMeasurement } from '~/utils/api'
-import { enqueue, flush, getAll, remove, clearAll } from '~/utils/offline-queue'
+import { enqueue, flush, getAllWithStatus, remove, clearAll, cleanupOld } from '~/utils/offline-queue'
+
+const DEFAULT_RETENTION_DAYS = 730 // 2年
 
 /** オフライン時のキューイング + オンライン復帰時の自動同期 */
 export function useOfflineSync() {
   const isOnline = ref(true)
   const pending = ref(0)
   const queueItems = ref<PendingMeasurement[]>([])
+  const allItems = ref<PendingMeasurement[]>([])
   const isSyncing = ref(false)
   const lastSyncResult = ref<{ sent: number; failed: number } | null>(null)
 
   async function refreshQueue() {
     try {
-      const items = await getAll()
-      queueItems.value = items
-      pending.value = items.length
+      const all = await getAllWithStatus()
+      allItems.value = all
+      const pendingItems = all.filter(item => !item.syncedAt)
+      queueItems.value = pendingItems
+      pending.value = pendingItems.length
     } catch {
       // IndexedDB エラーは無視
     }
@@ -30,6 +35,9 @@ export function useOfflineSync() {
     }
     try {
       await saveMeasurement(result, facePhotoBlob)
+      // オンライン送信成功時もローカルに記録 (顔写真は省略、URLのみ)
+      await enqueue(result, undefined, activeMeasurementId, new Date().toISOString())
+      await refreshQueue()
       return 'saved'
     } catch {
       // API 失敗時もキューに退避
@@ -58,10 +66,23 @@ export function useOfflineSync() {
     await refreshQueue()
   }
 
-  /** キューを全件削除 */
+  /** 未送信キューを全件削除 */
   async function clearQueue() {
     await clearAll()
     await refreshQueue()
+  }
+
+  /** 保存期間設定を取得 */
+  function getRetentionDays(): number {
+    if (!import.meta.client) return DEFAULT_RETENTION_DAYS
+    const stored = localStorage.getItem('alc-retention-days')
+    return stored ? parseInt(stored, 10) || DEFAULT_RETENTION_DAYS : DEFAULT_RETENTION_DAYS
+  }
+
+  /** 保存期間設定を変更 */
+  function setRetentionDays(days: number) {
+    if (!import.meta.client) return
+    localStorage.setItem('alc-retention-days', String(days))
   }
 
   if (import.meta.client) {
@@ -75,10 +96,16 @@ export function useOfflineSync() {
       isOnline.value = false
     }
 
-    onMounted(() => {
+    onMounted(async () => {
       window.addEventListener('online', handleOnline)
       window.addEventListener('offline', handleOffline)
-      refreshQueue()
+      // 古いレコードをクリーンアップ
+      try {
+        await cleanupOld(getRetentionDays())
+      } catch {
+        // 無視
+      }
+      await refreshQueue()
     })
 
     onUnmounted(() => {
@@ -91,6 +118,7 @@ export function useOfflineSync() {
     isOnline: readonly(isOnline),
     pending: readonly(pending),
     queueItems: readonly(queueItems),
+    allItems: readonly(allItems),
     isSyncing: readonly(isSyncing),
     lastSyncResult: readonly(lastSyncResult),
     save,
@@ -98,5 +126,7 @@ export function useOfflineSync() {
     removeItem,
     clearQueue,
     refreshQueue,
+    getRetentionDays,
+    setRetentionDays,
   }
 }

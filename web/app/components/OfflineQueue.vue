@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { getEmployees } from '~/utils/api'
+import { estimateDbSize } from '~/utils/offline-queue'
 
 const {
   queueItems,
+  allItems,
   pending,
   isSyncing,
   isOnline,
@@ -10,6 +12,7 @@ const {
   clearQueue,
   syncQueue,
   refreshQueue,
+  getRetentionDays,
 } = useOfflineSync()
 
 // 従業員名ルックアップ
@@ -24,6 +27,19 @@ function employeeName(id: string) {
   return employeeMap.value[id] || id.slice(0, 8)
 }
 
+// IndexedDB サイズ
+const dbSize = ref<{ totalBytes: number; recordCount: number } | null>(null)
+async function loadDbSize() {
+  try {
+    dbSize.value = await estimateDbSize()
+  } catch {}
+}
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 const isDeleting = ref<number | null>(null)
 const isClearing = ref(false)
 
@@ -31,16 +47,18 @@ async function handleRemove(id: number) {
   isDeleting.value = id
   try {
     await removeItem(id)
+    await loadDbSize()
   } finally {
     isDeleting.value = null
   }
 }
 
 async function handleClearAll() {
-  if (!confirm('送信キュー内の全データを削除しますか？この操作は元に戻せません。')) return
+  if (!confirm('送信キュー内の未送信データを削除しますか？この操作は元に戻せません。')) return
   isClearing.value = true
   try {
     await clearQueue()
+    await loadDbSize()
   } finally {
     isClearing.value = false
   }
@@ -74,31 +92,41 @@ function resultColor(type: string) {
 onMounted(() => {
   loadEmployees()
   refreshQueue()
+  loadDbSize()
 })
 </script>
 
 <template>
   <div>
     <!-- アクションバー -->
-    <div class="bg-white rounded-xl p-4 shadow-sm mb-4 flex items-center justify-between">
-      <p class="text-sm text-gray-600">
-        未送信: <span class="font-bold">{{ pending }}</span> 件
-      </p>
-      <div class="flex gap-2">
-        <button
-          :disabled="pending === 0 || isSyncing || !isOnline"
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
-          @click="syncQueue"
-        >
-          {{ isSyncing ? '送信中...' : '再送信' }}
-        </button>
-        <button
-          :disabled="pending === 0 || isClearing"
-          class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
-          @click="handleClearAll"
-        >
-          {{ isClearing ? '削除中...' : '全件削除' }}
-        </button>
+    <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-gray-600">
+          未送信: <span class="font-bold">{{ pending }}</span> 件
+        </p>
+        <div class="flex gap-2">
+          <button
+            :disabled="pending === 0 || isSyncing || !isOnline"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+            @click="syncQueue"
+          >
+            {{ isSyncing ? '送信中...' : '再送信' }}
+          </button>
+          <button
+            :disabled="pending === 0 || isClearing"
+            class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+            @click="handleClearAll"
+          >
+            {{ isClearing ? '削除中...' : '全件削除' }}
+          </button>
+        </div>
+      </div>
+      <!-- IndexedDB サイズ情報 -->
+      <div v-if="dbSize" class="mt-2 pt-2 border-t border-gray-100 flex gap-4 text-xs text-gray-500">
+        <span>IndexedDB: <span class="font-medium text-gray-700">{{ formatSize(dbSize.totalBytes) }}</span></span>
+        <span>全レコード: <span class="font-medium text-gray-700">{{ dbSize.recordCount }}</span> 件</span>
+        <span>送信済: <span class="font-medium text-gray-700">{{ allItems.filter(i => !!i.syncedAt).length }}</span> 件</span>
+        <span>保存期間: <span class="font-medium text-gray-700">{{ getRetentionDays() }}</span> 日</span>
       </div>
     </div>
 
