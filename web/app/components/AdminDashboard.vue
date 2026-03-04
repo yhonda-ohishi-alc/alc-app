@@ -1,5 +1,11 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const { user, logout } = useAuth()
+
+async function handleLogout() {
+  await logout()
+  navigateTo('/login')
+}
 
 // WebRTC (admin として接続)
 const { isConnected, isPeerConnected, remoteStream, error: rtcError, connect, disconnect } = useWebRtc('admin')
@@ -26,7 +32,7 @@ const cameraActive = computed(() => activeTab.value === 'camera')
 
 <template>
   <div class="flex flex-col flex-1 overflow-hidden">
-    <div class="px-4 pt-4">
+    <div class="px-4 pt-4 flex items-center gap-3">
       <div class="flex flex-wrap gap-1 bg-gray-200 rounded-lg p-1 w-fit">
         <button
           v-for="tab in [
@@ -44,6 +50,10 @@ const cameraActive = computed(() => activeTab.value === 'camera')
         >
           {{ tab.label }}
         </button>
+      </div>
+      <div class="flex items-center gap-2 ml-auto text-sm">
+        <span v-if="user" class="text-gray-500">{{ user.email }}</span>
+        <button class="text-red-600 hover:underline" @click="handleLogout">ログアウト</button>
       </div>
     </div>
 
