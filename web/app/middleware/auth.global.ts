@@ -1,6 +1,6 @@
 /** 管理ページの認証ミドルウェア */
 export default defineNuxtRouteMiddleware((to) => {
-  const protectedPaths = ['/register', '/dashboard', '/maintenance']
+  const protectedPaths = ['/register', '/maintenance']
 
   if (!protectedPaths.some(p => to.path.startsWith(p))) {
     return // 測定ページ・ログインページは認証不要

@@ -56,6 +56,18 @@ const roleLabels: Record<RoleTab, string> = {
   manager: '運行管理者',
   admin: 'システム管理者',
 }
+
+// 同タブ再クリックで再認証させるためのキー
+const managerAuthKey = ref(0)
+const adminAuthKey = ref(0)
+
+function onRoleTabClick(role: RoleTab) {
+  if (activeRole.value === role) {
+    if (role === 'manager') managerAuthKey.value++
+    if (role === 'admin') adminAuthKey.value++
+  }
+  activeRole.value = role
+}
 </script>
 
 <template>
@@ -70,7 +82,7 @@ const roleLabels: Record<RoleTab, string> = {
           :class="activeRole === role
             ? 'bg-white text-gray-800 shadow-sm'
             : 'text-gray-600 hover:text-gray-800'"
-          @click="activeRole = role"
+          @click="onRoleTabClick(role)"
         >
           {{ roleLabels[role] }}
         </button>
@@ -113,12 +125,12 @@ const roleLabels: Record<RoleTab, string> = {
     </template>
 
     <!-- 運行管理者タブ -->
-    <RoleAuthGate v-if="activeRole === 'manager'" required-role="manager" class="flex-1 min-h-0">
+    <RoleAuthGate v-if="activeRole === 'manager'" :key="managerAuthKey" required-role="manager" class="flex-1 min-h-0">
       <ManagerDashboard />
     </RoleAuthGate>
 
     <!-- システム管理者タブ -->
-    <RoleAuthGate v-if="activeRole === 'admin'" required-role="admin" class="flex-1 min-h-0">
+    <RoleAuthGate v-if="activeRole === 'admin'" :key="adminAuthKey" required-role="admin" class="flex-1 min-h-0">
       <AdminDashboard />
     </RoleAuthGate>
   </div>

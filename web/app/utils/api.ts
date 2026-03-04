@@ -174,7 +174,7 @@ export async function getEmployeeByCode(code: string): Promise<ApiEmployee> {
 }
 
 /** 乗務員を登録 */
-export async function createEmployee(data: { code?: string; nfc_id?: string; name: string }): Promise<ApiEmployee> {
+export async function createEmployee(data: { code?: string; nfc_id?: string; name: string; role?: string[] }): Promise<ApiEmployee> {
   return request<ApiEmployee>('/api/employees', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -182,7 +182,7 @@ export async function createEmployee(data: { code?: string; nfc_id?: string; nam
 }
 
 /** 乗務員情報を更新 */
-export async function updateEmployee(id: string, data: { name: string; code?: string | null }): Promise<ApiEmployee> {
+export async function updateEmployee(id: string, data: { name: string; code?: string | null; role?: string[] }): Promise<ApiEmployee> {
   return request<ApiEmployee>(`/api/employees/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),

@@ -147,7 +147,7 @@ export interface ApiEmployee {
   face_embedding_at?: string | null
   license_issue_date?: string | null
   license_expiry_date?: string | null
-  role: 'driver' | 'manager' | 'admin'
+  role: Array<'driver' | 'manager' | 'admin'>
   created_at: string
   updated_at: string
 }

@@ -4,9 +4,15 @@ const loginError = ref<string | null>(null)
 const isSubmitting = ref(false)
 const route = useRoute()
 
-// 認証済みならリダイレクト (redirect クエリがあればそちらへ、なければ dashboard)
+// 認証済みならリダイレクト (redirect クエリがあればそちらへ、なければ admin タブ)
 watch(isAuthenticated, (val) => {
-  if (val) navigateTo((route.query.redirect as string) || '/dashboard')
+  if (!val) return
+  const redirect = route.query.redirect as string
+  if (redirect) {
+    navigateTo(redirect)
+  } else {
+    navigateTo({ path: '/', query: { role: 'admin' } })
+  }
 }, { immediate: true })
 
 async function handleGoogleLogin() {

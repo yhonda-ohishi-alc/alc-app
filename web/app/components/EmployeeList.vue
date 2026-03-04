@@ -7,16 +7,24 @@ const employees = ref<ApiEmployee[]>([])
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
+const ROLES = [
+  { value: 'driver', label: '運行者' },
+  { value: 'manager', label: '運行管理者' },
+  { value: 'admin', label: 'システム管理者' },
+] as const
+
 // 新規登録フォーム
 const showForm = ref(false)
 const newName = ref('')
 const newCode = ref('')
+const newRole = ref<string[]>(['driver'])
 const isSaving = ref(false)
 
 // 編集
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const editCode = ref('')
+const editRole = ref<string[]>(['driver'])
 const isUpdating = ref(false)
 
 // 削除確認
@@ -36,9 +44,10 @@ async function handleCreate() {
   isSaving.value = true
   error.value = null
   try {
-    await createEmployee({ code: newCode.value.trim(), name: newName.value.trim() })
+    await createEmployee({ code: newCode.value.trim(), name: newName.value.trim(), role: newRole.value })
     newName.value = ''
     newCode.value = ''
+    newRole.value = ['driver']
     showForm.value = false
     await fetchData()
   } catch (e) {
@@ -52,6 +61,7 @@ function startEdit(emp: ApiEmployee) {
   editingId.value = emp.id
   editName.value = emp.name
   editCode.value = emp.code || ''
+  editRole.value = [...emp.role]
   deletingId.value = null
 }
 
@@ -67,6 +77,7 @@ async function handleUpdate() {
     await updateEmployee(editingId.value, {
       name: editName.value.trim(),
       code: editCode.value.trim() || null,
+      role: editRole.value,
     })
     editingId.value = null
     await fetchData()
@@ -277,13 +288,24 @@ onMounted(() => fetchData())
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
         </div>
-        <button
-          :disabled="!newName.trim() || !newCode.trim() || isSaving"
-          class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
-          @click="handleCreate"
-        >
-          {{ isSaving ? '登録中...' : '登録' }}
-        </button>
+        <div class="flex items-end gap-2">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">ロール</label>
+            <div class="flex gap-2">
+              <label v-for="r in ROLES" :key="r.value" class="flex items-center gap-1 text-xs cursor-pointer">
+                <input type="checkbox" :value="r.value" v-model="newRole" class="rounded">
+                {{ r.label }}
+              </label>
+            </div>
+          </div>
+          <button
+            :disabled="!newName.trim() || !newCode.trim() || newRole.length === 0 || isSaving"
+            class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+            @click="handleCreate"
+          >
+            {{ isSaving ? '登録中...' : '登録' }}
+          </button>
+        </div>
       </div>
       <p class="mt-2 text-xs text-gray-400">NFC カードは測定端末でタッチして紐付けます</p>
     </div>
@@ -306,6 +328,7 @@ onMounted(() => fetchData())
             <tr>
               <th class="px-4 py-3 text-left font-medium">社員番号</th>
               <th class="px-4 py-3 text-left font-medium">名前</th>
+              <th class="px-4 py-3 text-left font-medium">ロール</th>
               <th class="px-4 py-3 text-center font-medium">NFC</th>
               <th class="px-4 py-3 text-center font-medium">顔登録</th>
               <th class="px-4 py-3 text-left font-medium">登録日</th>
@@ -332,6 +355,14 @@ onMounted(() => fetchData())
                     class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     @keyup.enter="handleUpdate"
                   >
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-col gap-1">
+                    <label v-for="r in ROLES" :key="r.value" class="flex items-center gap-1 text-xs cursor-pointer">
+                      <input type="checkbox" :value="r.value" v-model="editRole" class="rounded">
+                      {{ r.label }}
+                    </label>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-center">
                   <span
@@ -375,6 +406,19 @@ onMounted(() => fetchData())
               <template v-else>
                 <td class="px-4 py-3 text-gray-800 font-mono">{{ emp.code || '-' }}</td>
                 <td class="px-4 py-3 text-gray-800 font-medium">{{ emp.name }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="r in emp.role" :key="r"
+                      class="inline-block px-1.5 py-0.5 rounded text-xs font-medium"
+                      :class="{
+                        'bg-gray-100 text-gray-700': r === 'driver',
+                        'bg-blue-100 text-blue-800': r === 'manager',
+                        'bg-purple-100 text-purple-800': r === 'admin',
+                      }"
+                    >{{ ROLES.find(x => x.value === r)?.label ?? r }}</span>
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-center">
                   <span
                     v-if="emp.nfc_id"

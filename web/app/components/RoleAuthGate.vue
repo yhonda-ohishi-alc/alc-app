@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * 【セキュリティ要件】
+ * - manager: NFC/社員番号 + 顔認証が必須。Google ログイン単独では通過不可。
+ * - admin  : Google ログインで通過 (watch で即時認証)。
+ *
+ * 注意: Google ログインリンクは admin タブ専用。
+ * manager タブでは表示しないこと (バイパス防止)。
+ * (/login 後は /dashboard にリダイレクトされ顔認証が完全にスキップされるため)
+ */
 import type { FaceAuthResult } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
 
@@ -7,45 +16,36 @@ const props = defineProps<{
 }>()
 
 const { isAuthenticated } = useAuth()
+const { setManagerId } = useManagerAuth()
+
+onUnmounted(() => setManagerId(null))
 
 // 認証状態
 const authState = ref<'pending' | 'authenticated' | 'denied'>('pending')
-const authenticatedEmployee = ref<{ id: string; name: string; role: string } | null>(null)
+
+// admin は Google ログインで直接通過 (computed で reactive に判定)
+const isGranted = computed(() =>
+  authState.value === 'authenticated' ||
+  (props.requiredRole === 'admin' && isAuthenticated.value)
+)
+const authenticatedEmployee = ref<{ id: string; name: string; role: string[] } | null>(null)
 const errorMessage = ref<string | null>(null)
 
 // NFC / 手動入力
 const employeeId = ref('')
 const employeeName = ref('')
 const manualIdInput = ref('')
-const useManualInput = ref(false)
+const useManualInput = ref(true)
 const manualError = ref<string | null>(null)
 const step = ref<'nfc' | 'face_auth'>('nfc')
 
-// Google ログイン済み → 全パス
-watch(isAuthenticated, (val) => {
-  if (val) authState.value = 'authenticated'
-}, { immediate: true })
-
-// sessionStorage でセッション間の認証状態を維持
-const storageKey = computed(() => `role_auth_${props.requiredRole}`)
-onMounted(() => {
-  if (authState.value === 'authenticated') return
-  const stored = sessionStorage.getItem(storageKey.value)
-  if (stored) {
-    try {
-      const data = JSON.parse(stored)
-      authenticatedEmployee.value = data
-      authState.value = 'authenticated'
-    } catch { /* ignore */ }
-  }
-})
 
 // ロール階層チェック
-function hasRole(employeeRole: string): boolean {
+function hasRole(employeeRole: string[]): boolean {
   if (props.requiredRole === 'manager') {
-    return employeeRole === 'manager' || employeeRole === 'admin'
+    return employeeRole.includes('manager') || employeeRole.includes('admin')
   }
-  return employeeRole === 'admin'
+  return employeeRole.includes('admin')
 }
 
 const roleLabel: Record<string, string> = {
@@ -61,7 +61,7 @@ async function onNfcRead(nfcId: string) {
     employeeId.value = emp.id
     employeeName.value = emp.name
     if (!hasRole(emp.role)) {
-      errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role})`
+      errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role.join(', ')})`
       return
     }
     authenticatedEmployee.value = { id: emp.id, name: emp.name, role: emp.role }
@@ -82,7 +82,7 @@ async function onManualSubmit() {
     employeeId.value = emp.id
     employeeName.value = emp.name
     if (!hasRole(emp.role)) {
-      errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role})`
+      errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role.join(', ')})`
       return
     }
     authenticatedEmployee.value = { id: emp.id, name: emp.name, role: emp.role }
@@ -96,7 +96,9 @@ async function onManualSubmit() {
 function onFaceAuthResult(result: FaceAuthResult) {
   if (result.verified) {
     authState.value = 'authenticated'
-    sessionStorage.setItem(storageKey.value, JSON.stringify(authenticatedEmployee.value))
+    if (props.requiredRole === 'manager' && authenticatedEmployee.value) {
+      setManagerId(authenticatedEmployee.value.id)
+    }
   } else {
     errorMessage.value = '顔認証に失敗しました。もう一度お試しください。'
     step.value = 'nfc'
@@ -105,6 +107,7 @@ function onFaceAuthResult(result: FaceAuthResult) {
 
 // リセット
 function resetAuth() {
+  setManagerId(null)
   authState.value = 'pending'
   authenticatedEmployee.value = null
   errorMessage.value = null
@@ -112,15 +115,14 @@ function resetAuth() {
   employeeName.value = ''
   manualIdInput.value = ''
   manualError.value = null
-  useManualInput.value = false
+  useManualInput.value = true
   step.value = 'nfc'
-  sessionStorage.removeItem(storageKey.value)
 }
 </script>
 
 <template>
   <!-- 認証済み → slot 表示 -->
-  <div v-if="authState === 'authenticated'" class="flex flex-col flex-1">
+  <div v-if="isGranted" class="flex flex-col flex-1">
     <!-- 認証者バナー -->
     <div v-if="authenticatedEmployee" class="bg-green-50 border-b border-green-200 px-4 py-1.5 text-center text-xs text-green-700">
       {{ authenticatedEmployee.name }} ({{ roleLabel[requiredRole] }}) としてログイン中
@@ -196,8 +198,8 @@ function resetAuth() {
           </button>
         </div>
 
-        <!-- Google ログインリンク -->
-        <div class="mt-6 pt-4 border-t border-gray-200 text-center">
+        <!-- Google ログインリンク (admin のみ表示: manager では顔認証バイパス防止) -->
+        <div v-if="requiredRole === 'admin'" class="mt-6 pt-4 border-t border-gray-200 text-center">
           <NuxtLink to="/login" class="text-blue-600 hover:underline text-sm">
             Google アカウントでログイン
           </NuxtLink>

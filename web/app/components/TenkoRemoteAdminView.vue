@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import type { FaceAuthResult } from '~/types'
+import { getEmployeeByCode } from '~/utils/api'
+
 const config = useRuntimeConfig()
+const { authenticatedManagerId, setManagerId } = useManagerAuth()
 
 // 管理者側 WebRTC
 const webRtc = useWebRtc('admin')
@@ -14,10 +18,74 @@ const isCallActive = ref(false)
 const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 
+// 顔認証モーダル状態 (セッション接続前確認)
+const pendingRoomId = ref<string | null>(null)
+const faceAuthActive = ref(false)
+const faceAuthError = ref<string | null>(null)
+const modalStep = ref<'id_input' | 'face_auth'>('id_input')
+const modalEmployeeId = ref('')
+const modalEmployeeName = ref('')
+const modalIdInput = ref('')
+const modalIdError = ref<string | null>(null)
+
 // HTTP用: wss://→https:// または ws://→http://
 const signalingHttpUrl = (config.public.signalingUrl as string).replace(/^wss/, 'https').replace(/^ws:/, 'http:')
 // WebSocket用: https://→wss:// または http://→ws://
 const signalingWsUrl = (config.public.signalingUrl as string).replace(/^https/, 'wss').replace(/^http:/, 'ws:')
+
+// セッションカードクリック → 顔認証モーダルを表示
+function requestCall(roomId: string) {
+  pendingRoomId.value = roomId
+  faceAuthError.value = null
+  modalIdError.value = null
+  faceAuthActive.value = true
+  // authenticatedManagerId があれば ID 入力スキップ
+  if (authenticatedManagerId.value) {
+    modalEmployeeId.value = authenticatedManagerId.value
+    modalStep.value = 'face_auth'
+  } else {
+    modalStep.value = 'id_input'
+  }
+}
+
+// モーダル内 ID 入力 → 社員検索 → 顔認証へ
+async function onModalIdSubmit() {
+  const input = modalIdInput.value.trim()
+  if (!input) return
+  modalIdError.value = null
+  try {
+    const emp = await getEmployeeByCode(input)
+    if (!emp.role.includes('manager') && !emp.role.includes('admin')) {
+      modalIdError.value = `${emp.name}さんには運行管理者の権限がありません`
+      return
+    }
+    modalEmployeeId.value = emp.id
+    modalEmployeeName.value = emp.name
+    setManagerId(emp.id)
+    modalStep.value = 'face_auth'
+  } catch {
+    modalIdError.value = `社員番号「${input}」の乗務員が見つかりません`
+  }
+}
+
+function onManagerFaceAuthResult(result: FaceAuthResult) {
+  if (result.verified) {
+    faceAuthActive.value = false
+    startCall(pendingRoomId.value!)
+  } else {
+    faceAuthError.value = '顔認証に失敗しました。もう一度お試しください。'
+  }
+}
+
+function cancelFaceAuth() {
+  faceAuthActive.value = false
+  pendingRoomId.value = null
+  faceAuthError.value = null
+  modalIdInput.value = ''
+  modalIdError.value = null
+  modalEmployeeId.value = ''
+  modalEmployeeName.value = ''
+}
 
 async function loadActiveRooms() {
   isLoading.value = true
@@ -206,7 +274,7 @@ onUnmounted(() => {
           :class="selectedRoomId === roomId && isCallActive
             ? 'border-blue-400 bg-blue-50'
             : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
-          @click="startCall(roomId)"
+          @click="requestCall(roomId)"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -223,6 +291,60 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- 顔認証モーダル (セッション接続前の管理者確認) -->
+  <div
+    v-if="faceAuthActive"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+  >
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4">
+      <h3 class="text-lg font-semibold text-gray-800 mb-1">点呼開始前の確認</h3>
+
+      <!-- Step 1: 社員番号入力 (authenticatedManagerId が未設定時) -->
+      <div v-if="modalStep === 'id_input'">
+        <p class="text-sm text-gray-500 mb-4">管理者の社員番号を入力してください</p>
+        <div v-if="modalIdError" class="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+          {{ modalIdError }}
+        </div>
+        <input
+          v-model="modalIdInput"
+          type="text"
+          placeholder="社員番号 (例: 001)"
+          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          @keyup.enter="onModalIdSubmit"
+        >
+        <button
+          :disabled="!modalIdInput.trim()"
+          class="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
+          @click="onModalIdSubmit"
+        >
+          次へ
+        </button>
+      </div>
+
+      <!-- Step 2: 顔認証 -->
+      <div v-if="modalStep === 'face_auth'">
+        <p v-if="modalEmployeeName" class="text-sm text-gray-500 mb-4">{{ modalEmployeeName }} — 顔認証を行ってください</p>
+        <p v-else class="text-sm text-gray-500 mb-4">管理者の顔認証を行ってください</p>
+        <div v-if="faceAuthError" class="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+          {{ faceAuthError }}
+        </div>
+        <FaceAuth
+          :key="pendingRoomId"
+          :employee-id="modalEmployeeId"
+          mode="verify"
+          @result="onManagerFaceAuthResult"
+        />
+      </div>
+
+      <button
+        class="w-full mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
+        @click="cancelFaceAuth"
+      >
+        キャンセル
+      </button>
     </div>
   </div>
 </template>

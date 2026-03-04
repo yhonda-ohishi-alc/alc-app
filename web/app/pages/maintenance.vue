@@ -239,7 +239,7 @@ function formatSeconds(totalSeconds: number): string {
     <footer class="w-full max-w-lg py-4">
       <div class="flex justify-center gap-4">
         <NuxtLink to="/" class="text-blue-600 hover:underline text-sm">測定画面</NuxtLink>
-        <NuxtLink to="/dashboard" class="text-blue-600 hover:underline text-sm">管理画面</NuxtLink>
+        <NuxtLink to="/?role=admin" class="text-blue-600 hover:underline text-sm">管理画面</NuxtLink>
       </div>
     </footer>
   </div>
