@@ -38,6 +38,7 @@ type TabKey = 'history' | 'camera' | 'queue' | 'employees' | 'license' | 'device
   | 'tenko' | 'remote_tenko' | 'schedules' | 'records' | 'webhooks' | 'baselines' | 'failures'
 const activeTab = ref<TabKey>('history')
 const cameraActive = computed(() => activeTab.value === 'camera')
+const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 </script>
 
 <template>
@@ -194,9 +195,9 @@ const cameraActive = computed(() => activeTab.value === 'camera')
 
       <!-- 点呼タブ (サマリ + セッション監視) -->
       <div v-if="activeTab === 'tenko'" class="space-y-4">
-        <TenkoDashboardSummary />
+        <TenkoDashboardSummary ref="tenkoDashboardSummaryRef" />
         <h2 class="text-sm font-medium text-gray-700">進行中セッション</h2>
-        <TenkoSessionMonitor />
+        <TenkoSessionMonitor @changed="tenkoDashboardSummaryRef?.refresh()" />
       </div>
 
       <!-- 遠隔点呼タブ -->

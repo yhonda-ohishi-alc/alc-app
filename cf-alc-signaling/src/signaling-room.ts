@@ -23,7 +23,11 @@ interface ServerMessage {
   message?: string;
 }
 
-export class SignalingRoom extends DurableObject {
+interface Env {
+  ROOM_REGISTRY: DurableObjectNamespace;
+}
+
+export class SignalingRoom extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const role = url.searchParams.get('role') as ClientRole;
@@ -42,8 +46,21 @@ export class SignalingRoom extends DurableObject {
     // Accept with role tag for Hibernatable WebSockets
     this.ctx.acceptWebSocket(pair[1], [role]);
 
+    // device が接続したら RoomRegistry に登録
+    if (role === 'device') {
+      const roomId = this.getRoomId(request.url);
+      await this.registryRequest('PUT', roomId);
+    }
+
     // Notify the other peer that a new participant joined
     this.notifyPeer(role, { type: 'peer_joined', role });
+
+    // If the other peer is already connected, notify the newly joined client too
+    const peerRole: ClientRole = role === 'device' ? 'admin' : 'device';
+    const existingPeers = this.ctx.getWebSockets(peerRole);
+    if (existingPeers.length > 0) {
+      this.send(pair[1], { type: 'peer_joined', role: peerRole });
+    }
 
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -102,6 +119,11 @@ export class SignalingRoom extends DurableObject {
     const role = this.getRole(ws);
     if (role) {
       this.notifyPeer(role, { type: 'peer_left', role });
+      // device が切断したら RoomRegistry から削除
+      if (role === 'device') {
+        const roomId = await this.getRoomIdFromStorage();
+        if (roomId) await this.registryRequest('DELETE', roomId);
+      }
     }
     ws.close(code, reason);
   }
@@ -110,6 +132,10 @@ export class SignalingRoom extends DurableObject {
     const role = this.getRole(ws);
     if (role) {
       this.notifyPeer(role, { type: 'peer_left', role });
+      if (role === 'device') {
+        const roomId = await this.getRoomIdFromStorage();
+        if (roomId) await this.registryRequest('DELETE', roomId);
+      }
     }
     ws.close(1011, 'WebSocket error');
   }
@@ -136,6 +162,38 @@ export class SignalingRoom extends DurableObject {
       ws.send(JSON.stringify(message));
     } catch {
       // WebSocket already closed
+    }
+  }
+
+  /** Extract roomId from request URL path (/room/:roomId) */
+  private getRoomId(urlStr: string): string {
+    const url = new URL(urlStr);
+    const match = url.pathname.match(/^\/room\/([^/?]+)/);
+    return match ? match[1] : '';
+  }
+
+  /** Get stored roomId — ハイバネーション後もDOストレージから復元 */
+  private async getRoomIdFromStorage(): Promise<string | null> {
+    const cached = (this as unknown as { _roomId?: string })._roomId;
+    if (cached) return cached;
+    const stored = await this.ctx.storage.get<string>('roomId');
+    return stored ?? null;
+  }
+
+  /** Call the RoomRegistry HTTP API */
+  private async registryRequest(method: 'PUT' | 'DELETE', roomId: string): Promise<void> {
+    if (!roomId) return;
+    // インスタンス変数キャッシュ + DO永続ストレージの両方に保存
+    (this as unknown as { _roomId?: string })._roomId = roomId;
+    if (method === 'PUT') {
+      await this.ctx.storage.put('roomId', roomId);
+    }
+    try {
+      const id = this.env.ROOM_REGISTRY.idFromName('registry');
+      const stub = this.env.ROOM_REGISTRY.get(id);
+      await stub.fetch(`https://registry/rooms/${roomId}`, { method });
+    } catch {
+      // Registry への通知失敗は無視 (RTC 接続には影響しない)
     }
   }
 }

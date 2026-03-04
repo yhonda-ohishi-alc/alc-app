@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TenkoSession, TenkoSessionFilter, TenkoType, ApiEmployee } from '~/types'
-import { listTenkoSessions, interruptTenkoSession, resumeTenkoSession, getEmployees } from '~/utils/api'
+import { listTenkoSessions, interruptTenkoSession, resumeTenkoSession, cancelTenkoSession, getEmployees } from '~/utils/api'
+
+const emit = defineEmits<{ changed: [] }>()
 
 const sessions = ref<TenkoSession[]>([])
 const total = ref(0)
@@ -65,6 +67,7 @@ async function handleInterrupt(id: string) {
     interruptingId.value = null
     interruptReason.value = ''
     await fetchData()
+    emit('changed')
   } catch (e) {
     error.value = e instanceof Error ? e.message : '中断エラー'
   }
@@ -82,8 +85,69 @@ async function handleResume(id: string) {
     resumingId.value = null
     resumeReason.value = ''
     await fetchData()
+    emit('changed')
   } catch (e) {
     error.value = e instanceof Error ? e.message : '再開エラー'
+  }
+}
+
+// キャンセル操作
+const cancellingId = ref<string | null>(null)
+const cancelReason = ref('')
+
+async function handleCancel(id: string) {
+  error.value = null
+  try {
+    await cancelTenkoSession(id, { reason: cancelReason.value || undefined })
+    cancellingId.value = null
+    cancelReason.value = ''
+    await fetchData()
+    emit('changed')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'キャンセルエラー'
+  }
+}
+
+// 一括キャンセル
+const selectedIds = ref<Set<string>>(new Set())
+const isBulkCancelling = ref(false)
+
+const cancellableSessions = computed(() => sessions.value.filter(s => !['completed', 'cancelled'].includes(s.status)))
+const allCancellableSelected = computed(
+  () => cancellableSessions.value.length > 0 && cancellableSessions.value.every(s => selectedIds.value.has(s.id))
+)
+
+function toggleSelectAll() {
+  if (allCancellableSelected.value) {
+    cancellableSessions.value.forEach(s => selectedIds.value.delete(s.id))
+  } else {
+    cancellableSessions.value.forEach(s => selectedIds.value.add(s.id))
+  }
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+function toggleSelect(id: string) {
+  if (selectedIds.value.has(id)) {
+    selectedIds.value.delete(id)
+  } else {
+    selectedIds.value.add(id)
+  }
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+async function handleBulkCancel() {
+  if (selectedIds.value.size === 0) return
+  isBulkCancelling.value = true
+  error.value = null
+  try {
+    await Promise.all([...selectedIds.value].map(id => cancelTenkoSession(id, {})))
+    selectedIds.value = new Set()
+    await fetchData()
+    emit('changed')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '一括キャンセルエラー'
+  } finally {
+    isBulkCancelling.value = false
   }
 }
 
@@ -191,12 +255,33 @@ onMounted(() => { loadEmployees(); fetchData() })
     <!-- ローディング -->
     <div v-if="isLoading" class="text-center py-8 text-gray-500">読み込み中...</div>
 
+    <!-- 一括キャンセルバー -->
+    <div v-if="selectedIds.size > 0" class="bg-red-50 border border-red-200 rounded-xl p-3 mb-2 flex items-center justify-between">
+      <span class="text-sm text-red-700">{{ selectedIds.size }} 件選択中</span>
+      <button
+        :disabled="isBulkCancelling"
+        class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+        @click="handleBulkCancel"
+      >
+        {{ isBulkCancelling ? 'キャンセル中...' : '一括キャンセル' }}
+      </button>
+    </div>
+
     <!-- テーブル -->
-    <div v-else-if="sessions.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div v-if="!isLoading && sessions.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-gray-600">
             <tr>
+              <th class="px-3 py-3 text-center font-medium w-8">
+                <input
+                  v-if="cancellableSessions.length > 0"
+                  type="checkbox"
+                  :checked="allCancellableSelected"
+                  class="cursor-pointer"
+                  @change="toggleSelectAll"
+                >
+              </th>
               <th class="px-4 py-3 text-left font-medium">開始日時</th>
               <th class="px-4 py-3 text-left font-medium">乗務員</th>
               <th class="px-4 py-3 text-center font-medium">種別</th>
@@ -208,6 +293,15 @@ onMounted(() => { loadEmployees(); fetchData() })
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-for="s in sessions" :key="s.id" class="hover:bg-gray-50 cursor-pointer" @click="selectedSession = s">
+              <td class="px-3 py-3 text-center" @click.stop>
+                <input
+                  v-if="!['completed', 'cancelled'].includes(s.status)"
+                  type="checkbox"
+                  :checked="selectedIds.has(s.id)"
+                  class="cursor-pointer"
+                  @change="toggleSelect(s.id)"
+                >
+              </td>
               <td class="px-4 py-3 text-gray-700">{{ formatDate(s.started_at || s.created_at) }}</td>
               <td class="px-4 py-3 text-gray-700">{{ employeeName(s.employee_id) }}</td>
               <td class="px-4 py-3 text-center">
@@ -231,24 +325,40 @@ onMounted(() => { loadEmployees(); fetchData() })
               </td>
               <td class="px-4 py-3 text-gray-700">{{ s.responsible_manager_name }}</td>
               <td class="px-4 py-3 text-center" @click.stop>
-                <!-- 中断ボタン (進行中セッションのみ) -->
+                <!-- 中断/キャンセルボタン (進行中セッションのみ) -->
                 <template v-if="isActive(s)">
                   <div v-if="interruptingId === s.id" class="flex items-center gap-1">
                     <input v-model="interruptReason" type="text" placeholder="理由 (任意)" class="px-2 py-1 border border-gray-300 rounded text-xs w-24">
                     <button class="px-2 py-1 bg-orange-600 text-white rounded text-xs" @click="handleInterrupt(s.id)">中断</button>
                     <button class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs" @click="interruptingId = null">取消</button>
                   </div>
-                  <button v-else class="px-2 py-1 text-orange-600 hover:bg-orange-50 rounded text-xs" @click="interruptingId = s.id">中断</button>
+                  <div v-else-if="cancellingId === s.id" class="flex items-center gap-1">
+                    <input v-model="cancelReason" type="text" placeholder="理由 (任意)" class="px-2 py-1 border border-gray-300 rounded text-xs w-24">
+                    <button class="px-2 py-1 bg-red-600 text-white rounded text-xs" @click="handleCancel(s.id)">確定</button>
+                    <button class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs" @click="cancellingId = null">取消</button>
+                  </div>
+                  <div v-else class="flex items-center gap-1">
+                    <button class="px-2 py-1 text-orange-600 hover:bg-orange-50 rounded text-xs" @click="interruptingId = s.id">中断</button>
+                    <button class="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs" @click="cancellingId = s.id; cancelReason = ''">キャンセル</button>
+                  </div>
                 </template>
 
-                <!-- 再開ボタン (中断セッションのみ) -->
+                <!-- 再開/キャンセルボタン (中断セッションのみ) -->
                 <template v-else-if="s.status === 'interrupted'">
                   <div v-if="resumingId === s.id" class="flex items-center gap-1">
                     <input v-model="resumeReason" type="text" placeholder="再開理由" class="px-2 py-1 border border-gray-300 rounded text-xs w-24">
                     <button :disabled="!resumeReason.trim()" class="px-2 py-1 bg-green-600 text-white rounded text-xs disabled:opacity-50" @click="handleResume(s.id)">再開</button>
                     <button class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs" @click="resumingId = null">取消</button>
                   </div>
-                  <button v-else class="px-2 py-1 text-green-600 hover:bg-green-50 rounded text-xs" @click="resumingId = s.id">再開</button>
+                  <div v-else-if="cancellingId === s.id" class="flex items-center gap-1">
+                    <input v-model="cancelReason" type="text" placeholder="理由 (任意)" class="px-2 py-1 border border-gray-300 rounded text-xs w-24">
+                    <button class="px-2 py-1 bg-red-600 text-white rounded text-xs" @click="handleCancel(s.id)">確定</button>
+                    <button class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs" @click="cancellingId = null">取消</button>
+                  </div>
+                  <div v-else class="flex items-center gap-1">
+                    <button class="px-2 py-1 text-green-600 hover:bg-green-50 rounded text-xs" @click="resumingId = s.id">再開</button>
+                    <button class="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs" @click="cancellingId = s.id; cancelReason = ''">キャンセル</button>
+                  </div>
                 </template>
 
                 <span v-else class="text-gray-400 text-xs">-</span>
@@ -269,7 +379,7 @@ onMounted(() => { loadEmployees(); fetchData() })
     </div>
 
     <!-- 空状態 -->
-    <div v-else class="text-center py-8 text-gray-500">セッションがありません</div>
+    <div v-if="!isLoading && sessions.length === 0" class="text-center py-8 text-gray-500">セッションがありません</div>
 
     <!-- 詳細モーダル -->
     <div

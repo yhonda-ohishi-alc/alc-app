@@ -27,7 +27,8 @@ export type TenkoStep =
   | 'interrupted'
   | 'cancelled'
 
-export function useTenkoKiosk() {
+export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
+  const remoteMode = options?.remoteMode ?? false
   const step = ref<TenkoStep>('nfc')
   const employeeId = ref('')
   const employeeName = ref('')
@@ -46,22 +47,24 @@ export function useTenkoKiosk() {
 
   // --- 現在の点呼タイプ ---
   const tenkoType = computed<TenkoType | null>(() =>
-    session.value?.tenko_type ?? selectedSchedule.value?.tenko_type ?? null,
+    session.value?.tenko_type ?? selectedSchedule.value?.tenko_type ?? (remoteMode ? 'pre_operation' : null),
   )
   const isPreOperation = computed(() => tenkoType.value === 'pre_operation')
 
   // --- ステップ定義 (点呼タイプ別) ---
   const stepLabels = computed(() => {
+    const scheduleLabel = remoteMode ? [] : ['予定選択']
     if (isPreOperation.value) {
-      return ['NFC', '予定選択', '顔認証', '体温・血圧', '自己申告', '日常点検', 'アルコール', '指示確認', '完了']
+      return ['NFC', ...scheduleLabel, '顔認証', '体温・血圧', '自己申告', '日常点検', 'アルコール', '指示確認', '完了']
     }
-    return ['NFC', '予定選択', '顔認証', 'アルコール', '指示確認', '運行報告', '完了']
+    return ['NFC', ...scheduleLabel, '顔認証', 'アルコール', '指示確認', '運行報告', '完了']
   })
   const stepKeys = computed<TenkoStep[]>(() => {
+    const scheduleKey: TenkoStep[] = remoteMode ? [] : ['schedule_select']
     if (isPreOperation.value) {
-      return ['nfc', 'schedule_select', 'face_auth', 'medical', 'self_declaration', 'daily_inspection', 'alcohol', 'instruction', 'completed']
+      return ['nfc', ...scheduleKey, 'face_auth', 'medical', 'self_declaration', 'daily_inspection', 'alcohol', 'instruction', 'completed']
     }
-    return ['nfc', 'schedule_select', 'face_auth', 'alcohol', 'instruction', 'report', 'completed']
+    return ['nfc', ...scheduleKey, 'face_auth', 'alcohol', 'instruction', 'report', 'completed']
   })
   const currentStepIndex = computed(() => {
     const idx = stepKeys.value.indexOf(step.value)
@@ -78,6 +81,12 @@ export function useTenkoKiosk() {
     error.value = null
     employeeId.value = empId
     employeeName.value = empName
+
+    // 遠隔点呼: スケジュール不要 → 直接顔認証へ
+    if (remoteMode) {
+      step.value = 'face_auth'
+      return
+    }
 
     isLoading.value = true
     try {
@@ -104,7 +113,8 @@ export function useTenkoKiosk() {
 
   // --- 顔認証完了 → セッション開始 + アルコール測定 ---
   async function onFaceAuthComplete(result: FaceAuthResult) {
-    if (!result.verified || !selectedSchedule.value) return
+    if (!result.verified) return
+    if (!remoteMode && !selectedSchedule.value) return
     error.value = null
     isLoading.value = true
 
@@ -119,11 +129,9 @@ export function useTenkoKiosk() {
       }
 
       // セッション開始
-      const body: StartTenkoSession = {
-        schedule_id: selectedSchedule.value.id,
-        employee_id: employeeId.value,
-        identity_face_photo_url: photoUrl,
-      }
+      const body: StartTenkoSession = selectedSchedule.value
+        ? { schedule_id: selectedSchedule.value.id, employee_id: employeeId.value, identity_face_photo_url: photoUrl }
+        : { tenko_type: 'pre_operation', employee_id: employeeId.value, identity_face_photo_url: photoUrl }
       const s = await startTenkoSession(body)
       session.value = s
       _advanceByStatus(s.status)

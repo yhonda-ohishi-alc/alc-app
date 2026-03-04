@@ -25,7 +25,6 @@ onMounted(() => {
       ref="videoRef"
       autoplay
       playsinline
-      muted
       class="w-full h-full object-cover"
     />
     <div

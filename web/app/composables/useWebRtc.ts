@@ -40,6 +40,8 @@ export function useWebRtc(role: 'device' | 'admin') {
     pc.onconnectionstatechange = () => {
       if (pc?.connectionState === 'failed' || pc?.connectionState === 'disconnected') {
         error.value = 'P2P 接続が切断されました'
+        isPeerConnected.value = false
+        remoteStream.value = null
       }
     }
 

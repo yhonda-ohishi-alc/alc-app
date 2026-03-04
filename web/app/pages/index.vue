@@ -26,11 +26,12 @@ const activeRole = ref<RoleTab>(
 )
 
 // --- 運行者サブタブ ---
-type DriverSubTab = 'normal' | 'tenko' | 'demo' | 'remote'
+type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'demo' | 'remote_demo'
 const driverSubTab = ref<DriverSubTab>(
   route.query.tab === 'tenko' ? 'tenko'
   : route.query.tab === 'demo' ? 'demo'
   : route.query.tab === 'remote' ? 'remote'
+  : route.query.tab === 'remote_demo' ? 'remote_demo'
   : 'normal',
 )
 
@@ -86,7 +87,8 @@ const roleLabels: Record<RoleTab, string> = {
               { key: 'normal' as const, label: '通常点呼' },
               { key: 'tenko' as const, label: '自動点呼' },
               { key: 'remote' as const, label: '遠隔点呼' },
-              { key: 'demo' as const, label: 'デモ' },
+              { key: 'demo' as const, label: '自動点呼デモ' },
+              { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
             ])"
             :key="tab.key"
             class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -103,7 +105,11 @@ const roleLabels: Record<RoleTab, string> = {
       <NormalMeasurement v-if="driverSubTab === 'normal'" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'tenko'" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'remote'" :remote-mode="true" class="flex-1 min-h-0" />
+      <TenkoKiosk v-if="driverSubTab === 'remote_demo'" :remote-mode="true" :demo-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'demo'" :demo-mode="true" class="flex-1 min-h-0" />
+
+      <!-- 画面共有: タブに関係なく常時フローティング表示 -->
+      <ScreenShareSender />
     </template>
 
     <!-- 運行管理者タブ -->

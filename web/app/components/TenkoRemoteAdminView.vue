@@ -1,80 +1,73 @@
 <script setup lang="ts">
-import type { TenkoSession } from '~/types'
-import { listTenkoSessions, interruptTenkoSession, getEmployees } from '~/utils/api'
-
 const config = useRuntimeConfig()
 
 // 管理者側 WebRTC
 const webRtc = useWebRtc('admin')
 const adminCamera = useCamera()
+let adminAudioStream: MediaStream | null = null  // マイク音声 (WebRTC用)
+const adminCombinedStream = ref<MediaStream | null>(null)  // 映像+音声 (TenkoVideoCall用)
 
-// セッション一覧 (アクティブなセッションのみ)
-const activeSessions = ref<TenkoSession[]>([])
-const employeeNameMap = ref<Record<string, string>>({})
-const selectedSession = ref<TenkoSession | null>(null)
+// シグナリングサーバーからアクティブなルーム(device接続中)一覧を取得
+const activeRooms = ref<string[]>([])
+const selectedRoomId = ref<string | null>(null)
+const isCallActive = ref(false)
 const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 
-// WebRTC 接続状態
-const isCallActive = ref(false)
+// HTTP用: wss://→https:// または ws://→http://
+const signalingHttpUrl = (config.public.signalingUrl as string).replace(/^wss/, 'https').replace(/^ws:/, 'http:')
+// WebSocket用: https://→wss:// または http://→ws://
+const signalingWsUrl = (config.public.signalingUrl as string).replace(/^https/, 'wss').replace(/^http:/, 'ws:')
 
-const statusLabels: Record<string, string> = {
-  identity_verified: '本人確認済',
-  alcohol_testing: 'アルコール検査中',
-  medical_pending: '医療データ待機',
-  self_declaration_pending: '自己申告待機',
-  daily_inspection_pending: '日常点検待機',
-  instruction_pending: '指示確認待機',
-  report_pending: '運行報告待機',
-  completed: '完了',
-  cancelled: 'キャンセル',
-  interrupted: '中断',
-}
-
-const tenkoTypeLabels: Record<string, string> = {
-  pre_operation: '業務前',
-  post_operation: '業務後',
-}
-
-const ACTIVE_STATUSES = new Set([
-  'identity_verified', 'alcohol_testing', 'medical_pending',
-  'self_declaration_pending', 'daily_inspection_pending',
-  'instruction_pending', 'report_pending', 'interrupted',
-])
-
-async function loadActiveSessions() {
+async function loadActiveRooms() {
   isLoading.value = true
   loadError.value = null
   try {
-    const [sessRes, employees] = await Promise.all([
-      listTenkoSessions({ per_page: 100 }),
-      getEmployees(),
-    ])
-    activeSessions.value = sessRes.sessions.filter(s => ACTIVE_STATUSES.has(s.status))
-    employeeNameMap.value = Object.fromEntries(employees.map(e => [e.id, e.name]))
+    const res = await fetch(`${signalingHttpUrl}/active-rooms`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as { rooms: string[] }
+    activeRooms.value = data.rooms
   } catch {
-    loadError.value = 'セッション一覧の取得に失敗しました'
+    loadError.value = '接続中デバイスの取得に失敗しました'
   } finally {
     isLoading.value = false
   }
 }
 
-async function startCall(session: TenkoSession) {
+async function startCall(roomId: string) {
   if (isCallActive.value) {
     webRtc.disconnect()
     adminCamera.stop()
+    adminAudioStream?.getTracks().forEach(t => t.stop())
+    adminAudioStream = null
     isCallActive.value = false
   }
 
-  selectedSession.value = session
+  selectedRoomId.value = roomId
   try {
     await adminCamera.start('user')
-    await webRtc.connect(config.public.signalingUrl, session.id)
-    if (adminCamera.stream.value) {
-      await webRtc.startStreaming(adminCamera.stream.value)
+    // カメラ映像 + マイク音声を合成して送信
+    let streamToSend = adminCamera.stream.value
+    try {
+      adminAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      if (streamToSend) {
+        streamToSend = new MediaStream([
+          ...streamToSend.getVideoTracks(),
+          ...adminAudioStream.getAudioTracks(),
+        ])
+      }
+    }
+    catch {
+      // マイク拒否時はビデオのみで続行
+    }
+    adminCombinedStream.value = streamToSend
+    await webRtc.connect(signalingWsUrl, roomId)
+    if (streamToSend) {
+      await webRtc.startStreaming(streamToSend)
     }
     isCallActive.value = true
-  } catch {
+  }
+  catch {
     loadError.value = 'ビデオ通話の開始に失敗しました'
   }
 }
@@ -82,34 +75,59 @@ async function startCall(session: TenkoSession) {
 function endCall() {
   webRtc.disconnect()
   adminCamera.stop()
+  adminAudioStream?.getTracks().forEach(t => t.stop())
+  adminAudioStream = null
+  adminCombinedStream.value = null
   isCallActive.value = false
-  selectedSession.value = null
+  selectedRoomId.value = null
 }
 
-async function handleInterrupt() {
-  if (!selectedSession.value) return
-  const reason = window.prompt('中断理由を入力してください')
-  if (reason === null) return
-  try {
-    await interruptTenkoSession(selectedSession.value.id, { reason })
-    await loadActiveSessions()
-  } catch {
-    alert('中断に失敗しました')
+// WebSocket で room 一覧をリアルタイム受信
+let watchWs: WebSocket | null = null
+let watchPingTimer: ReturnType<typeof setInterval> | null = null
+
+function connectWatchSocket() {
+  const wsUrl = `${signalingWsUrl}/watch-rooms`
+  watchWs = new WebSocket(wsUrl)
+
+  watchWs.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.type === 'rooms_updated') {
+        activeRooms.value = data.rooms
+      }
+    } catch { /* ignore */ }
+  }
+
+  watchWs.onopen = () => {
+    watchPingTimer = setInterval(() => watchWs?.send('ping'), 30000)
+  }
+
+  watchWs.onclose = () => {
+    if (watchPingTimer) { clearInterval(watchPingTimer); watchPingTimer = null }
+    // 切断時は3秒後に再接続
+    setTimeout(connectWatchSocket, 3000)
+  }
+
+  watchWs.onerror = () => {
+    watchWs?.close()
   }
 }
 
-// 定期リロード (30秒)
-let reloadTimer: ReturnType<typeof setInterval> | null = null
-
 onMounted(() => {
-  loadActiveSessions()
-  reloadTimer = setInterval(loadActiveSessions, 30000)
+  loadActiveRooms() // 初回即時取得
+  connectWatchSocket()
 })
 
 onUnmounted(() => {
-  if (reloadTimer) clearInterval(reloadTimer)
+  watchWs?.close()
+  watchWs = null
+  if (watchPingTimer) clearInterval(watchPingTimer)
   webRtc.disconnect()
   adminCamera.stop()
+  adminAudioStream?.getTracks().forEach(t => t.stop())
+  adminAudioStream = null
+  adminCombinedStream.value = null
 })
 </script>
 
@@ -120,7 +138,7 @@ onUnmounted(() => {
       <button
         class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
         :disabled="isLoading"
-        @click="loadActiveSessions"
+        @click="loadActiveRooms"
       >
         更新
       </button>
@@ -135,37 +153,25 @@ onUnmounted(() => {
       <div class="space-y-3">
         <h3 class="text-sm font-semibold text-gray-600">ビデオ通話</h3>
 
-        <div v-if="selectedSession && isCallActive">
+        <div v-if="selectedRoomId && isCallActive">
           <TenkoVideoCall
-            :local-stream="adminCamera.stream.value"
+            :local-stream="adminCombinedStream"
             :remote-stream="webRtc.remoteStream.value"
             :is-peer-connected="webRtc.isPeerConnected.value"
             :is-connected="webRtc.isConnected.value"
           />
 
-          <!-- 接続中セッション情報 -->
           <div class="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
-            <div class="font-semibold text-blue-800">
-              {{ employeeNameMap[selectedSession.employee_id] || '不明' }}
-            </div>
-            <div class="text-blue-600 mt-0.5">
-              {{ tenkoTypeLabels[selectedSession.tenko_type] }} /
-              {{ statusLabels[selectedSession.status] || selectedSession.status }}
-            </div>
+            <div class="font-semibold text-blue-800">接続中</div>
+            <div class="text-blue-500 text-xs mt-0.5 font-mono">{{ selectedRoomId }}</div>
           </div>
 
-          <div class="mt-2 flex gap-2">
+          <div class="mt-2">
             <button
-              class="flex-1 py-2 text-sm rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-medium transition-colors"
+              class="w-full py-2 text-sm rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-medium transition-colors"
               @click="endCall"
             >
               通話終了
-            </button>
-            <button
-              class="flex-1 py-2 text-sm rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium transition-colors"
-              @click="handleInterrupt"
-            >
-              点呼を中断
             </button>
           </div>
         </div>
@@ -174,74 +180,44 @@ onUnmounted(() => {
           v-else
           class="flex items-center justify-center aspect-video rounded-xl bg-gray-100 text-gray-400 text-sm"
         >
-          右のリストからセッションを選択して通話開始
+          右のリストからデバイスを選択して通話開始
         </div>
       </div>
 
-      <!-- 右: アクティブセッション一覧 -->
+      <!-- 右: 接続中デバイス一覧 -->
       <div class="space-y-3">
         <h3 class="text-sm font-semibold text-gray-600">
-          アクティブセッション
-          <span class="ml-1 text-gray-400">({{ activeSessions.length }}件)</span>
+          接続待ちデバイス
+          <span class="ml-1 text-gray-400">({{ activeRooms.length }}台)</span>
         </h3>
 
-        <div v-if="isLoading && activeSessions.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        <div v-if="isLoading && activeRooms.length === 0" class="text-center py-8 text-gray-400 text-sm">
           読み込み中...
         </div>
 
-        <div v-else-if="activeSessions.length === 0" class="text-center py-8 text-gray-400 text-sm">
-          進行中のセッションはありません
+        <div v-else-if="activeRooms.length === 0" class="text-center py-8 text-gray-400 text-sm">
+          接続中のデバイスはありません
         </div>
 
         <div
-          v-for="session in activeSessions"
-          :key="session.id"
+          v-for="roomId in activeRooms"
+          :key="roomId"
           class="rounded-xl border p-4 cursor-pointer transition-colors"
-          :class="selectedSession?.id === session.id && isCallActive
+          :class="selectedRoomId === roomId && isCallActive
             ? 'border-blue-400 bg-blue-50'
             : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
-          @click="startCall(session)"
+          @click="startCall(roomId)"
         >
-          <div class="flex items-start justify-between">
-            <div>
-              <div class="font-semibold text-gray-800">
-                {{ employeeNameMap[session.employee_id] || '不明' }}
-              </div>
-              <div class="text-xs text-gray-500 mt-0.5">
-                {{ tenkoTypeLabels[session.tenko_type] }}
-              </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span class="text-sm font-medium text-gray-800">デバイス接続中</span>
             </div>
-            <span
-              class="text-xs px-2 py-0.5 rounded-full font-medium"
-              :class="{
-                'bg-yellow-100 text-yellow-700': session.status === 'interrupted',
-                'bg-blue-100 text-blue-700': ['identity_verified', 'medical_pending', 'self_declaration_pending', 'daily_inspection_pending', 'instruction_pending', 'report_pending'].includes(session.status),
-                'bg-red-100 text-red-700': session.status === 'alcohol_testing',
-              }"
-            >
-              {{ statusLabels[session.status] || session.status }}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+              待機中
             </span>
           </div>
-
-          <!-- アルコール結果 -->
-          <div v-if="session.alcohol_result" class="mt-2 text-xs text-gray-600">
-            アルコール:
-            <span :class="session.alcohol_result === 'pass' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'">
-              {{ session.alcohol_result === 'pass' ? '異常なし' : '検知' }}
-            </span>
-            <template v-if="session.alcohol_value != null">
-              ({{ session.alcohol_value }} mg/L)
-            </template>
-          </div>
-
-          <!-- 医療データ -->
-          <div v-if="session.temperature || session.systolic" class="mt-1 text-xs text-gray-500">
-            <template v-if="session.temperature">体温 {{ session.temperature }}℃</template>
-            <template v-if="session.systolic">
-              血圧 {{ session.systolic }}/{{ session.diastolic }} mmHg
-            </template>
-          </div>
-
+          <div class="mt-1 text-xs text-gray-400 font-mono truncate">{{ roomId }}</div>
           <div class="mt-2 text-xs text-blue-600 font-medium">
             クリックして通話開始 →
           </div>

@@ -46,6 +46,8 @@ function overdueMinutes(schedule: TenkoSchedule) {
   return Math.floor(diff / 60000)
 }
 
+defineExpose({ refresh })
+
 onMounted(() => {
   loadEmployees()
   refresh()
@@ -66,7 +68,7 @@ onMounted(() => {
 
     <template v-if="dashboard">
       <!-- サマリカード -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
         <div class="bg-white rounded-xl p-4 shadow-sm">
           <p class="text-xs text-gray-500">未消費予定</p>
           <p class="text-2xl font-bold text-blue-600">{{ dashboard.pending_schedules }}</p>
@@ -74,6 +76,10 @@ onMounted(() => {
         <div class="bg-white rounded-xl p-4 shadow-sm">
           <p class="text-xs text-gray-500">進行中セッション</p>
           <p class="text-2xl font-bold text-yellow-600">{{ dashboard.active_sessions }}</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <p class="text-xs text-gray-500">中断中</p>
+          <p class="text-2xl font-bold text-orange-500">{{ dashboard.interrupted_sessions }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm">
           <p class="text-xs text-gray-500">本日完了</p>

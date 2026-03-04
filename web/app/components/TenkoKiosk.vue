@@ -19,6 +19,8 @@ const isDemoMode = computed(() => props.demoMode || isDemoModeFromUrl.value)
 const config = useRuntimeConfig()
 const webRtc = useWebRtc('device')
 const camera = useCamera()
+let audioStream: MediaStream | null = null  // マイク音声 (WebRTC用)
+const combinedStream = ref<MediaStream | null>(null)  // 映像+音声 (TenkoVideoCall用)
 
 // 点呼キオスク状態管理
 const {
@@ -29,24 +31,65 @@ const {
   onAlcoholResult, onMedicalSubmit, onSelfDeclarationSubmit,
   onDailyInspectionSubmit, onInstructionConfirm, onReportSubmit,
   reset,
-} = useTenkoKiosk()
+} = useTenkoKiosk({ remoteMode: props.remoteMode })
 
-// セッション開始後に WebRTC 接続
+// アルコール測定完了後 (instruction / report ステップ) に WebRTC 接続
 watch(
-  () => session.value?.id,
-  async (sessionId) => {
-    if (!props.remoteMode || !sessionId) return
-    try {
-      await camera.start('user')
-      await webRtc.connect(config.public.signalingUrl, sessionId)
-      if (camera.stream.value) {
-        await webRtc.startStreaming(camera.stream.value)
+  () => step.value,
+  async (newStep) => {
+    if (!props.remoteMode || !session.value?.id) return
+    if (newStep === 'instruction' || newStep === 'report') {
+      try {
+        await camera.start('user')
+        // カメラ映像 + マイク音声を合成して送信
+        let streamToSend = camera.stream.value
+        try {
+          audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+          if (streamToSend) {
+            streamToSend = new MediaStream([
+              ...streamToSend.getVideoTracks(),
+              ...audioStream.getAudioTracks(),
+            ])
+          }
+        }
+        catch {
+          // マイク拒否時はビデオのみで続行
+        }
+        combinedStream.value = streamToSend
+        await webRtc.connect(config.public.signalingUrl, session.value.id)
+        if (streamToSend) {
+          await webRtc.startStreaming(streamToSend)
+        }
       }
-    } catch {
-      // カメラ/WebRTC 失敗は点呼フローをブロックしない
+      catch {
+        // カメラ/WebRTC 失敗は点呼フローをブロックしない
+      }
     }
   }
 )
+
+// 管理者が切断 → オーバーレイ表示
+const hadPeerConnected = ref(false)
+watch(
+  () => webRtc.isPeerConnected.value,
+  (connected) => {
+    if (!props.remoteMode) return
+    if (connected) hadPeerConnected.value = true
+  }
+)
+const isDisconnected = computed(
+  () => props.remoteMode && hadPeerConnected.value && !webRtc.isPeerConnected.value
+)
+
+async function reconnect() {
+  if (!session.value?.id) return
+  try {
+    await webRtc.connect(config.public.signalingUrl, session.value.id)
+    if (camera.stream.value) await webRtc.startStreaming(camera.stream.value)
+  } catch {
+    // 失敗しても点呼フローはブロックしない
+  }
+}
 
 // BLE Medical Gateway (体温・血圧)
 const {
@@ -143,6 +186,9 @@ function handleReset() {
   if (props.remoteMode) {
     webRtc.disconnect()
     camera.stop()
+    audioStream?.getTracks().forEach(t => t.stop())
+    audioStream = null
+    combinedStream.value = null
   }
 }
 
@@ -150,6 +196,9 @@ onUnmounted(() => {
   if (props.remoteMode) {
     webRtc.disconnect()
     camera.stop()
+    audioStream?.getTracks().forEach(t => t.stop())
+    audioStream = null
+    combinedStream.value = null
   }
 })
 </script>
@@ -158,13 +207,28 @@ onUnmounted(() => {
   <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
     <!-- 遠隔点呼 ビデオ通話 -->
     <ClientOnly>
-      <div v-if="remoteMode && session" class="w-full max-w-md mb-4">
+      <div v-if="remoteMode && (step === 'instruction' || step === 'report' || step === 'completed')" class="w-full max-w-md mb-4">
         <TenkoVideoCall
-          :local-stream="camera.stream.value"
+          :local-stream="combinedStream"
           :remote-stream="webRtc.remoteStream.value"
           :is-peer-connected="webRtc.isPeerConnected.value"
           :is-connected="webRtc.isConnected.value"
         />
+        <!-- 切断時ボタン -->
+        <div v-if="isDisconnected" class="flex gap-2 mt-2">
+          <button
+            class="flex-1 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-medium"
+            @click="reconnect"
+          >
+            再接続
+          </button>
+          <button
+            class="flex-1 py-1.5 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium"
+            @click="handleReset"
+          >
+            終了
+          </button>
+        </div>
       </div>
     </ClientOnly>
 
@@ -190,7 +254,7 @@ onUnmounted(() => {
 
     <!-- デモ用点呼予定作成 (NFCステップのみ表示) -->
     <ClientOnly>
-      <DemoScheduleCreator v-if="isDemoMode && step === 'nfc'" class="w-full max-w-md mb-4" />
+      <DemoScheduleCreator v-if="isDemoMode && !remoteMode && step === 'nfc'" class="w-full max-w-md mb-4" />
     </ClientOnly>
 
     <!-- 端末未アクティベート警告 -->
@@ -212,7 +276,7 @@ onUnmounted(() => {
     </div>
 
     <header class="w-full max-w-md text-center py-6">
-      <h1 class="text-2xl font-bold text-gray-800">自動点呼</h1>
+      <h1 class="text-2xl font-bold text-gray-800">{{ remoteMode ? '遠隔点呼' : '自動点呼' }}</h1>
       <p v-if="tenkoType" class="mt-1 text-sm">
         <span
           class="px-2 py-0.5 rounded text-xs font-bold"

@@ -355,7 +355,7 @@ export interface TenkoSession {
   id: string
   tenant_id: string
   employee_id: string
-  schedule_id: string
+  schedule_id: string | null
   tenko_type: TenkoType
   status: TenkoSessionStatus
   identity_verified_at: string | null
@@ -377,7 +377,7 @@ export interface TenkoSession {
   report_no_report: boolean | null
   report_submitted_at: string | null
   location: string | null
-  responsible_manager_name: string
+  responsible_manager_name: string | null
   cancel_reason: string | null
   interrupted_at: string | null
   resumed_at: string | null
@@ -393,7 +393,8 @@ export interface TenkoSession {
 }
 
 export interface StartTenkoSession {
-  schedule_id: string
+  schedule_id?: string          // remote mode では省略
+  tenko_type?: TenkoType        // schedule なしの場合に使用
   employee_id: string
   identity_face_photo_url?: string
   location?: string
@@ -559,6 +560,7 @@ export interface WebhookDelivery {
 export interface TenkoDashboard {
   pending_schedules: number
   active_sessions: number
+  interrupted_sessions: number
   completed_today: number
   cancelled_today: number
   overdue_schedules: TenkoSchedule[]
