@@ -231,8 +231,7 @@ export function useBleGateway() {
         break
 
       case 'reset':
-        thermometerConnected.value = false
-        bloodPressureConnected.value = false
+        // スキャン再開のみ — 接続状態は disconnected/heartbeat で管理
         break
 
       case 'error':

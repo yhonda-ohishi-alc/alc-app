@@ -18,12 +18,17 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-export async function saveFaceDescriptor(employeeId: string, descriptor: number[]): Promise<void> {
+export async function saveFaceDescriptor(
+  employeeId: string,
+  descriptor: number[],
+  approvalStatus: FaceRecord['approvalStatus'] = 'approved',
+): Promise<void> {
   const db = await openDb()
   const record: FaceRecord = {
     employeeId,
     descriptor: new Float32Array(descriptor),
     updatedAt: Date.now(),
+    approvalStatus,
   }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -33,7 +38,24 @@ export async function saveFaceDescriptor(employeeId: string, descriptor: number[
   })
 }
 
+/** approved のみ返す (顔認証用) */
 export async function getFaceDescriptor(employeeId: string): Promise<number[] | null> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const request = tx.objectStore(STORE_NAME).get(employeeId)
+    request.onsuccess = () => {
+      const record = request.result as FaceRecord | undefined
+      if (!record) return resolve(null)
+      if (record.approvalStatus && record.approvalStatus !== 'approved') return resolve(null)
+      resolve(Array.from(record.descriptor))
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/** approvalStatus を無視して descriptor を取得 (サーバーアップロード用) */
+export async function getRawFaceDescriptor(employeeId: string): Promise<number[] | null> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
@@ -53,10 +75,12 @@ export async function getAllDescriptors(): Promise<{ employeeId: string; descrip
     const request = tx.objectStore(STORE_NAME).getAll()
     request.onsuccess = () => {
       const records = request.result as FaceRecord[]
-      resolve(records.map(r => ({
-        employeeId: r.employeeId,
-        descriptor: Array.from(r.descriptor),
-      })))
+      resolve(records
+        .filter(r => !r.approvalStatus || r.approvalStatus === 'approved')
+        .map(r => ({
+          employeeId: r.employeeId,
+          descriptor: Array.from(r.descriptor),
+        })))
     }
     request.onerror = () => reject(request.error)
   })
@@ -87,6 +111,7 @@ export async function bulkSaveFaceDescriptors(
         employeeId: r.employeeId,
         descriptor: new Float32Array(r.descriptor),
         updatedAt: r.updatedAt,
+        approvalStatus: 'approved',
       } satisfies FaceRecord)
     }
     tx.oncomplete = () => resolve()

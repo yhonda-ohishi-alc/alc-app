@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ApiEmployee } from '~/types'
-import { getEmployees, createEmployee, updateEmployee, deleteEmployee, uploadFacePhoto, updateEmployeeFace } from '~/utils/api'
-import { getFaceDescriptor, getAllDescriptorsWithTimestamp } from '~/utils/face-db'
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee, uploadFacePhoto, updateEmployeeFace, approveFace, rejectFace } from '~/utils/api'
+import { getRawFaceDescriptor, getAllDescriptorsWithTimestamp } from '~/utils/face-db'
 
 const employees = ref<ApiEmployee[]>([])
 const isLoading = ref(false)
@@ -126,7 +126,7 @@ async function onFaceRegistered(snapshot: Blob | null) {
     if (snapshot) {
       url = await uploadFacePhoto(snapshot)
     }
-    const embedding = await getFaceDescriptor(faceRegEmployee.value.id)
+    const embedding = await getRawFaceDescriptor(faceRegEmployee.value.id)
     await updateEmployeeFace(faceRegEmployee.value.id, url, embedding ?? undefined)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '顔写真アップロードエラー'
@@ -154,7 +154,7 @@ async function handleSyncToServer(emp: ApiEmployee) {
   syncingId.value = emp.id
   error.value = null
   try {
-    const embedding = await getFaceDescriptor(emp.id)
+    const embedding = await getRawFaceDescriptor(emp.id)
     if (!embedding) {
       error.value = 'ローカルに顔データが見つかりません'
       return
@@ -168,10 +168,40 @@ async function handleSyncToServer(emp: ApiEmployee) {
   }
 }
 
-function faceStatus(emp: ApiEmployee): 'server' | 'local' | 'none' {
-  if (emp.face_photo_url || emp.face_embedding_at) return 'server'
+function faceStatus(emp: ApiEmployee): 'approved' | 'pending' | 'rejected' | 'local' | 'none' {
+  if (emp.face_approval_status === 'approved') return 'approved'
+  if (emp.face_approval_status === 'pending') return 'pending'
+  if (emp.face_approval_status === 'rejected') return 'rejected'
   if (localFaceIds.value.has(emp.id)) return 'local'
   return 'none'
+}
+
+const approvingId = ref<string | null>(null)
+
+async function handleApprove(id: string) {
+  approvingId.value = id
+  error.value = null
+  try {
+    await approveFace(id)
+    await fetchData()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '承認エラー'
+  } finally {
+    approvingId.value = null
+  }
+}
+
+async function handleReject(id: string) {
+  approvingId.value = id
+  error.value = null
+  try {
+    await rejectFace(id)
+    await fetchData()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '却下エラー'
+  } finally {
+    approvingId.value = null
+  }
 }
 
 async function fetchData() {
@@ -195,7 +225,11 @@ function formatDate(iso: string) {
 }
 
 const faceRegisteredCount = computed(() =>
-  employees.value.filter(e => e.face_photo_url || e.face_embedding_at).length
+  employees.value.filter(e => e.face_approval_status === 'approved').length
+)
+
+const facePendingCount = computed(() =>
+  employees.value.filter(e => e.face_approval_status === 'pending').length
 )
 
 const localOnlyCount = computed(() =>
@@ -246,7 +280,8 @@ onMounted(() => fetchData())
     <div class="bg-white rounded-xl p-4 shadow-sm mb-4">
       <div class="flex items-center gap-6 text-sm text-gray-600">
         <span>登録数: <strong class="text-gray-800">{{ employees.length }}</strong> 名</span>
-        <span>顔登録済: <strong class="text-green-700">{{ faceRegisteredCount }}</strong></span>
+        <span>顔承認済: <strong class="text-green-700">{{ faceRegisteredCount }}</strong></span>
+        <span v-if="facePendingCount > 0" class="text-yellow-700">承認待ち: <strong>{{ facePendingCount }}</strong></span>
         <span v-if="localOnlyCount > 0" class="text-yellow-700">ローカルのみ: <strong>{{ localOnlyCount }}</strong></span>
         <span>NFC紐付: <strong class="text-blue-700">{{ nfcLinkedCount }}</strong></span>
         <div class="ml-auto flex gap-2">
@@ -373,9 +408,17 @@ onMounted(() => fetchData())
                 </td>
                 <td class="px-4 py-3 text-center">
                   <span
-                    v-if="faceStatus(emp) === 'server'"
+                    v-if="faceStatus(emp) === 'approved'"
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                  >済</span>
+                  >承認済</span>
+                  <span
+                    v-else-if="faceStatus(emp) === 'pending'"
+                    class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                  >承認待ち</span>
+                  <span
+                    v-else-if="faceStatus(emp) === 'rejected'"
+                    class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800"
+                  >却下</span>
                   <span
                     v-else-if="faceStatus(emp) === 'local'"
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
@@ -428,9 +471,17 @@ onMounted(() => fetchData())
                 </td>
                 <td class="px-4 py-3 text-center">
                   <span
-                    v-if="faceStatus(emp) === 'server'"
+                    v-if="faceStatus(emp) === 'approved'"
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                  >済</span>
+                  >承認済</span>
+                  <span
+                    v-else-if="faceStatus(emp) === 'pending'"
+                    class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                  >承認待ち</span>
+                  <span
+                    v-else-if="faceStatus(emp) === 'rejected'"
+                    class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800"
+                  >却下</span>
                   <span
                     v-else-if="faceStatus(emp) === 'local'"
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
@@ -447,6 +498,22 @@ onMounted(() => fetchData())
                       @click="handleSyncToServer(emp)"
                     >
                       {{ syncingId === emp.id ? '同期中...' : '同期' }}
+                    </button>
+                    <button
+                      v-if="faceStatus(emp) === 'pending'"
+                      :disabled="approvingId === emp.id"
+                      class="px-2 py-1 text-green-700 hover:bg-green-50 rounded text-xs font-medium"
+                      @click="handleApprove(emp.id)"
+                    >
+                      承認
+                    </button>
+                    <button
+                      v-if="faceStatus(emp) === 'pending'"
+                      :disabled="approvingId === emp.id"
+                      class="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs"
+                      @click="handleReject(emp.id)"
+                    >
+                      却下
                     </button>
                     <button
                       class="px-2 py-1 text-green-600 hover:bg-green-50 rounded text-xs"

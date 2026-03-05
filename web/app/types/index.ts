@@ -111,6 +111,7 @@ export interface FaceRecord {
   employeeId: string
   descriptor: Float32Array
   updatedAt: number
+  approvalStatus?: 'pending' | 'approved' | 'rejected'
 }
 
 /** API: 測定結果 (サーバー側) */
@@ -145,6 +146,8 @@ export interface ApiEmployee {
   name: string
   face_photo_url?: string | null
   face_embedding_at?: string | null
+  face_approval_status?: 'none' | 'pending' | 'approved' | 'rejected'
+  face_approved_at?: string | null
   license_issue_date?: string | null
   license_expiry_date?: string | null
   role: Array<'driver' | 'manager' | 'admin'>

@@ -15,7 +15,7 @@ export function useFaceAuth() {
     const embedding = result.face[0].embedding
     if (!embedding || embedding.length === 0) return false
 
-    await saveFaceDescriptor(employeeId, embedding)
+    await saveFaceDescriptor(employeeId, embedding, 'pending')
     return true
   }
 

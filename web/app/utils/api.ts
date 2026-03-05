@@ -211,6 +211,16 @@ export async function updateEmployeeFace(
   })
 }
 
+/** 顔登録を承認 */
+export async function approveFace(employeeId: string): Promise<ApiEmployee> {
+  return request<ApiEmployee>(`/api/employees/${employeeId}/face/approve`, { method: 'PUT' })
+}
+
+/** 顔登録を却下 */
+export async function rejectFace(employeeId: string): Promise<ApiEmployee> {
+  return request<ApiEmployee>(`/api/employees/${employeeId}/face/reject`, { method: 'PUT' })
+}
+
 /** 全乗務員の顔特徴量を取得 (同期用) */
 export async function getFaceData(): Promise<FaceDataEntry[]> {
   return request<FaceDataEntry[]>('/api/employees/face-data')

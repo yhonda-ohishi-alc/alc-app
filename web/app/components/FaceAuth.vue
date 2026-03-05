@@ -18,6 +18,7 @@ const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = u
 
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
+const waitingConfirm = ref(false)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 
 // --- Face detection checks ---
@@ -57,6 +58,11 @@ function startLoop() {
         updateChecks(result)
         drawOverlay(result)
         if (allChecksPassed.value) {
+          if (props.mode === 'register') {
+            waitingConfirm.value = true
+            stopLoop()
+            return
+          }
           doAuth()
           return
         }
@@ -204,8 +210,19 @@ async function doAuth() {
   }
 }
 
+function confirmRegister() {
+  waitingConfirm.value = false
+  doAuth()
+}
+
+function retryConfirm() {
+  waitingConfirm.value = false
+  startLoop()
+}
+
 function retry() {
   status.value = 'checking'
+  waitingConfirm.value = false
   startLoop()
 }
 
@@ -251,6 +268,23 @@ function retry() {
         <span class="text-sm leading-none">{{ check.status ? '\u2713' : '\u2717' }}</span>
         <span class="truncate">{{ check.label }}: {{ check.val || (check.status ? 'ok' : 'fail') }}</span>
       </div>
+    </div>
+
+    <!-- Register confirmation -->
+    <div v-if="waitingConfirm" class="w-full flex flex-col gap-2">
+      <p class="text-center text-lg font-medium text-blue-700">この顔で登録しますか？</p>
+      <button
+        class="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+        @click="confirmRegister"
+      >
+        登録する
+      </button>
+      <button
+        class="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
+        @click="retryConfirm"
+      >
+        やり直す
+      </button>
     </div>
 
     <!-- Status messages -->

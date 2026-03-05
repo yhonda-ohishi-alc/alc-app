@@ -14,6 +14,8 @@ const deviceTenantId = ref<string | null>(
 
 let initialized = false
 let refreshTimerId: ReturnType<typeof setTimeout> | null = null
+let inactivityTimerId: ReturnType<typeof setTimeout> | null = null
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5分
 
 export function useAuth() {
   const config = useRuntimeConfig()
@@ -48,42 +50,45 @@ export function useAuth() {
     isLoading.value = false
   }
 
-  /** Google OAuth ログイン (renderButton 方式) */
-  async function loginWithGoogle(buttonElement: HTMLElement): Promise<void> {
-    const { $googleAuthReady } = useNuxtApp()
-    const ready = await ($googleAuthReady as Promise<boolean>)
-    if (!ready || !window.google) {
-      throw new Error('Google 認証の初期化に失敗しました')
+  /** Google OAuth ログイン (Authorization Code Flow + prompt=login) */
+  function loginWithGoogleRedirect(redirectAfterLogin?: string): void {
+    const clientId = config.public.googleClientId as string
+    const callbackUrl = `${window.location.origin}/auth/callback`
+
+    // CSRF 対策: state をランダム生成して sessionStorage に保存
+    const state = crypto.randomUUID()
+    sessionStorage.setItem('oauth_state', state)
+    if (redirectAfterLogin) {
+      sessionStorage.setItem('oauth_redirect', redirectAfterLogin)
     }
 
-    const clientId = config.public.googleClientId as string
-
-    return new Promise((resolve, reject) => {
-      window.google!.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response) => {
-          try {
-            await exchangeGoogleToken(response.credential)
-            resolve()
-          } catch (e) {
-            reject(e)
-          }
-        },
-      })
-      window.google!.accounts.id.renderButton(buttonElement, {
-        theme: 'outline',
-        size: 'large',
-        width: 300,
-      })
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      scope: 'openid email profile',
+      prompt: 'login',
+      max_age: '0',
+      state,
     })
+
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
   }
 
-  /** Google ID token をバックエンドと交換して App JWT を取得 */
-  async function exchangeGoogleToken(idToken: string): Promise<void> {
-    const res = await fetch(`${apiBase}/api/auth/google`, {
+  /** Google OAuth コールバック: authorization code をバックエンドと交換 */
+  async function handleGoogleCallback(code: string, state: string): Promise<void> {
+    // CSRF state 検証
+    const savedState = sessionStorage.getItem('oauth_state')
+    sessionStorage.removeItem('oauth_state')
+    if (!savedState || savedState !== state) {
+      throw new Error('不正なリクエスト (state mismatch)')
+    }
+
+    const callbackUrl = `${window.location.origin}/auth/callback`
+    const res = await fetch(`${apiBase}/api/auth/google/code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_token: idToken }),
+      body: JSON.stringify({ code, redirect_uri: callbackUrl }),
     })
 
     if (!res.ok) {
@@ -130,6 +135,7 @@ export function useAuth() {
     }
 
     scheduleAutoRefresh()
+    startInactivityWatch()
   }
 
   /** トークンをセットして state を更新 */
@@ -147,6 +153,43 @@ export function useAuth() {
     }
 
     scheduleAutoRefresh()
+    startInactivityWatch()
+  }
+
+  /** 無操作タイマーをリセット (操作があるたびに呼ばれる) */
+  function resetInactivityTimer() {
+    if (inactivityTimerId) {
+      clearTimeout(inactivityTimerId)
+    }
+    if (!accessToken.value) return
+
+    inactivityTimerId = setTimeout(() => {
+      console.log('[Auth] 5分間無操作のため自動ログアウト')
+      logout()
+    }, INACTIVITY_TIMEOUT_MS)
+  }
+
+  /** ユーザー操作イベントの監視を開始 */
+  function startInactivityWatch() {
+    if (typeof window === 'undefined') return
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const
+    for (const event of events) {
+      window.addEventListener(event, resetInactivityTimer, { passive: true })
+    }
+    resetInactivityTimer()
+  }
+
+  /** ユーザー操作イベントの監視を停止 */
+  function stopInactivityWatch() {
+    if (typeof window === 'undefined') return
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const
+    for (const event of events) {
+      window.removeEventListener(event, resetInactivityTimer)
+    }
+    if (inactivityTimerId) {
+      clearTimeout(inactivityTimerId)
+      inactivityTimerId = null
+    }
   }
 
   /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール */
@@ -204,10 +247,20 @@ export function useAuth() {
       }
     }
 
+    // 無操作タイマー停止
+    stopInactivityWatch()
+
     accessToken.value = null
     user.value = null
     if (typeof window !== 'undefined') {
       localStorage.removeItem(REFRESH_TOKEN_KEY)
+
+      // Google の OAuth セッションをクリア (iframe で非同期実行)
+      const iframe = document.createElement('iframe')
+      iframe.style.display = 'none'
+      iframe.src = 'https://accounts.google.com/Logout'
+      document.body.appendChild(iframe)
+      setTimeout(() => iframe.remove(), 3000)
     }
     // deviceTenantId は意図的に保持 (キオスクモード継続)
   }
@@ -236,7 +289,8 @@ export function useAuth() {
     deviceTenantId: readonly(deviceTenantId),
     isDeviceActivated,
     init,
-    loginWithGoogle,
+    loginWithGoogleRedirect,
+    handleGoogleCallback,
     refreshAccessToken,
     logout,
     activateDevice,

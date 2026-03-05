@@ -2,6 +2,7 @@
 import type { FaceAuthResult, MeasurementResult } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode, startMeasurement, updateMeasurement, uploadFacePhoto } from '~/utils/api'
 import { checkLicenseExpiry, formatExpiryDate, type LicenseExpiryStatus } from '~/utils/license'
+import { checkFaceApproval } from '~/utils/face-approval'
 
 const { isDemoMode: isDemoModeFromUrl } = useDemoMode()
 
@@ -30,7 +31,7 @@ const { isOnline, pending, isSyncing, save: offlineSave, syncQueue } = useOfflin
 
 // シングルトン再呼出で共有状態取得
 const { isDeviceActivated } = useAuth()
-const { isSyncing: isFaceSyncing } = useFaceSync()
+const { isSyncing: isFaceSyncing, sync: faceSync } = useFaceSync()
 
 // 手動入力フォールバック
 const manualIdInput = ref('')
@@ -57,16 +58,21 @@ async function tryStartMeasurement(empId: string) {
 
 // NFC 読み取り → employee UUID を解決
 const employeeName = ref('')
+const approvalError = ref<string | null>(null)
 async function onNfcRead(nfcId: string, expiryDate?: Date) {
+  approvalError.value = null
   if (expiryDate) {
     licenseExpiryDate.value = expiryDate
     licenseExpiryStatus.value = checkLicenseExpiry(expiryDate)
   }
   try {
     const emp = await getEmployeeByNfcId(nfcId)
+    const err = checkFaceApproval(emp)
+    if (err) { approvalError.value = err; return }
     employeeId.value = emp.id
     employeeName.value = emp.name
     await tryStartMeasurement(emp.id)
+    await faceSync()
     step.value = 'face_auth'
   } catch {
     console.error(`乗務員が見つかりません (NFC ID: ${nfcId})`)
@@ -79,11 +85,15 @@ async function onManualSubmit() {
   const input = manualIdInput.value.trim()
   if (!input) return
   manualError.value = null
+  approvalError.value = null
   try {
     const emp = await getEmployeeByCode(input)
+    const err = checkFaceApproval(emp)
+    if (err) { approvalError.value = err; return }
     employeeId.value = emp.id
     employeeName.value = emp.name
     await tryStartMeasurement(emp.id)
+    await faceSync()
     step.value = 'face_auth'
   } catch {
     manualError.value = `社員番号「${input}」の乗務員が見つかりません`
@@ -393,6 +403,11 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
       <div v-if="step === 'nfc'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
+
+          <!-- 承認エラー -->
+          <div v-if="approvalError" class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
+            {{ approvalError }}
+          </div>
 
           <!-- NFC モード -->
           <div v-if="!useManualInput && !isDemoMode">

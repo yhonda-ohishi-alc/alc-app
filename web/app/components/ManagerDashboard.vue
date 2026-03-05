@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type TabKey = 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures'
+type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures'
 const activeTab = ref<TabKey>('tenko')
 const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 </script>
@@ -10,6 +10,8 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
       <div class="flex flex-wrap gap-1 bg-blue-100 rounded-lg p-1 w-fit">
         <button
           v-for="tab in [
+            { key: 'employees', label: '乗務員' },
+            { key: 'license', label: '免許証' },
             { key: 'tenko', label: '点呼' },
             { key: 'remote_tenko', label: '遠隔点呼' },
             { key: 'screen_share', label: '画面共有' },
@@ -30,6 +32,14 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
     </div>
 
     <div class="flex-1 overflow-y-auto px-4 py-4">
+      <div v-if="activeTab === 'employees'">
+        <EmployeeList />
+      </div>
+
+      <div v-if="activeTab === 'license'">
+        <LicenseRegistration />
+      </div>
+
       <div v-if="activeTab === 'tenko'" class="space-y-4">
         <TenkoDashboardSummary ref="tenkoDashboardSummaryRef" />
         <h2 class="text-sm font-medium text-gray-700">進行中セッション</h2>

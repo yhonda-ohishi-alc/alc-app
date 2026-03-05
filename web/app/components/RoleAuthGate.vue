@@ -10,6 +10,7 @@
  */
 import type { FaceAuthResult } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
+import { checkFaceApproval } from '~/utils/face-approval'
 
 const props = defineProps<{
   requiredRole: 'manager' | 'admin'
@@ -17,6 +18,7 @@ const props = defineProps<{
 
 const { isAuthenticated } = useAuth()
 const { setManagerId } = useManagerAuth()
+const { sync: faceSync, isSyncing: isFaceSyncing } = useFaceSync()
 
 onUnmounted(() => setManagerId(null))
 
@@ -48,6 +50,7 @@ function hasRole(employeeRole: string[]): boolean {
   return employeeRole.includes('admin')
 }
 
+
 const roleLabel: Record<string, string> = {
   manager: '運行管理者',
   admin: 'システム管理者',
@@ -64,7 +67,10 @@ async function onNfcRead(nfcId: string) {
       errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role.join(', ')})`
       return
     }
+    const approvalErr = checkFaceApproval(emp)
+    if (approvalErr) { errorMessage.value = approvalErr; return }
     authenticatedEmployee.value = { id: emp.id, name: emp.name, role: emp.role }
+    await faceSync()
     step.value = 'face_auth'
   } catch {
     errorMessage.value = `乗務員が見つかりません (NFC ID: ${nfcId})`
@@ -85,7 +91,10 @@ async function onManualSubmit() {
       errorMessage.value = `${emp.name}さんには${roleLabel[props.requiredRole]}の権限がありません (現在のロール: ${emp.role.join(', ')})`
       return
     }
+    const approvalErr = checkFaceApproval(emp)
+    if (approvalErr) { errorMessage.value = approvalErr; return }
     authenticatedEmployee.value = { id: emp.id, name: emp.name, role: emp.role }
+    await faceSync()
     step.value = 'face_auth'
   } catch {
     manualError.value = `社員番号「${input}」の乗務員が見つかりません`
@@ -145,8 +154,14 @@ function resetAuth() {
           {{ errorMessage }}
         </div>
 
+        <!-- 顔データ同期中 -->
+        <div v-if="isFaceSyncing" class="flex items-center justify-center gap-2 py-6 text-gray-500">
+          <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          <span class="text-sm">顔データを同期中...</span>
+        </div>
+
         <!-- Step 1: NFC / 手動入力 -->
-        <div v-if="step === 'nfc'">
+        <div v-else-if="step === 'nfc'">
           <div v-if="!useManualInput">
             <NfcStatus @read="onNfcRead" />
             <button
@@ -183,7 +198,7 @@ function resetAuth() {
         </div>
 
         <!-- Step 2: 顔認証 -->
-        <div v-if="step === 'face_auth'">
+        <div v-else-if="step === 'face_auth'">
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <FaceAuth
             :employee-id="employeeId"

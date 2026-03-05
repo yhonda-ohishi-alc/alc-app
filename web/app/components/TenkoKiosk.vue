@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FaceAuthResult, MeasurementResult, SubmitMedicalData } from '~/types'
 import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
+import { checkFaceApproval } from '~/utils/face-approval'
 
 const props = defineProps<{
   demoMode?: boolean
@@ -111,6 +112,8 @@ const manualError = ref<string | null>(null)
 async function onNfcRead(nfcId: string) {
   try {
     const emp = await getEmployeeByNfcId(nfcId)
+    const approvalErr = checkFaceApproval(emp)
+    if (approvalErr) { error.value = approvalErr; return }
     await identifyEmployee(emp.id, emp.name)
   } catch {
     error.value = `乗務員が見つかりません (NFC ID: ${nfcId})`
@@ -123,6 +126,8 @@ async function onManualSubmit() {
   manualError.value = null
   try {
     const emp = await getEmployeeByCode(input)
+    const approvalErr = checkFaceApproval(emp)
+    if (approvalErr) { error.value = approvalErr; return }
     await identifyEmployee(emp.id, emp.name)
   } catch {
     manualError.value = `社員番号「${input}」の乗務員が見つかりません`

@@ -93,8 +93,8 @@ function onRoleTabClick(role: RoleTab) {
 <template>
   <div class="flex flex-col h-full">
     <!-- ロールタブ -->
-    <div class="w-full max-w-lg mx-auto px-4 pt-2">
-      <div class="flex gap-1 bg-gray-200 rounded-lg p-1">
+    <div class="w-full max-w-lg mx-auto px-4 pt-2 flex items-center gap-2">
+      <div class="flex-1 flex gap-1 bg-gray-200 rounded-lg p-1">
         <button
           v-for="role in roleTabOptions"
           :key="role"
@@ -107,6 +107,15 @@ function onRoleTabClick(role: RoleTab) {
           {{ roleLabels[role] }}
         </button>
       </div>
+      <button
+        class="p-2 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+        title="ページ更新"
+        @click="location.reload()"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.49 15a8 8 0 0013.02 2.13M19.51 9A8 8 0 006.49 6.87" />
+        </svg>
+      </button>
     </div>
 
     <!-- 運行者タブ -->

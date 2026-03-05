@@ -5,13 +5,17 @@ import {
 } from '~/utils/face-db'
 import { getFaceData, updateEmployeeFace } from '~/utils/api'
 
+// モジュールスコープ: 複数コンポーネントから同時に sync() が走らないようにする
+let globalSyncing = false
+
 export function useFaceSync() {
   const isSyncing = ref(false)
   const lastSyncAt = ref<number | null>(null)
   const syncError = ref<string | null>(null)
 
   async function sync() {
-    if (isSyncing.value) return
+    if (globalSyncing) return
+    globalSyncing = true
     isSyncing.value = true
     syncError.value = null
 
@@ -55,30 +59,21 @@ export function useFaceSync() {
         console.log(`[FaceSync] ${toDownload.length} 件ダウンロード`)
       }
 
-      // 4. Local → Remote: ローカルにしかないか、ローカルが新しければアップロード
+      // 4. Local → Remote: サーバーに承認済みデータがない場合のみアップロード
+      const downloadedIds = new Set(toDownload.map(d => d.employeeId))
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       for (const [empId, localEntry] of localMap) {
-        // 非 UUID キー (旧データ) はスキップ
         if (!uuidRegex.test(empId)) {
           console.warn(`[FaceSync] ${empId} は UUID でないためスキップ`)
           continue
         }
+        // 今回ダウンロードした or サーバーに承認済みあり → 再アップロードしない
+        if (downloadedIds.has(empId)) continue
+        if (serverMap.has(empId)) continue
 
         try {
-          const serverEntry = serverMap.get(empId)
-
-          if (!serverEntry) {
-            // サーバーに無い → アップロード
-            await updateEmployeeFace(empId, undefined, localEntry.descriptor)
-            console.log(`[FaceSync] ${empId} アップロード (新規)`)
-          } else {
-            const serverTs = new Date(serverEntry.face_embedding_at).getTime()
-            if (localEntry.updatedAt > serverTs) {
-              // ローカルが新しい → アップロード
-              await updateEmployeeFace(empId, undefined, localEntry.descriptor)
-              console.log(`[FaceSync] ${empId} アップロード (更新)`)
-            }
-          }
+          await updateEmployeeFace(empId, undefined, localEntry.descriptor)
+          console.log(`[FaceSync] ${empId} アップロード (新規)`)
         } catch (e) {
           console.error(`[FaceSync] ${empId} のアップロード失敗:`, e)
         }
@@ -90,6 +85,7 @@ export function useFaceSync() {
       console.error('[FaceSync] sync error:', e)
     } finally {
       isSyncing.value = false
+      globalSyncing = false
     }
   }
 
