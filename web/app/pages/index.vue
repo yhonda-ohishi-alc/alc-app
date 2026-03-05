@@ -59,6 +59,24 @@ const roleLabels: Record<RoleTab, string> = {
   admin: 'システム管理者',
 }
 
+// ハンバーガーメニュー
+const menuOpen = ref(false)
+const menuRef = ref<HTMLElement | null>(null)
+
+function onMenuSelect(tab: DriverSubTab) {
+  driverSubTab.value = tab
+  menuOpen.value = false
+}
+
+function onClickOutside(e: Event) {
+  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
+    menuOpen.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', onClickOutside))
+onUnmounted(() => document.removeEventListener('click', onClickOutside))
+
 // 同タブ再クリックで再認証させるためのキー
 const managerAuthKey = ref(0)
 const adminAuthKey = ref(0)
@@ -93,17 +111,14 @@ function onRoleTabClick(role: RoleTab) {
 
     <!-- 運行者タブ -->
     <template v-if="activeRole === 'driver'">
-      <!-- 通常点呼 / 自動点呼 サブタブ -->
-      <div class="w-full max-w-lg mx-auto px-4 mt-2">
-        <div class="flex gap-1 bg-blue-100 rounded-lg p-1">
+      <!-- 通常点呼 / 自動点呼 サブタブ + ハンバーガーメニュー -->
+      <div class="w-full max-w-lg mx-auto px-4 mt-2 flex items-center gap-2">
+        <div class="flex-1 flex gap-1 bg-blue-100 rounded-lg p-1">
           <button
             v-for="tab in ([
               { key: 'normal' as const, label: '通常点呼' },
               { key: 'tenko' as const, label: '自動点呼' },
               { key: 'remote' as const, label: '遠隔点呼' },
-              { key: 'demo' as const, label: '自動点呼デモ' },
-              { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
-              { key: 'device' as const, label: 'デバイス設定' },
             ])"
             :key="tab.key"
             class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -114,6 +129,40 @@ function onRoleTabClick(role: RoleTab) {
           >
             {{ tab.label }}
           </button>
+        </div>
+        <!-- ハンバーガーメニュー -->
+        <div ref="menuRef" class="relative">
+          <button
+            class="p-2 rounded-md transition-colors"
+            :class="['demo', 'remote_demo', 'device'].includes(driverSubTab)
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'"
+            @click.stop="menuOpen = !menuOpen"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div
+            v-if="menuOpen"
+            class="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border py-1 z-50"
+          >
+            <button
+              v-for="item in ([
+                { key: 'demo' as const, label: '自動点呼デモ' },
+                { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
+                { key: 'device' as const, label: 'デバイス設定' },
+              ])"
+              :key="item.key"
+              class="w-full text-left px-4 py-2 text-sm transition-colors"
+              :class="driverSubTab === item.key
+                ? 'bg-blue-50 text-blue-800 font-medium'
+                : 'text-gray-700 hover:bg-gray-100'"
+              @click="onMenuSelect(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
         </div>
       </div>
 

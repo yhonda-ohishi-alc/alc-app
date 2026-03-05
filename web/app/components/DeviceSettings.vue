@@ -1,6 +1,11 @@
 <script setup lang="ts">
-// ESP32 系 USB Vendor IDs (CH340, CP210x, Espressif)
-const ESP_VENDOR_IDS = [0x1A86, 0x10C4, 0x303A]
+// BLE Gateway の既知 VID:PID (CH340, CP210x, Espressif, FTDI FT232R)
+const BLE_GW_DEVICES = [
+  { vid: 0x1A86 },            // CH340/CH552
+  { vid: 0x10C4 },            // CP210x
+  { vid: 0x303A },            // Espressif native USB
+  { vid: 0x0403, pid: 0x6001 }, // FTDI FT232R (ATOM Lite)
+]
 
 const { ports, isSupported, refreshPorts, forgetPort } = useSerialDeviceManager()
 
@@ -13,6 +18,7 @@ const bleGw = useBleGateway()
 // FC-1200 diagnostics
 const fc1200Testing = ref(false)
 const fc1200TestResult = ref<string | null>(null)
+const fc1200Measuring = ref(false)
 
 // BLE GW diagnostics
 const bleGwTesting = ref(false)
@@ -29,18 +35,21 @@ function formatVidPid(info: SerialPortInfo): string {
   return 'シリアルポート'
 }
 
-function isEspDevice(info: SerialPortInfo): boolean {
-  return info.usbVendorId !== undefined && ESP_VENDOR_IDS.includes(info.usbVendorId)
+function isBleGwDevice(info: SerialPortInfo): boolean {
+  if (info.usbVendorId === undefined) return false
+  return BLE_GW_DEVICES.some(d =>
+    d.vid === info.usbVendorId && (d.pid === undefined || d.pid === info.usbProductId),
+  )
 }
 
-// FC-1200 ポート (ESP32 以外の USB デバイス)
+// FC-1200 ポート (BLE GW 以外の USB デバイス)
 const fc1200Ports = computed(() =>
-  ports.value.filter(e => !isEspDevice(e.info)),
+  ports.value.filter(e => !isBleGwDevice(e.info)),
 )
 
-// BLE Gateway ポート (ESP32 系)
+// BLE Gateway ポート
 const bleGwPorts = computed(() =>
-  ports.value.filter(e => isEspDevice(e.info)),
+  ports.value.filter(e => isBleGwDevice(e.info)),
 )
 
 async function registerFc1200() {
@@ -55,9 +64,11 @@ async function registerFc1200() {
 async function registerBleGw() {
   if (!isSupported) return
   try {
-    // BLE GW 用: ESP32 系を優先表示
     await navigator.serial.requestPort({
-      filters: ESP_VENDOR_IDS.map(vid => ({ usbVendorId: vid })),
+      filters: BLE_GW_DEVICES.map(d => ({
+        usbVendorId: d.vid,
+        ...(d.pid !== undefined && { usbProductId: d.pid }),
+      })),
     })
     await refreshPorts()
   } catch {}
@@ -65,24 +76,57 @@ async function registerBleGw() {
 
 async function testFc1200() {
   fc1200Testing.value = true
+  fc1200Measuring.value = false
   fc1200TestResult.value = null
   try {
     const success = await fc1200.autoConnect()
     if (success) {
-      fc1200TestResult.value = `接続成功 (状態: ${fc1200.state.value})`
-      // センサー寿命チェック
-      fc1200.checkSensorLifetime()
-      await new Promise(r => setTimeout(r, 2000))
-      await fc1200.cleanup()
+      fc1200TestResult.value = '接続成功 — 測定を開始します'
+      fc1200Measuring.value = true
+      fc1200.startMeasurement()
     } else {
       fc1200TestResult.value = '接続失敗 — デバイスが USB に接続されているか確認してください'
+      fc1200Testing.value = false
     }
   } catch (e) {
     fc1200TestResult.value = `エラー: ${e instanceof Error ? e.message : '不明'}`
-  } finally {
     fc1200Testing.value = false
   }
 }
+
+async function stopFc1200Test() {
+  fc1200Measuring.value = false
+  fc1200Testing.value = false
+  await fc1200.disconnect()
+}
+
+// 測定完了 or エラーで自動終了
+watch(fc1200.result, (val) => {
+  if (val && fc1200Measuring.value) {
+    fc1200TestResult.value = `測定完了: ${val.alcoholValue} mg/L (${val.resultType === 'normal' ? '正常' : '超過'})`
+    fc1200Measuring.value = false
+    fc1200Testing.value = false
+    fc1200.disconnect()
+  }
+})
+
+watch(fc1200.error, (val) => {
+  if (val && fc1200Measuring.value) {
+    fc1200TestResult.value = `エラー: ${val}`
+    fc1200Measuring.value = false
+    fc1200Testing.value = false
+    fc1200.disconnect()
+  }
+})
+
+const fc1200StateText = computed(() => {
+  switch (fc1200.state.value) {
+    case 'warming_up': return 'ウォームアップ中...'
+    case 'blow_waiting': return '息を吹きかけてください'
+    case 'measuring': return '測定中...'
+    default: return ''
+  }
+})
 
 async function testBleGw() {
   bleGwTesting.value = true
@@ -119,7 +163,7 @@ async function syncFc1200Date() {
   fc1200.updateDeviceDate()
   fc1200TestResult.value = 'デバイス日時を同期しました'
   await new Promise(r => setTimeout(r, 2000))
-  await fc1200.cleanup()
+  await fc1200.disconnect()
 }
 </script>
 
@@ -171,6 +215,24 @@ async function syncFc1200Date() {
           </div>
           <p v-else class="text-xs text-gray-400 mb-3">未登録</p>
 
+          <!-- 測定中の状態表示 -->
+          <div v-if="fc1200Measuring" class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-3">
+            <div class="flex items-center gap-3">
+              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+              <span class="text-sm font-medium text-blue-700">{{ fc1200StateText || '接続中...' }}</span>
+            </div>
+            <div v-if="fc1200.state.value === 'blow_waiting'" class="mt-3 bg-blue-100 rounded-lg p-3 text-center">
+              <p class="text-blue-800 font-bold">息を吹きかけてください</p>
+              <p class="text-blue-600 text-xs mt-1">FC-1200 のセンサー部に向かって約5秒間</p>
+            </div>
+            <button
+              class="mt-3 px-3 py-1.5 text-xs text-red-600 border border-red-300 rounded-lg hover:bg-red-50"
+              @click="stopFc1200Test"
+            >
+              中止
+            </button>
+          </div>
+
           <!-- 診断ボタン -->
           <div class="flex gap-2">
             <button
@@ -178,11 +240,11 @@ async function syncFc1200Date() {
               :disabled="fc1200Testing || fc1200Ports.length === 0"
               @click="testFc1200"
             >
-              {{ fc1200Testing ? '接続テスト中...' : '接続テスト' }}
+              {{ fc1200Testing ? 'テスト中...' : 'テスト測定' }}
             </button>
             <button
               class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              :disabled="fc1200Ports.length === 0"
+              :disabled="fc1200Testing || fc1200Ports.length === 0"
               @click="syncFc1200Date"
             >
               日時同期

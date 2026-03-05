@@ -12,8 +12,13 @@ const SERIAL_OPTIONS: SerialOptions = {
   flowControl: 'none' as FlowControlType,
 }
 
-// ESP32 系 USB Vendor IDs (CH340, CP210x, Espressif)
-const ESP_VENDOR_IDS = [0x1A86, 0x10C4, 0x303A]
+// BLE Gateway の既知 VID:PID (CH340, CP210x, Espressif, FTDI FT232R)
+const BLE_GW_DEVICES = [
+  { vid: 0x1A86 },            // CH340/CH552
+  { vid: 0x10C4 },            // CP210x
+  { vid: 0x303A },            // Espressif native USB
+  { vid: 0x0403, pid: 0x6001 }, // FTDI FT232R (ATOM Lite)
+]
 
 // シングルトン: 全コンポーネントで共有
 const isConnected = ref(false)
@@ -94,10 +99,13 @@ export function useBleGateway() {
           return { vid: info.usbVendorId?.toString(16), pid: info.usbProductId?.toString(16) }
         }))
 
-        // VID マッチを優先、なければ許可済みポートの先頭を使う
+        // VID+PID マッチを優先、なければ許可済みポートの先頭を使う
         const candidate = ports.find((p) => {
           const info = p.getInfo()
-          return info.usbVendorId !== undefined && ESP_VENDOR_IDS.includes(info.usbVendorId)
+          if (info.usbVendorId === undefined) return false
+          return BLE_GW_DEVICES.some(d =>
+            d.vid === info.usbVendorId && (d.pid === undefined || d.pid === info.usbProductId),
+          )
         }) ?? (ports.length === 1 ? ports[0] : null)
         if (!candidate) return false
 

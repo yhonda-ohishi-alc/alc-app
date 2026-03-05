@@ -10,6 +10,21 @@ const SERIAL_OPTIONS: SerialOptions = {
   flowControl: 'none' as FlowControlType,
 }
 
+// BLE Gateway の既知 VID:PID（除外用）
+const BLE_GW_DEVICES = [
+  { vid: 0x1A86 },            // CH340/CH552
+  { vid: 0x10C4 },            // CP210x
+  { vid: 0x303A },            // Espressif native USB
+  { vid: 0x0403, pid: 0x6001 }, // FTDI FT232R (ATOM Lite)
+]
+
+function isBleGwPort(info: SerialPortInfo): boolean {
+  if (info.usbVendorId === undefined) return false
+  return BLE_GW_DEVICES.some(d =>
+    d.vid === info.usbVendorId && (d.pid === undefined || d.pid === info.usbProductId),
+  )
+}
+
 export function useFc1200Serial() {
   const isConnected = ref(false)
   const isWasmReady = ref(false)
@@ -40,8 +55,11 @@ export function useFc1200Serial() {
       const ports = await navigator.serial.getPorts()
       if (ports.length === 0) return false
 
-      // USB Vendor ID があるポート（実デバイス）を優先、なければ先頭
-      port = ports.find(p => p.getInfo().usbVendorId !== undefined) ?? ports[0] ?? null
+      // BLE GW 以外で USB VID があるポートを優先
+      port = ports.find(p => {
+        const info = p.getInfo()
+        return info.usbVendorId !== undefined && !isBleGwPort(info)
+      }) ?? null
       if (!port) return false
 
       await initFc1200Wasm()
