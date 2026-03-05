@@ -16,6 +16,7 @@ const {
   connect,
   startAutoConnect,
   clearReadings,
+  resetGateway,
 } = useBleGateway()
 
 const autoConnecting = ref(false)
@@ -138,6 +139,15 @@ onMounted(async () => {
         >
           医療機器で測定するとデータが表示されます
         </p>
+
+        <!-- 再スキャンボタン (データ受信後に別の機器を測定したい場合) -->
+        <button
+          v-if="hasMedicalData"
+          class="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs hover:bg-amber-100 transition-colors mx-auto"
+          @click="resetGateway(); clearReadings()"
+        >
+          別の機器を測定（再スキャン）
+        </button>
 
         <!-- エラー -->
         <p v-if="error" class="text-sm text-red-600 text-center">{{ error }}</p>

@@ -30,6 +30,7 @@ const latestBloodPressure = ref<BloodPressureReading | null>(null)
 const gatewayVersion = ref<string | null>(null)
 
 let port: SerialPort | null = null
+let writer: WritableStreamDefaultWriter<Uint8Array> | null = null
 let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 let readLoopActive = false
 let lineBuffer = ''
@@ -66,6 +67,7 @@ export function useBleGateway() {
 
       if (port.readable) {
         reader = port.readable.getReader()
+        if (port.writable) writer = port.writable.getWriter()
         isConnected.value = true
         startReadLoop()
       }
@@ -114,6 +116,7 @@ export function useBleGateway() {
 
         if (port.readable) {
           reader = port.readable.getReader()
+          if (port.writable) writer = port.writable.getWriter()
           isConnected.value = true
           startReadLoop()
           return true
@@ -227,10 +230,33 @@ export function useBleGateway() {
         }
         break
 
+      case 'reset':
+        thermometerConnected.value = false
+        bloodPressureConnected.value = false
+        break
+
       case 'error':
         error.value = msg.message
         break
     }
+  }
+
+  /** ATOM にコマンドを送信 */
+  async function sendCommand(cmd: Record<string, string>): Promise<void> {
+    if (!writer) return
+    const encoder = new TextEncoder()
+    try {
+      await writer.write(encoder.encode(JSON.stringify(cmd) + '\n'))
+      console.log('[BLE-GW TX]', cmd)
+    }
+    catch (e) {
+      console.warn('[BLE-GW] sendCommand failed:', e)
+    }
+  }
+
+  /** ATOM の BLE 接続をリセットして再スキャン開始 */
+  async function resetGateway(): Promise<void> {
+    await sendCommand({ cmd: 'reset' })
   }
 
   /** 測定値をクリア（BLE ステップ突入時に呼ぶ） */
@@ -302,6 +328,11 @@ export function useBleGateway() {
     stopHeartbeatCheck()
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
 
+    if (writer) {
+      try { writer.releaseLock() } catch {}
+      writer = null
+    }
+
     if (reader) {
       try { await reader.cancel() } catch {}
       try { reader.releaseLock() } catch {}
@@ -334,5 +365,7 @@ export function useBleGateway() {
     startAutoConnect,
     disconnect,
     clearReadings,
+    sendCommand,
+    resetGateway,
   }
 }

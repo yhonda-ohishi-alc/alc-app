@@ -250,6 +250,7 @@ export type BleGatewayMessage =
   | { type: 'blood_pressure'; systolic: number; diastolic: number; pulse?: number; unit: 'mmHg' }
   | { type: 'error'; message: string }
   | { type: 'heartbeat'; uptime: number; thermo: boolean; bp: boolean }
+  | { type: 'reset'; message: string }
 
 // --- 自動点呼 (Tenko) ---
 
