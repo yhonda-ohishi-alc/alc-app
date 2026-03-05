@@ -25,7 +25,7 @@ function disconnectRtc() {
   isRtcActive.value = false
 }
 
-type TabKey = 'employees' | 'license' | 'device' | 'queue' | 'webhooks' | 'camera'
+type TabKey = 'employees' | 'license' | 'queue' | 'webhooks' | 'camera'
 const activeTab = ref<TabKey>('employees')
 const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
@@ -38,7 +38,6 @@ const cameraActive = computed(() => activeTab.value === 'camera')
           v-for="tab in [
             { key: 'employees', label: '乗務員' },
             { key: 'license', label: '免許証' },
-            { key: 'device', label: 'デバイス' },
             { key: 'queue', label: '送信キュー' },
             { key: 'webhooks', label: 'Webhook' },
             { key: 'camera', label: 'リモートカメラ' },
@@ -64,10 +63,6 @@ const cameraActive = computed(() => activeTab.value === 'camera')
 
       <div v-if="activeTab === 'license'">
         <LicenseRegistration />
-      </div>
-
-      <div v-if="activeTab === 'device'">
-        <DeviceManager />
       </div>
 
       <div v-if="activeTab === 'queue'">

@@ -7,7 +7,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-gray-50 overflow-hidden">
+  <div class="min-h-screen flex flex-col bg-gray-50">
     <NuxtRouteAnnouncer />
     <NuxtPage />
   </div>

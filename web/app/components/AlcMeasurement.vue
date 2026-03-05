@@ -161,7 +161,7 @@ function emitDemoResult() {
           デバイスが USB 接続されていることを確認してください。
           <br>
           初回は
-          <NuxtLink to="/?role=admin" class="text-blue-600 hover:underline">管理画面</NuxtLink>
+          <NuxtLink to="/?tab=device" class="text-blue-600 hover:underline">デバイス設定</NuxtLink>
           からデバイスを登録してください。
         </p>
       </div>

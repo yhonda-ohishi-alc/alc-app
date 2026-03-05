@@ -11,6 +11,9 @@ const loadError = ref<string | null>(null)
 
 const videoContainer = ref<HTMLElement | null>(null)
 const isFullscreen = ref(false)
+const isMuted = ref(false)
+const hasMic = ref(false)
+let adminMicStream: MediaStream | null = null
 
 function toggleFullscreen() {
   if (!videoContainer.value) return
@@ -45,22 +48,54 @@ async function loadActiveRooms() {
 async function startViewing(roomId: string) {
   if (isViewActive.value) {
     webRtc.disconnect()
+    adminMicStream?.getTracks().forEach(t => t.stop())
+    adminMicStream = null
     isViewActive.value = false
   }
 
   selectedRoomId.value = roomId
+  isMuted.value = false
   try {
+    // マイク音声を取得
+    try {
+      adminMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      hasMic.value = true
+    } catch {
+      // マイク拒否時は視聴のみで続行
+    }
+
     await webRtc.connect(signalingWsUrl, roomId)
+
+    // マイク音声をWebRTCで送信
+    if (adminMicStream) {
+      await webRtc.startStreaming(adminMicStream)
+    }
+
     isViewActive.value = true
   } catch {
+    adminMicStream?.getTracks().forEach(t => t.stop())
+    adminMicStream = null
+    hasMic.value = false
     loadError.value = '接続に失敗しました'
   }
 }
 
 function stopViewing() {
   webRtc.disconnect()
+  adminMicStream?.getTracks().forEach(t => t.stop())
+  adminMicStream = null
+  hasMic.value = false
   isViewActive.value = false
   selectedRoomId.value = null
+  isMuted.value = false
+}
+
+function toggleMute() {
+  if (!adminMicStream) return
+  isMuted.value = !isMuted.value
+  for (const track of adminMicStream.getAudioTracks()) {
+    track.enabled = !isMuted.value
+  }
 }
 
 // WebSocket でリアルタイム更新
@@ -111,6 +146,8 @@ onUnmounted(() => {
   watchWs = null
   if (watchPingTimer) clearInterval(watchPingTimer)
   webRtc.disconnect()
+  adminMicStream?.getTracks().forEach(t => t.stop())
+  adminMicStream = null
 })
 </script>
 
@@ -148,15 +185,35 @@ onUnmounted(() => {
         <h3 class="text-sm font-semibold text-gray-600">共有画面</h3>
 
         <div v-if="selectedRoomId && isViewActive" class="space-y-2">
-          <!-- 接続ステータス -->
-          <div class="flex items-center gap-2 text-sm">
-            <span
-              class="w-2 h-2 rounded-full"
-              :class="webRtc.isPeerConnected.value ? 'bg-green-500 animate-pulse' : 'bg-yellow-400 animate-pulse'"
-            />
-            <span class="text-gray-600">
-              {{ webRtc.isPeerConnected.value ? '画面受信中' : '接続待機中...' }}
-            </span>
+          <!-- 接続ステータス + マイク -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-sm">
+              <span
+                class="w-2 h-2 rounded-full"
+                :class="webRtc.isPeerConnected.value ? 'bg-green-500 animate-pulse' : 'bg-yellow-400 animate-pulse'"
+              />
+              <span class="text-gray-600">
+                {{ webRtc.isPeerConnected.value ? '画面受信中' : '接続待機中...' }}
+              </span>
+            </div>
+            <button
+              class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors"
+              :class="isMuted
+                ? 'bg-red-100 hover:bg-red-200 text-red-700'
+                : hasMic ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
+              :disabled="!hasMic"
+              @click="toggleMute"
+            >
+              <svg v-if="!isMuted && hasMic" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+              {{ !hasMic ? 'マイク未接続' : isMuted ? 'ミュート中' : 'マイクON' }}
+            </button>
           </div>
 
           <!-- 画面映像 -->

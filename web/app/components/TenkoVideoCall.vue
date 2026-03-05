@@ -58,7 +58,7 @@ const statusColor = computed(() => {
 
 <template>
   <!-- 遠隔点呼ビデオ通話パネル -->
-  <div class="relative bg-gray-900 rounded-xl overflow-hidden" style="aspect-ratio: 16/9;">
+  <div class="relative bg-gray-900 rounded-xl overflow-hidden" style="aspect-ratio: 16/9; max-height: 35vh;">
     <!-- 相手映像 (大) -->
     <RemoteCamera :stream="remoteStream" />
 

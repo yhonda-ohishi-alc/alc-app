@@ -249,6 +249,7 @@ export type BleGatewayMessage =
   | { type: 'temperature'; value: number; unit: 'celsius' }
   | { type: 'blood_pressure'; systolic: number; diastolic: number; pulse?: number; unit: 'mmHg' }
   | { type: 'error'; message: string }
+  | { type: 'heartbeat'; uptime: number; thermo: boolean; bp: boolean }
 
 // --- 自動点呼 (Tenko) ---
 

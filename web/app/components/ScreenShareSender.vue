@@ -2,9 +2,16 @@
 const config = useRuntimeConfig()
 const signalingUrl = config.public.signalingUrl as string
 
-const { isSharing, roomId, error, isPeerConnected, isConnected, startSharing, stopSharing } = useScreenShare()
+const { isSharing, roomId, error, isPeerConnected, isConnected, isMuted, remoteStream, startSharing, stopSharing, toggleMute } = useScreenShare()
 
 const shortRoomId = computed(() => roomId.value ? roomId.value.slice(-8).toUpperCase() : null)
+
+const audioRef = ref<HTMLAudioElement | null>(null)
+watch(() => remoteStream.value, (stream) => {
+  if (audioRef.value) {
+    audioRef.value.srcObject = stream
+  }
+})
 
 const statusLabel = computed(() => {
   if (isPeerConnected.value) return '管理者が視聴中'
@@ -39,6 +46,25 @@ const statusLabel = computed(() => {
       <!-- エラー -->
       <div v-if="error" class="px-3 pb-2 text-xs text-red-600 text-center">{{ error }}</div>
 
+      <!-- マイクミュート -->
+      <div class="px-3 pb-1">
+        <button
+          class="w-full py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1"
+          :class="isMuted ? 'bg-red-100 hover:bg-red-200 text-red-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'"
+          @click="toggleMute"
+        >
+          <svg v-if="!isMuted" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+          {{ isMuted ? 'ミュート中' : 'マイクON' }}
+        </button>
+      </div>
+
       <!-- 停止ボタン -->
       <div class="px-3 pb-3">
         <button
@@ -48,6 +74,9 @@ const statusLabel = computed(() => {
           共有を停止
         </button>
       </div>
+
+      <!-- 管理者の音声再生 -->
+      <audio ref="audioRef" autoplay playsinline class="hidden" />
     </div>
 
     <!-- 未共有: 小さいボタン -->

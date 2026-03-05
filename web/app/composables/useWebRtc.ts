@@ -163,8 +163,8 @@ export function useWebRtc(role: 'device' | 'admin') {
         }
       }
 
-      // Peer が既に接続中なら offer を再送
-      if (isPeerConnected.value && role === 'device') {
+      // Peer が既に接続中なら offer を再送 (device/admin 両方)
+      if (isPeerConnected.value) {
         await createAndSendOffer()
       }
     }

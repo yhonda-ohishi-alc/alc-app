@@ -14,7 +14,7 @@ const {
   hasMedicalData,
   isWebSerialSupported,
   connect,
-  autoConnect,
+  startAutoConnect,
   clearReadings,
 } = useBleGateway()
 
@@ -29,7 +29,7 @@ onMounted(async () => {
   if (!isWebSerialSupported() || isConnected.value) return
 
   autoConnecting.value = true
-  const success = await autoConnect()
+  const success = await startAutoConnect(5, 3000)
   autoConnecting.value = false
   if (!success) {
     autoConnectFailed.value = true

@@ -137,7 +137,7 @@ onMounted(() => {
         <div
           v-if="expanded"
           class="bg-white border-t border-gray-200 shadow-2xl"
-          style="max-height: 60vh; overflow-y: auto;"
+          style="max-height: 50vh; overflow-y: auto;"
         >
           <div class="p-3 space-y-3 max-w-4xl mx-auto">
             <!-- ヘッダー -->

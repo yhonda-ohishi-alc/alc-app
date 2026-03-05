@@ -26,12 +26,13 @@ const activeRole = ref<RoleTab>(
 )
 
 // --- 運行者サブタブ ---
-type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'demo' | 'remote_demo'
+type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'demo' | 'remote_demo' | 'device'
 const driverSubTab = ref<DriverSubTab>(
   route.query.tab === 'tenko' ? 'tenko'
   : route.query.tab === 'demo' ? 'demo'
   : route.query.tab === 'remote' ? 'remote'
   : route.query.tab === 'remote_demo' ? 'remote_demo'
+  : route.query.tab === 'device' ? 'device'
   : 'normal',
 )
 
@@ -48,6 +49,7 @@ watch(driverSubTab, (tab) => {
   if (tab === 'tenko') query.tab = 'tenko'
   else if (tab === 'demo') query.tab = 'demo'
   else if (tab === 'remote') query.tab = 'remote'
+  else if (tab === 'device') query.tab = 'device'
   navigateTo({ path: '/', query }, { replace: true })
 })
 
@@ -73,12 +75,12 @@ function onRoleTabClick(role: RoleTab) {
 <template>
   <div class="flex flex-col h-full">
     <!-- ロールタブ -->
-    <div class="w-full max-w-lg mx-auto px-4 pt-3">
+    <div class="w-full max-w-lg mx-auto px-4 pt-2">
       <div class="flex gap-1 bg-gray-200 rounded-lg p-1">
         <button
           v-for="role in roleTabOptions"
           :key="role"
-          class="flex-1 px-3 py-2.5 rounded-md text-sm font-medium transition-colors"
+          class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
           :class="activeRole === role
             ? 'bg-white text-gray-800 shadow-sm'
             : 'text-gray-600 hover:text-gray-800'"
@@ -101,6 +103,7 @@ function onRoleTabClick(role: RoleTab) {
               { key: 'remote' as const, label: '遠隔点呼' },
               { key: 'demo' as const, label: '自動点呼デモ' },
               { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
+              { key: 'device' as const, label: 'デバイス設定' },
             ])"
             :key="tab.key"
             class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -119,6 +122,7 @@ function onRoleTabClick(role: RoleTab) {
       <TenkoKiosk v-if="driverSubTab === 'remote'" :remote-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'remote_demo'" :remote-mode="true" :demo-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'demo'" :demo-mode="true" class="flex-1 min-h-0" />
+      <DeviceSettings v-if="driverSubTab === 'device'" class="flex-1 min-h-0" />
 
       <!-- 画面共有: タブに関係なく常時フローティング表示 -->
       <ScreenShareSender />

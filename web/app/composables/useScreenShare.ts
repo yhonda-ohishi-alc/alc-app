@@ -5,6 +5,8 @@ export function useScreenShare() {
   const roomId = ref<string | null>(null)
   const error = ref<string | null>(null)
 
+  const isMuted = ref(false)
+
   let screenStream: MediaStream | null = null
   let micStream: MediaStream | null = null
 
@@ -53,6 +55,14 @@ export function useScreenShare() {
     }
   }
 
+  function toggleMute() {
+    if (!micStream) return
+    isMuted.value = !isMuted.value
+    for (const track of micStream.getAudioTracks()) {
+      track.enabled = !isMuted.value
+    }
+  }
+
   function stopSharing() {
     screenStream?.getTracks().forEach(t => t.stop())
     screenStream = null
@@ -61,6 +71,7 @@ export function useScreenShare() {
     webRtc.disconnect()
     isSharing.value = false
     roomId.value = null
+    isMuted.value = false
   }
 
   onUnmounted(() => stopSharing())
@@ -71,7 +82,10 @@ export function useScreenShare() {
     error: readonly(error),
     isPeerConnected: webRtc.isPeerConnected,
     isConnected: webRtc.isConnected,
+    isMuted: readonly(isMuted),
+    remoteStream: webRtc.remoteStream,
     startSharing,
     stopSharing,
+    toggleMute,
   }
 }

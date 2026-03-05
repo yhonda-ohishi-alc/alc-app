@@ -48,8 +48,8 @@ export function useAuth() {
     isLoading.value = false
   }
 
-  /** Google OAuth ログイン */
-  async function loginWithGoogle(): Promise<void> {
+  /** Google OAuth ログイン (renderButton 方式) */
+  async function loginWithGoogle(buttonElement: HTMLElement): Promise<void> {
     const { $googleAuthReady } = useNuxtApp()
     const ready = await ($googleAuthReady as Promise<boolean>)
     if (!ready || !window.google) {
@@ -70,7 +70,11 @@ export function useAuth() {
           }
         },
       })
-      window.google!.accounts.id.prompt()
+      window.google!.accounts.id.renderButton(buttonElement, {
+        theme: 'outline',
+        size: 'large',
+        width: 300,
+      })
     })
   }
 

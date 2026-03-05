@@ -29,6 +29,17 @@ let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 let readLoopActive = false
 let lineBuffer = ''
 
+// Reconnection state
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempt = 0
+const MAX_RECONNECT_ATTEMPTS = 10
+const RECONNECT_BASE_DELAY = 2000
+
+// Heartbeat state
+let lastHeartbeatTime = 0
+let heartbeatCheckTimer: ReturnType<typeof setInterval> | null = null
+const HEARTBEAT_TIMEOUT = 30000
+
 export function useBleGateway() {
 
   function isWebSerialSupported(): boolean {
@@ -146,6 +157,12 @@ export function useBleGateway() {
     }
     finally {
       readLoopActive = false
+      // If we were connected and the loop ended unexpectedly, attempt reconnect
+      if (isConnected.value) {
+        console.warn('[BLE-GW] Read loop ended, attempting reconnect...')
+        await cleanup()
+        scheduleReconnect()
+      }
     }
   }
 
@@ -164,6 +181,14 @@ export function useBleGateway() {
     switch (msg.type) {
       case 'ready':
         gatewayVersion.value = msg.version
+        reconnectAttempt = 0
+        startHeartbeatCheck()
+        break
+
+      case 'heartbeat':
+        lastHeartbeatTime = Date.now()
+        thermometerConnected.value = msg.thermo
+        bloodPressureConnected.value = msg.bp
         break
 
       case 'connected':
@@ -211,12 +236,63 @@ export function useBleGateway() {
     latestTemperature.value !== null || latestBloodPressure.value !== null,
   )
 
+  function scheduleReconnect(): void {
+    if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+      error.value = 'BLE ゲートウェイへの再接続に失敗しました'
+      reconnectAttempt = 0
+      return
+    }
+    const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempt), 30000)
+    reconnectAttempt++
+    console.log(`[BLE-GW] Reconnect attempt ${reconnectAttempt} in ${delay}ms`)
+    reconnectTimer = setTimeout(async () => {
+      const success = await autoConnect()
+      if (success) {
+        reconnectAttempt = 0
+      } else {
+        scheduleReconnect()
+      }
+    }, delay)
+  }
+
+  function startHeartbeatCheck(): void {
+    stopHeartbeatCheck()
+    lastHeartbeatTime = Date.now()
+    heartbeatCheckTimer = setInterval(() => {
+      if (Date.now() - lastHeartbeatTime > HEARTBEAT_TIMEOUT) {
+        console.warn('[BLE-GW] Heartbeat timeout, reconnecting...')
+        cleanup().then(() => scheduleReconnect())
+      }
+    }, 10000)
+  }
+
+  function stopHeartbeatCheck(): void {
+    if (heartbeatCheckTimer) {
+      clearInterval(heartbeatCheckTimer)
+      heartbeatCheckTimer = null
+    }
+  }
+
+  /** 初回自動接続（複数回リトライ） */
+  async function startAutoConnect(maxAttempts = 5, intervalMs = 3000): Promise<boolean> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const success = await autoConnect()
+      if (success) return true
+      if (i < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, intervalMs))
+      }
+    }
+    return false
+  }
+
   async function disconnect(): Promise<void> {
     await cleanup()
   }
 
   async function cleanup(): Promise<void> {
     readLoopActive = false
+    stopHeartbeatCheck()
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
 
     if (reader) {
       try { await reader.cancel() } catch {}
@@ -247,6 +323,7 @@ export function useBleGateway() {
     isWebSerialSupported,
     connect,
     autoConnect,
+    startAutoConnect,
     disconnect,
     clearReadings,
   }
