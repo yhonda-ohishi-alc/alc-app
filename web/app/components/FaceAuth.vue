@@ -231,7 +231,7 @@ function retry() {
 <template>
   <div class="flex flex-col items-center gap-4">
     <!-- Camera + canvas overlay -->
-    <div class="relative overflow-hidden rounded-2xl bg-black aspect-[4/3] w-full max-h-[40vh]">
+    <div class="relative overflow-hidden rounded-2xl bg-black aspect-[4/3] w-full max-h-[40vh] sm:max-h-[40vh] max-sm:max-h-[60vh]">
       <video
         ref="videoRef"
         autoplay

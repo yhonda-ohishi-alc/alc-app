@@ -322,7 +322,7 @@ onUnmounted(() => {
     v-if="faceAuthActive"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
   >
-    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4">
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm mx-4 max-sm:max-w-none max-sm:mx-2 max-sm:max-h-[95vh] max-sm:overflow-y-auto">
       <h3 class="text-lg font-semibold text-gray-800 mb-1">点呼開始前の確認</h3>
 
       <!-- Step 1: 社員番号入力 (authenticatedManagerId が未設定時) -->
