@@ -1,3 +1,5 @@
+import wasm from 'vite-plugin-wasm'
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -22,6 +24,7 @@ export default defineNuxtConfig({
   ],
 
   vite: {
+    plugins: [wasm()],
     optimizeDeps: {
       exclude: ['fc1200-wasm'],
     },

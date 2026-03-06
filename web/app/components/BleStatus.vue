@@ -12,6 +12,7 @@ const {
   latestTemperature,
   latestBloodPressure,
   hasMedicalData,
+  transport,
   isWebSerialSupported,
   connect,
   startAutoConnect,
@@ -27,7 +28,7 @@ onMounted(async () => {
   clearReadings()
 
   // 既に接続済みならスキップ
-  if (!isWebSerialSupported() || isConnected.value) return
+  if (isConnected.value) return
 
   autoConnecting.value = true
   const success = await startAutoConnect(5, 3000)
@@ -40,45 +41,38 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- WebSerial 非対応 -->
-    <div v-if="!isWebSerialSupported()" class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-      <p class="text-amber-700 text-sm">WebSerial API 非対応のため BLE ゲートウェイは使用できません</p>
-      <button
-        class="mt-3 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
-        @click="emit('skip')"
-      >
-        スキップ
-      </button>
+    <!-- 自動接続中 -->
+    <div v-if="autoConnecting" class="flex flex-col items-center gap-3 py-4">
+      <span class="w-4 h-4 rounded-full bg-blue-500 animate-pulse" />
+      <p class="text-blue-600 text-sm">BLE ゲートウェイに接続中...</p>
     </div>
 
-    <template v-else>
-      <!-- 自動接続中 -->
-      <div v-if="autoConnecting" class="flex flex-col items-center gap-3 py-4">
-        <span class="w-4 h-4 rounded-full bg-blue-500 animate-pulse" />
-        <p class="text-blue-600 text-sm">BLE ゲートウェイに接続中...</p>
-      </div>
-
-      <!-- 未接続 (自動接続失敗) -->
-      <div v-else-if="!isConnected" class="flex flex-col items-center gap-3">
-        <p class="text-gray-500 text-sm text-center">
-          BLE ゲートウェイが見つかりません。<br>
+    <!-- 未接続 (自動接続失敗) -->
+    <div v-else-if="!isConnected" class="flex flex-col items-center gap-3">
+      <p class="text-gray-500 text-sm text-center">
+        BLE ゲートウェイが見つかりません。<br>
+        <template v-if="isWebSerialSupported()">
           ATOM Lite が USB 接続されていることを確認してください。
-        </p>
-        <div class="flex gap-3">
-          <button
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-            @click="connect"
-          >
-            手動で接続
-          </button>
-          <button
-            class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-colors"
-            @click="emit('skip')"
-          >
-            スキップ
-          </button>
-        </div>
+        </template>
+        <template v-else>
+          Android BLE ブリッジが起動していることを確認してください。
+        </template>
+      </p>
+      <div class="flex gap-3">
+        <button
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+          @click="connect"
+        >
+          {{ isWebSerialSupported() ? '手動で接続' : '再接続' }}
+        </button>
+        <button
+          class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-colors"
+          @click="emit('skip')"
+        >
+          スキップ
+        </button>
       </div>
+    </div>
 
       <!-- 接続中: デバイス状態 + 測定値表示 -->
       <template v-else>
@@ -172,6 +166,5 @@ onMounted(async () => {
           </button>
         </div>
       </template>
-    </template>
   </div>
 </template>

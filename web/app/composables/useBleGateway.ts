@@ -20,6 +20,11 @@ const BLE_GW_DEVICES = [
   { vid: 0x0403, pid: 0x6001 }, // FTDI FT232R (ATOM Lite)
 ]
 
+// Android BLE Bridge WebSocket
+const BLE_WS_URL = 'ws://127.0.0.1:9877'
+const BLE_WS_RECONNECT_DELAY = 3000
+const BLE_WS_MAX_RECONNECT = 10
+
 // シングルトン: 全コンポーネントで共有
 const isConnected = ref(false)
 const error = ref<string | null>(null)
@@ -28,6 +33,7 @@ const bloodPressureConnected = ref(false)
 const latestTemperature = ref<TemperatureReading | null>(null)
 const latestBloodPressure = ref<BloodPressureReading | null>(null)
 const gatewayVersion = ref<string | null>(null)
+const transport = ref<'serial' | 'websocket' | null>(null)
 
 let port: SerialPort | null = null
 let writer: WritableStreamDefaultWriter<Uint8Array> | null = null
@@ -35,7 +41,13 @@ let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 let readLoopActive = false
 let lineBuffer = ''
 
-// Reconnection state
+// WebSocket state
+let ws: WebSocket | null = null
+let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let wsReconnectAttempts = 0
+let wsIntentionalClose = false
+
+// Reconnection state (serial)
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 const MAX_RECONNECT_ATTEMPTS = 10
@@ -52,12 +64,100 @@ export function useBleGateway() {
     return typeof navigator !== 'undefined' && 'serial' in navigator
   }
 
+  // --- WebSocket transport (Android BLE Bridge) ---
+
+  function connectWebSocket(): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
+    error.value = null
+    wsIntentionalClose = false
+
+    try {
+      ws = new WebSocket(BLE_WS_URL)
+    }
+    catch {
+      error.value = 'BLE ブリッジへの WebSocket 接続に失敗しました'
+      scheduleWsReconnect()
+      return
+    }
+
+    ws.onopen = () => {
+      console.log('[BLE-GW] WebSocket connected')
+      isConnected.value = true
+      transport.value = 'websocket'
+      error.value = null
+      wsReconnectAttempts = 0
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data) as BleGatewayMessage
+        console.log('[BLE-GW WS RX]', msg)
+        processMessage(msg)
+      }
+      catch {
+        console.warn('[BLE-GW] Invalid WebSocket JSON:', event.data)
+      }
+    }
+
+    ws.onclose = () => {
+      isConnected.value = false
+      transport.value = null
+      ws = null
+      if (!wsIntentionalClose) {
+        scheduleWsReconnect()
+      }
+    }
+
+    ws.onerror = () => {
+      error.value = 'BLE ブリッジとの接続でエラーが発生しました'
+    }
+  }
+
+  function scheduleWsReconnect(): void {
+    if (wsReconnectAttempts >= BLE_WS_MAX_RECONNECT) {
+      error.value = 'BLE ブリッジに接続できません'
+      return
+    }
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectAttempts++
+      connectWebSocket()
+    }, BLE_WS_RECONNECT_DELAY)
+  }
+
+  function disconnectWebSocket(): void {
+    wsIntentionalClose = true
+    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+    if (ws) {
+      ws.close()
+      ws = null
+    }
+    if (transport.value === 'websocket') {
+      isConnected.value = false
+      transport.value = null
+      thermometerConnected.value = false
+      bloodPressureConnected.value = false
+    }
+  }
+
+  function sendWsCommand(cmd: Record<string, string>): void {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify(cmd))
+    console.log('[BLE-GW WS TX]', cmd)
+  }
+
+  // --- WebSerial transport (PC / ATOM Lite USB) ---
+
   /** ブラウザのポートピッカーで手動接続 */
   async function connect(): Promise<void> {
     error.value = null
 
     if (!isWebSerialSupported()) {
-      error.value = 'WebSerial API 非対応ブラウザです。Chrome/Edge をご使用ください'
+      // WebSerial 非対応 → WebSocket フォールバック
+      connectWebSocket()
       return
     }
 
@@ -69,6 +169,7 @@ export function useBleGateway() {
         reader = port.readable.getReader()
         if (port.writable) writer = port.writable.getWriter()
         isConnected.value = true
+        transport.value = 'serial'
         startReadLoop()
       }
       else {
@@ -87,8 +188,15 @@ export function useBleGateway() {
 
   /** 許可済みポートに自動接続（リトライ付き） */
   async function autoConnect(): Promise<boolean> {
-    if (!isWebSerialSupported()) return false
     if (isConnected.value) return true
+
+    // WebSerial 非対応 → WebSocket で接続
+    if (!isWebSerialSupported()) {
+      connectWebSocket()
+      // WebSocket の接続完了を少し待つ
+      await new Promise(r => setTimeout(r, 500))
+      return isConnected.value
+    }
 
     const MAX_RETRIES = 3
     const RETRY_DELAY = 500
@@ -118,6 +226,7 @@ export function useBleGateway() {
           reader = port.readable.getReader()
           if (port.writable) writer = port.writable.getWriter()
           isConnected.value = true
+          transport.value = 'serial'
           startReadLoop()
           return true
         }
@@ -188,12 +297,14 @@ export function useBleGateway() {
     }
   }
 
+  // --- 共通: メッセージ処理 (Serial / WebSocket 共用) ---
+
   function processMessage(msg: BleGatewayMessage): void {
     switch (msg.type) {
       case 'ready':
         gatewayVersion.value = msg.version
         reconnectAttempt = 0
-        startHeartbeatCheck()
+        if (transport.value === 'serial') startHeartbeatCheck()
         break
 
       case 'heartbeat':
@@ -240,8 +351,12 @@ export function useBleGateway() {
     }
   }
 
-  /** ATOM にコマンドを送信 */
+  /** コマンドを送信 (transport に応じて Serial / WebSocket を使い分け) */
   async function sendCommand(cmd: Record<string, string>): Promise<void> {
+    if (transport.value === 'websocket') {
+      sendWsCommand(cmd)
+      return
+    }
     if (!writer) return
     const encoder = new TextEncoder()
     try {
@@ -253,9 +368,14 @@ export function useBleGateway() {
     }
   }
 
-  /** ATOM の BLE 接続をリセットして再スキャン開始 */
+  /** BLE 接続をリセットして再スキャン開始 */
   async function resetGateway(): Promise<void> {
-    await sendCommand({ cmd: 'reset' })
+    if (transport.value === 'websocket') {
+      sendWsCommand({ command: 'reset' })
+    }
+    else {
+      await sendCommand({ cmd: 'reset' })
+    }
   }
 
   /** 測定値をクリア（BLE ステップ突入時に呼ぶ） */
@@ -319,6 +439,7 @@ export function useBleGateway() {
   }
 
   async function disconnect(): Promise<void> {
+    disconnectWebSocket()
     await cleanup()
   }
 
@@ -343,9 +464,12 @@ export function useBleGateway() {
       port = null
     }
 
-    isConnected.value = false
-    thermometerConnected.value = false
-    bloodPressureConnected.value = false
+    if (transport.value === 'serial') {
+      isConnected.value = false
+      transport.value = null
+      thermometerConnected.value = false
+      bloodPressureConnected.value = false
+    }
     lineBuffer = ''
   }
 
@@ -357,6 +481,7 @@ export function useBleGateway() {
     latestTemperature: readonly(latestTemperature),
     latestBloodPressure: readonly(latestBloodPressure),
     gatewayVersion: readonly(gatewayVersion),
+    transport: readonly(transport),
     hasMedicalData,
     isWebSerialSupported,
     connect,
