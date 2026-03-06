@@ -57,6 +57,15 @@ export function useFc1200Serial() {
     return typeof navigator !== 'undefined' && 'serial' in navigator
   }
 
+  /** WebSerial または WebSocket (Android ブリッジ) で接続可能か */
+  function isSupported(): boolean {
+    // WebSerial 対応 or Android WebView (WebSocket フォールバック)
+    if (isWebSerialSupported()) return true
+    // WebView 内 = WebSocket ブリッジが使える
+    if (typeof window !== 'undefined' && typeof WebSocket !== 'undefined') return true
+    return false
+  }
+
   // --- WebSocket transport (Android FC-1200 Bridge) ---
 
   function connectWebSocket(): void {
@@ -515,6 +524,7 @@ export function useFc1200Serial() {
     dateUpdateSuccess: readonly(dateUpdateSuccess),
     transport: readonly(transport),
     isWebSerialSupported,
+    isSupported,
     autoConnect,
     connect,
     disconnect,

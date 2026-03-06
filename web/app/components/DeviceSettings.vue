@@ -169,9 +169,9 @@ async function syncFc1200Date() {
 
 <template>
   <div class="w-full max-w-lg mx-auto px-4 py-4 space-y-6">
-    <!-- WebSerial 非対応 -->
-    <div v-if="!isSupported" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-      <p class="text-red-700 text-sm">WebSerial API 非対応ブラウザです (Chrome/Edge をご使用ください)</p>
+    <!-- WebSerial 非対応 (デバイス管理はPC版のみ) -->
+    <div v-if="!isSupported" class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+      <p class="text-yellow-700 text-sm">デバイス管理は Chrome/Edge ブラウザ版でのみ利用可能です</p>
     </div>
 
     <template v-else>

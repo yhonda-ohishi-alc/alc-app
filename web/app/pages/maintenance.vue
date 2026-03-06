@@ -6,7 +6,7 @@ const {
   sensorLifetime,
   memoryRecords,
   dateUpdateSuccess,
-  isWebSerialSupported,
+  isSupported,
   connect,
   disconnect,
   resetSession,
@@ -58,9 +58,9 @@ function formatSeconds(totalSeconds: number): string {
 
     <main class="w-full max-w-lg flex flex-col gap-4">
       <!-- WebSerial 非対応 -->
-      <div v-if="!isWebSerialSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-        <p class="text-red-700 font-medium">WebSerial API 非対応</p>
-        <p class="text-red-500 text-sm mt-1">Chrome または Edge をご使用ください</p>
+      <div v-if="!isSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+        <p class="text-red-700 font-medium">FC-1200 接続非対応</p>
+        <p class="text-red-500 text-sm mt-1">Chrome / Edge ブラウザまたは Android アプリをご使用ください</p>
       </div>
 
       <template v-else>

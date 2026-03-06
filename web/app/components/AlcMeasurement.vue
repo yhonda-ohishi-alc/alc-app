@@ -16,7 +16,7 @@ const {
   state,
   error,
   result,
-  isWebSerialSupported,
+  isSupported,
   autoConnect,
   startMeasurement,
   resetSession,
@@ -34,7 +34,7 @@ watch(isConnected, (connected) => {
 
 // マウント時に自動接続を試行
 onMounted(async () => {
-  if (!isWebSerialSupported() || isConnected.value) return
+  if (!isSupported() || isConnected.value) return
   autoConnecting.value = true
   const success = await autoConnect()
   autoConnecting.value = false
@@ -142,9 +142,9 @@ function emitDemoResult() {
 
     <!-- 通常モード (FC-1200) -->
     <!-- WebSerial 非対応 -->
-    <div v-else-if="!isWebSerialSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-      <p class="text-red-700 font-medium">WebSerial API 非対応</p>
-      <p class="text-red-500 text-sm mt-1">Chrome または Edge ブラウザをご使用ください</p>
+    <div v-else-if="!isSupported()" class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+      <p class="text-red-700 font-medium">FC-1200 接続非対応</p>
+      <p class="text-red-500 text-sm mt-1">Chrome / Edge ブラウザまたは Android アプリをご使用ください</p>
     </div>
 
     <template v-else>
