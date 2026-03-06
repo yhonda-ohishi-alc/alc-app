@@ -137,9 +137,37 @@ async function onManualSubmit() {
 // --- 顔認証結果 ---
 function onFaceAuthResult(result: FaceAuthResult) {
   if (result.verified) {
+    if (employeeId.value) authorizeEmployee(employeeId.value)
     onFaceAuthComplete(result)
   }
 }
+
+// 指紋認証 (Android Bridge)
+const {
+  isFingerprintAvailable,
+  isEmployeeAuthorized,
+  authorizeEmployee,
+  requestFingerprint: triggerFingerprint,
+} = useFingerprint()
+
+const canUseFingerprint = computed(() =>
+  isFingerprintAvailable.value && employeeId.value && isEmployeeAuthorized(employeeId.value),
+)
+
+function requestFingerprint() {
+  triggerFingerprint()
+}
+
+onMounted(() => {
+  const handler = (e: Event) => {
+    const detail = (e as CustomEvent).detail
+    if (detail?.success) {
+      onFaceAuthComplete({ verified: true, similarity: 1.0 })
+    }
+  }
+  window.addEventListener('fingerprint-result', handler)
+  onUnmounted(() => window.removeEventListener('fingerprint-result', handler))
+})
 
 // --- アルコール測定結果 ---
 function onMeasurementResult(result: MeasurementResult) {
@@ -398,6 +426,14 @@ onUnmounted(() => {
             :demo-mode="isDemoMode"
             @result="onFaceAuthResult"
           />
+          <button
+            v-if="canUseFingerprint"
+            class="w-full mt-4 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+            @click="requestFingerprint"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v3c0 1.66-1.34 3-3 3"/><path d="M8 15V11c0-2.21 1.79-4 4-4s4 1.79 4 4"/><path d="M2 11c0-5.52 4.48-10 10-10s10 4.48 10 10v3c0 3.31-2.69 6-6 6"/><path d="M12 11v4c0 .55-.45 1-1 1"/><path d="M6 11c0-3.31 2.69-6 6-6s6 2.69 6 6v2"/></svg>
+            指紋認証で本人確認
+          </button>
         </div>
       </div>
 
