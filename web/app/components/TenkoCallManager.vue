@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import QRCode from 'qrcode'
+
 interface TenkoCallNumber {
   id: number
   call_number: string
@@ -7,17 +9,7 @@ interface TenkoCallNumber {
   created_at: string
 }
 
-interface TenkoCallDriver {
-  id: number
-  phone_number: string
-  driver_name: string
-  call_number: string | null
-  tenant_id: string
-  created_at: string
-}
-
 const numbers = ref<TenkoCallNumber[]>([])
-const drivers = ref<TenkoCallDriver[]>([])
 const loading = ref(false)
 const error = ref('')
 
@@ -25,6 +17,9 @@ const error = ref('')
 const newCallNumber = ref('')
 const newLabel = ref('')
 const adding = ref(false)
+
+// QRコード画像キャッシュ
+const qrImages = ref<Record<string, string>>({})
 
 const { accessToken, deviceTenantId } = useAuth()
 
@@ -35,16 +30,23 @@ function authHeaders() {
   return h
 }
 
+async function generateQr(callNumber: string): Promise<string> {
+  if (qrImages.value[callNumber]) return qrImages.value[callNumber]
+  const url = await QRCode.toDataURL(callNumber, { width: 200, margin: 2 })
+  qrImages.value[callNumber] = url
+  return url
+}
+
 async function fetchData() {
   loading.value = true
   error.value = ''
   try {
-    const [nums, drvs] = await Promise.all([
-      $fetch<TenkoCallNumber[]>('/api/tenko-call/numbers', { headers: authHeaders() }),
-      $fetch<TenkoCallDriver[]>('/api/tenko-call/drivers', { headers: authHeaders() }),
-    ])
+    const nums = await $fetch<TenkoCallNumber[]>('/api/tenko-call/numbers', { headers: authHeaders() })
     numbers.value = nums
-    drivers.value = drvs
+    // QRコード生成
+    for (const num of nums) {
+      await generateQr(num.call_number)
+    }
   } catch (e: any) {
     error.value = e.message || '取得に失敗しました'
   } finally {
@@ -88,11 +90,44 @@ async function removeNumber(id: number) {
   }
 }
 
+// QR拡大表示
+const showQrModal = ref(false)
+const modalQrNumber = ref('')
+
+function openQr(callNumber: string) {
+  modalQrNumber.value = callNumber
+  showQrModal.value = true
+}
+
 onMounted(fetchData)
 </script>
 
 <template>
   <div class="space-y-6">
+    <!-- QR拡大モーダル -->
+    <div
+      v-if="showQrModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="showQrModal = false"
+    >
+      <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">{{ modalQrNumber }}</h3>
+        <img
+          v-if="qrImages[modalQrNumber]"
+          :src="qrImages[modalQrNumber]"
+          :alt="modalQrNumber"
+          class="w-64 h-64 mx-auto"
+        >
+        <p class="mt-3 text-sm text-gray-500">ドライバーのアプリでこのQRコードを読み取ってください</p>
+        <button
+          class="mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"
+          @click="showQrModal = false"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+
     <!-- 点呼用番号マスタ -->
     <div class="bg-white rounded-xl p-4 shadow-sm">
       <h3 class="text-sm font-semibold text-gray-800 mb-3">点呼用電話番号</h3>
@@ -122,11 +157,25 @@ onMounted(fetchData)
 
       <!-- 一覧 -->
       <div v-if="numbers.length" class="divide-y">
-        <div v-for="num in numbers" :key="num.id" class="flex items-center justify-between py-2">
-          <div>
+        <div v-for="num in numbers" :key="num.id" class="flex items-center gap-4 py-3">
+          <!-- QRコードサムネイル -->
+          <img
+            v-if="qrImages[num.call_number]"
+            :src="qrImages[num.call_number]"
+            :alt="num.call_number"
+            class="w-16 h-16 cursor-pointer hover:opacity-80 transition-opacity rounded border"
+            @click="openQr(num.call_number)"
+          >
+          <div class="flex-1">
             <span class="font-mono text-sm">{{ num.call_number }}</span>
             <span v-if="num.label" class="ml-2 text-xs text-gray-500">{{ num.label }}</span>
           </div>
+          <button
+            class="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            @click="openQr(num.call_number)"
+          >
+            QR表示
+          </button>
           <button
             class="text-red-500 hover:text-red-700 text-xs"
             @click="removeNumber(num.id)"
@@ -136,33 +185,6 @@ onMounted(fetchData)
         </div>
       </div>
       <p v-else class="text-sm text-gray-400">登録された番号はありません</p>
-    </div>
-
-    <!-- 登録済みドライバー一覧 -->
-    <div class="bg-white rounded-xl p-4 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-800 mb-3">登録済みドライバー</h3>
-
-      <div v-if="drivers.length" class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="text-left text-gray-500 border-b">
-            <tr>
-              <th class="pb-2 pr-4">電話番号</th>
-              <th class="pb-2 pr-4">名前</th>
-              <th class="pb-2 pr-4">点呼先</th>
-              <th class="pb-2">登録日</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y">
-            <tr v-for="d in drivers" :key="d.id">
-              <td class="py-2 pr-4 font-mono">{{ d.phone_number }}</td>
-              <td class="py-2 pr-4">{{ d.driver_name }}</td>
-              <td class="py-2 pr-4 font-mono">{{ d.call_number || '-' }}</td>
-              <td class="py-2 text-gray-500 text-xs">{{ d.created_at?.slice(0, 10) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else class="text-sm text-gray-400">登録ドライバーはいません</p>
     </div>
 
     <!-- エラー表示 -->

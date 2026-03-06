@@ -3,7 +3,18 @@ import type { ApiEmployee } from '~/types'
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, uploadFacePhoto, updateEmployeeFace, approveFace, rejectFace } from '~/utils/api'
 import { getRawFaceDescriptor, getAllDescriptorsWithTimestamp } from '~/utils/face-db'
 
+interface TenkoCallDriver {
+  id: number
+  phone_number: string
+  driver_name: string
+  call_number: string | null
+  employee_code: string | null
+  tenant_id: string
+  created_at: string
+}
+
 const employees = ref<ApiEmployee[]>([])
+const tenkoDrivers = ref<TenkoCallDriver[]>([])
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
@@ -204,11 +215,39 @@ async function handleReject(id: string) {
   }
 }
 
+const { accessToken, deviceTenantId } = useAuth()
+
+function authHeaders() {
+  const h: Record<string, string> = {}
+  if (accessToken.value) h['Authorization'] = `Bearer ${accessToken.value}`
+  if (deviceTenantId.value) h['X-Tenant-ID'] = deviceTenantId.value
+  return h
+}
+
+// employee_code でマッチ
+const tenkoDriverMap = computed(() => {
+  const map = new Map<string, TenkoCallDriver>()
+  for (const d of tenkoDrivers.value) {
+    if (d.employee_code) map.set(d.employee_code, d)
+  }
+  return map
+})
+
+function getTenkoDriver(emp: ApiEmployee): TenkoCallDriver | undefined {
+  if (!emp.code) return undefined
+  return tenkoDriverMap.value.get(emp.code)
+}
+
 async function fetchData() {
   isLoading.value = true
   error.value = null
   try {
-    employees.value = await getEmployees()
+    const [emps, drivers] = await Promise.all([
+      getEmployees(),
+      $fetch<TenkoCallDriver[]>('/api/tenko-call/drivers', { headers: authHeaders() }).catch(() => [] as TenkoCallDriver[]),
+    ])
+    employees.value = emps
+    tenkoDrivers.value = drivers
   } catch (e) {
     error.value = e instanceof Error ? e.message : '取得エラー'
   } finally {
@@ -366,6 +405,7 @@ onMounted(() => fetchData())
               <th class="px-4 py-3 text-left font-medium">ロール</th>
               <th class="px-4 py-3 text-center font-medium">NFC</th>
               <th class="px-4 py-3 text-center font-medium">顔登録</th>
+              <th class="px-4 py-3 text-center font-medium">中間点呼</th>
               <th class="px-4 py-3 text-left font-medium">登録日</th>
               <th class="px-4 py-3 text-center font-medium">操作</th>
             </tr>
@@ -424,6 +464,12 @@ onMounted(() => fetchData())
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
                   >ローカルのみ</span>
                   <span v-else class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">未登録</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <template v-if="getTenkoDriver(emp)">
+                    <span class="text-xs font-mono text-gray-600">{{ getTenkoDriver(emp)!.phone_number }}</span>
+                  </template>
+                  <span v-else class="text-xs text-gray-400">-</span>
                 </td>
                 <td class="px-4 py-3 text-gray-600">{{ formatDate(emp.created_at) }}</td>
                 <td class="px-4 py-3 text-center">
@@ -487,6 +533,12 @@ onMounted(() => fetchData())
                     class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
                   >ローカルのみ</span>
                   <span v-else class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">未登録</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <template v-if="getTenkoDriver(emp)">
+                    <span class="text-xs font-mono text-gray-600">{{ getTenkoDriver(emp)!.phone_number }}</span>
+                  </template>
+                  <span v-else class="text-xs text-gray-400">-</span>
                 </td>
                 <td class="px-4 py-3 text-gray-600">{{ formatDate(emp.created_at) }}</td>
                 <td class="px-4 py-3 text-center">
