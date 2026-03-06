@@ -33,8 +33,8 @@ export function useScreenShare() {
         ...screenStream.getVideoTracks(),
         ...micStream.getAudioTracks(),
       ])
-    } catch {
-      // マイク拒否時は画面映像のみで続行
+    } catch (e) {
+      console.warn('[ScreenShare] getUserMedia failed, continuing without mic:', e)
     }
 
     const id = 'screen-' + crypto.randomUUID()
@@ -56,10 +56,19 @@ export function useScreenShare() {
   }
 
   function toggleMute() {
-    if (!micStream) return
     isMuted.value = !isMuted.value
-    for (const track of micStream.getAudioTracks()) {
-      track.enabled = !isMuted.value
+
+    // Android bridge: OS レベルでマイクミュート
+    const android = (window as any).Android
+    if (android?.setMicMuted) {
+      android.setMicMuted(isMuted.value)
+    }
+
+    // Web 標準: track.enabled でミュート
+    if (micStream) {
+      for (const track of micStream.getAudioTracks()) {
+        track.enabled = !isMuted.value
+      }
     }
   }
 
