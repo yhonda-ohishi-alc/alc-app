@@ -10,6 +10,7 @@ const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 
 const videoContainer = ref<HTMLElement | null>(null)
+const videoRef = ref<HTMLVideoElement | null>(null)
 const isFullscreen = ref(false)
 const isMuted = ref(false)
 const hasMic = ref(false)
@@ -133,6 +134,10 @@ function connectWatchSocket() {
   }
 }
 
+watch(() => webRtc.remoteStream.value, (stream) => {
+  if (videoRef.value) videoRef.value.srcObject = stream
+})
+
 onMounted(() => {
   loadActiveRooms()
   connectWatchSocket()
@@ -217,8 +222,20 @@ onUnmounted(() => {
           </div>
 
           <!-- 画面映像 -->
-          <div ref="videoContainer" class="relative group">
-            <RemoteCamera :stream="webRtc.remoteStream.value" />
+          <div ref="videoContainer" class="relative group bg-black rounded-xl overflow-hidden">
+            <video
+              v-show="webRtc.remoteStream.value"
+              ref="videoRef"
+              autoplay
+              playsinline
+              class="w-full max-h-[80vh] object-contain mx-auto"
+            />
+            <div
+              v-if="!webRtc.remoteStream.value"
+              class="flex items-center justify-center h-48 text-gray-400 text-sm"
+            >
+              接続待機中...
+            </div>
             <button
               class="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
               :title="isFullscreen ? '全画面解除' : '全画面表示'"
