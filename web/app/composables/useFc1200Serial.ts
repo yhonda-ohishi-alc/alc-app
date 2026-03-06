@@ -18,6 +18,11 @@ const BLE_GW_DEVICES = [
   { vid: 0x0403, pid: 0x6001 }, // FTDI FT232R (ATOM Lite)
 ]
 
+// Android FC-1200 Bridge WebSocket
+const FC1200_WS_URL = 'ws://127.0.0.1:9878'
+const FC1200_WS_RECONNECT_DELAY = 3000
+const FC1200_WS_MAX_RECONNECT = 10
+
 function isBleGwPort(info: SerialPortInfo): boolean {
   if (info.usbVendorId === undefined) return false
   return BLE_GW_DEVICES.some(d =>
@@ -34,6 +39,7 @@ export function useFc1200Serial() {
   const sensorLifetime = ref<SensorLifetime | null>(null)
   const memoryRecords = ref<MemoryRecord[]>([])
   const dateUpdateSuccess = ref<boolean | null>(null)
+  const transport = ref<'serial' | 'websocket' | null>(null)
 
   let port: SerialPort | null = null
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -41,15 +47,113 @@ export function useFc1200Serial() {
   let session: Fc1200WasmSession | null = null
   let readLoopActive = false
 
+  // WebSocket state
+  let ws: WebSocket | null = null
+  let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let wsReconnectAttempts = 0
+  let wsIntentionalClose = false
+
   function isWebSerialSupported(): boolean {
     return typeof navigator !== 'undefined' && 'serial' in navigator
   }
+
+  // --- WebSocket transport (Android FC-1200 Bridge) ---
+
+  function connectWebSocket(): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
+    error.value = null
+    wsIntentionalClose = false
+
+    try {
+      ws = new WebSocket(FC1200_WS_URL)
+    }
+    catch {
+      error.value = 'FC-1200 ブリッジへの WebSocket 接続に失敗しました'
+      scheduleWsReconnect()
+      return
+    }
+
+    ws.onopen = () => {
+      console.log('[FC-1200] WebSocket connected')
+      isConnected.value = true
+      transport.value = 'websocket'
+      error.value = null
+      wsReconnectAttempts = 0
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data) as Fc1200Event
+        console.log('[FC-1200 WS RX]', msg)
+        processEvent(msg)
+      }
+      catch {
+        console.warn('[FC-1200] Invalid WebSocket JSON:', event.data)
+      }
+    }
+
+    ws.onclose = () => {
+      if (transport.value === 'websocket') {
+        isConnected.value = false
+        transport.value = null
+      }
+      ws = null
+      if (!wsIntentionalClose) {
+        scheduleWsReconnect()
+      }
+    }
+
+    ws.onerror = () => {
+      error.value = 'FC-1200 ブリッジとの接続でエラーが発生しました'
+    }
+  }
+
+  function scheduleWsReconnect(): void {
+    if (wsReconnectAttempts >= FC1200_WS_MAX_RECONNECT) {
+      error.value = 'FC-1200 ブリッジに接続できません'
+      return
+    }
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectAttempts++
+      connectWebSocket()
+    }, FC1200_WS_RECONNECT_DELAY)
+  }
+
+  function disconnectWebSocket(): void {
+    wsIntentionalClose = true
+    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+    if (ws) {
+      ws.close()
+      ws = null
+    }
+    if (transport.value === 'websocket') {
+      isConnected.value = false
+      transport.value = null
+    }
+  }
+
+  function sendWsCommand(command: string): void {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify({ command }))
+    console.log('[FC-1200 WS TX]', command)
+  }
+
+  // --- WebSerial transport (PC) ---
 
   /** 許可済みポートに自動接続（ダイアログなし） */
   async function autoConnect(): Promise<boolean> {
     error.value = null
 
-    if (!isWebSerialSupported()) return false
+    // WebSerial 非対応 → WebSocket で接続
+    if (!isWebSerialSupported()) {
+      connectWebSocket()
+      await new Promise(r => setTimeout(r, 500))
+      return isConnected.value
+    }
 
     try {
       const ports = await navigator.serial.getPorts()
@@ -74,6 +178,7 @@ export function useFc1200Serial() {
         reader = port.readable.getReader()
         writer = port.writable.getWriter()
         isConnected.value = true
+        transport.value = 'serial'
         startReadLoop()
         return true
       }
@@ -95,7 +200,8 @@ export function useFc1200Serial() {
     error.value = null
 
     if (!isWebSerialSupported()) {
-      error.value = 'WebSerial API 非対応ブラウザです。Chrome/Edge をご使用ください'
+      // WebSerial 非対応 → WebSocket フォールバック
+      connectWebSocket()
       return
     }
 
@@ -117,6 +223,7 @@ export function useFc1200Serial() {
         reader = port.readable.getReader()
         writer = port.writable.getWriter()
         isConnected.value = true
+        transport.value = 'serial'
         startReadLoop()
       }
       else {
@@ -237,13 +344,20 @@ export function useFc1200Serial() {
   }
 
   async function startMeasurement(): Promise<void> {
-    if (!session || !isConnected.value) {
+    if (!isConnected.value) {
       error.value = 'FC-1200 が接続されていません'
       return
     }
 
     error.value = null
     result.value = null
+
+    if (transport.value === 'websocket') {
+      sendWsCommand('reset')
+      return
+    }
+
+    if (!session) return
     session.start_measurement()
     state.value = session.state() as Fc1200State
     await sendPendingResponse()
@@ -251,47 +365,75 @@ export function useFc1200Serial() {
 
   /** センサ寿命確認 (RQUT) */
   async function checkSensorLifetime(): Promise<void> {
-    if (!session || !isConnected.value) {
+    if (!isConnected.value) {
       error.value = 'FC-1200 が接続されていません'
       return
     }
     error.value = null
     sensorLifetime.value = null
+
+    if (transport.value === 'websocket') {
+      sendWsCommand('sensor_lifetime')
+      return
+    }
+
+    if (!session) return
     session.check_sensor_lifetime()
     await sendPendingResponse()
   }
 
   /** メモリ取込開始 (RQDD) */
   async function startMemoryRead(): Promise<void> {
-    if (!session || !isConnected.value) {
+    if (!isConnected.value) {
       error.value = 'FC-1200 が接続されていません'
       return
     }
     error.value = null
     memoryRecords.value = []
+
+    if (transport.value === 'websocket') {
+      sendWsCommand('memory_read')
+      return
+    }
+
+    if (!session) return
     session.start_memory_read()
     await sendPendingResponse()
   }
 
   /** メモリ取込完了 (DDOK — デバイスメモリクリア) */
   async function completeMemoryRead(): Promise<void> {
-    if (!session || !isConnected.value) {
+    if (!isConnected.value) {
       error.value = 'FC-1200 が接続されていません'
       return
     }
+
+    if (transport.value === 'websocket') {
+      sendWsCommand('memory_complete')
+      return
+    }
+
+    if (!session) return
     session.complete_memory_read()
     await sendPendingResponse()
   }
 
   /** デバイス日時更新 (DT) */
   async function updateDeviceDate(datetime?: string): Promise<void> {
-    if (!session || !isConnected.value) {
+    if (!isConnected.value) {
       error.value = 'FC-1200 が接続されていません'
       return
     }
     error.value = null
     dateUpdateSuccess.value = null
     const dt = datetime ?? formatDateForDevice(new Date())
+
+    if (transport.value === 'websocket') {
+      sendWsCommand(`date_update:${dt}`)
+      return
+    }
+
+    if (!session) return
     session.update_date(dt)
     await sendPendingResponse()
   }
@@ -306,7 +448,10 @@ export function useFc1200Serial() {
   }
 
   function resetSession(): void {
-    if (session) {
+    if (transport.value === 'websocket') {
+      sendWsCommand('reset')
+    }
+    else if (session) {
       session.reset()
       state.value = session.state() as Fc1200State
     }
@@ -318,6 +463,7 @@ export function useFc1200Serial() {
   }
 
   async function disconnect(): Promise<void> {
+    disconnectWebSocket()
     await cleanup()
   }
 
@@ -346,11 +492,17 @@ export function useFc1200Serial() {
       session = null
     }
 
-    isConnected.value = false
+    if (transport.value === 'serial') {
+      isConnected.value = false
+      transport.value = null
+    }
     state.value = 'idle'
   }
 
-  onUnmounted(() => cleanup())
+  onUnmounted(() => {
+    disconnectWebSocket()
+    cleanup()
+  })
 
   return {
     isConnected: readonly(isConnected),
@@ -361,6 +513,7 @@ export function useFc1200Serial() {
     sensorLifetime: readonly(sensorLifetime),
     memoryRecords: readonly(memoryRecords),
     dateUpdateSuccess: readonly(dateUpdateSuccess),
+    transport: readonly(transport),
     isWebSerialSupported,
     autoConnect,
     connect,
