@@ -271,18 +271,20 @@ async function exportCsv() {
             <tr>
               <th class="text-left px-4 py-2 font-medium text-gray-600">社員名</th>
               <th class="text-left px-4 py-2 font-medium text-gray-600">打刻日時</th>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">デバイス</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="isLoadingPunches">
-              <td colspan="2" class="px-4 py-6 text-center text-gray-500">読み込み中...</td>
+              <td colspan="3" class="px-4 py-6 text-center text-gray-500">読み込み中...</td>
             </tr>
             <tr v-else-if="punches.length === 0">
-              <td colspan="2" class="px-4 py-6 text-center text-gray-500">打刻記録なし</td>
+              <td colspan="3" class="px-4 py-6 text-center text-gray-500">打刻記録なし</td>
             </tr>
             <tr v-for="p in punches" :key="p.id" class="border-t">
               <td class="px-4 py-2">{{ employeeName(p.employee_id) }}</td>
               <td class="px-4 py-2">{{ formatTime(p.punched_at) }}</td>
+              <td class="px-4 py-2 text-gray-500">{{ p.device_name ?? '-' }}</td>
             </tr>
           </tbody>
         </table>

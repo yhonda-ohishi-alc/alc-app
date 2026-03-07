@@ -584,10 +584,10 @@ export async function getTimecardCardByCardId(cardId: string): Promise<TimecardC
   return request<TimecardCard>(`/api/timecard/cards/by-card/${encodeURIComponent(cardId)}`)
 }
 
-export async function punchTimecard(cardId: string): Promise<TimePunchWithEmployee> {
+export async function punchTimecard(cardId: string, deviceId?: string | null): Promise<TimePunchWithEmployee> {
   return request<TimePunchWithEmployee>('/api/timecard/punch', {
     method: 'POST',
-    body: JSON.stringify({ card_id: cardId }),
+    body: JSON.stringify({ card_id: cardId, device_id: deviceId || undefined }),
   })
 }
 

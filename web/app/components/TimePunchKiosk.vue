@@ -3,6 +3,7 @@ import type { TimePunchWithEmployee } from '~/types'
 import { punchTimecard } from '~/utils/api'
 
 const nfc = useNfcWebSocket()
+const { deviceId } = useAuth()
 
 type Step = 'waiting' | 'processing' | 'done' | 'error'
 const step = ref<Step>('waiting')
@@ -19,7 +20,7 @@ onMounted(() => {
 
     try {
       const cardId = event.employee_id
-      const res = await punchTimecard(cardId)
+      const res = await punchTimecard(cardId, deviceId.value)
       result.value = res
       step.value = 'done'
       scheduleReset()
