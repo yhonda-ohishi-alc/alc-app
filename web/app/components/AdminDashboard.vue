@@ -25,7 +25,7 @@ function disconnectRtc() {
   isRtcActive.value = false
 }
 
-type TabKey = 'employees' | 'license' | 'queue' | 'webhooks' | 'tenko_call' | 'camera'
+type TabKey = 'employees' | 'license' | 'queue' | 'webhooks' | 'tenko_call' | 'camera' | 'devices'
 const activeTab = ref<TabKey>('employees')
 const cameraActive = computed(() => activeTab.value === 'camera')
 </script>
@@ -42,6 +42,7 @@ const cameraActive = computed(() => activeTab.value === 'camera')
             { key: 'webhooks', label: 'Webhook' },
             { key: 'tenko_call', label: '中間点呼' },
             { key: 'camera', label: 'リモートカメラ' },
+            { key: 'devices', label: 'デバイス管理' },
           ]"
           :key="tab.key"
           class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
@@ -76,6 +77,10 @@ const cameraActive = computed(() => activeTab.value === 'camera')
 
       <div v-if="activeTab === 'tenko_call'">
         <TenkoCallManager />
+      </div>
+
+      <div v-if="activeTab === 'devices'">
+        <DeviceRegistrationManager />
       </div>
 
       <div v-if="activeTab === 'camera'" class="space-y-4">

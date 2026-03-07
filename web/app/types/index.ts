@@ -699,3 +699,77 @@ export interface TimePunchesResponse {
   page: number
   per_page: number
 }
+
+// --- Device Registration ---
+
+export type DeviceFlowType = 'qr_temp' | 'qr_permanent' | 'url'
+export type DeviceStatus = 'active' | 'disabled'
+export type RegistrationStatus = 'pending' | 'approved' | 'rejected' | 'expired'
+
+export interface Device {
+  id: string
+  tenant_id: string
+  device_name: string
+  device_type: 'kiosk' | 'android'
+  phone_number?: string
+  user_id?: string
+  status: DeviceStatus
+  approved_by?: string
+  approved_at?: string
+  last_seen_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DeviceRegistrationRequest {
+  id: string
+  registration_code: string
+  flow_type: DeviceFlowType
+  tenant_id?: string
+  phone_number?: string
+  device_name: string
+  status: RegistrationStatus
+  device_id?: string
+  expires_at?: string
+  created_at: string
+}
+
+export interface CreateRegistrationResponse {
+  registration_code: string
+  expires_at: string
+}
+
+export interface RegistrationStatusResponse {
+  status: RegistrationStatus
+  device_id?: string
+  tenant_id?: string
+}
+
+export interface ClaimRegistrationRequest {
+  registration_code: string
+  phone_number?: string
+  device_name?: string
+}
+
+export interface ClaimRegistrationResponse {
+  success: boolean
+  flow_type: DeviceFlowType
+  device_id?: string
+  tenant_id?: string
+  message?: string
+}
+
+export interface CreateTokenResponse {
+  registration_code: string
+  registration_url: string
+}
+
+export interface CreatePermanentQrResponse {
+  registration_code: string
+}
+
+export interface ApproveDeviceResponse {
+  success: boolean
+  device_id: string
+  tenant_id: string
+}

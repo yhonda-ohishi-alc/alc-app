@@ -12,6 +12,9 @@ import type {
   EquipmentFailure, CreateEquipmentFailure, UpdateEquipmentFailure, EquipmentFailureFilter, EquipmentFailuresResponse,
   // Timecard
   TimecardCard, CreateTimecardCard, TimePunchWithEmployee, TimePunchFilter, TimePunchesResponse,
+  // Device Registration
+  Device, DeviceRegistrationRequest, CreateRegistrationResponse, RegistrationStatusResponse,
+  ClaimRegistrationRequest, ClaimRegistrationResponse, CreateTokenResponse, CreatePermanentQrResponse, ApproveDeviceResponse,
 } from '~/types'
 
 let apiBase = ''
@@ -594,4 +597,77 @@ export async function listTimePunches(filter: TimePunchFilter = {}): Promise<Tim
 
 export async function downloadTimePunchesCsv(filter: TimePunchFilter = {}): Promise<void> {
   await downloadCsv(`/api/timecard/punches/csv${toParams(filter)}`, 'time-punches.csv')
+}
+
+// ============ Device Registration ============
+
+// 公開API (認証不要)
+export async function createDeviceRegistrationRequest(deviceName?: string): Promise<CreateRegistrationResponse> {
+  return request<CreateRegistrationResponse>('/api/devices/register/request', {
+    method: 'POST',
+    body: JSON.stringify({ device_name: deviceName }),
+  })
+}
+
+export async function checkDeviceRegistrationStatus(code: string): Promise<RegistrationStatusResponse> {
+  return request<RegistrationStatusResponse>(`/api/devices/register/status/${code}`)
+}
+
+export async function claimDeviceRegistration(data: ClaimRegistrationRequest): Promise<ClaimRegistrationResponse> {
+  return request<ClaimRegistrationResponse>('/api/devices/register/claim', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// テナント認証付きAPI
+export async function listDevices(): Promise<Device[]> {
+  return request<Device[]>('/api/devices')
+}
+
+export async function listPendingDeviceRegistrations(): Promise<DeviceRegistrationRequest[]> {
+  return request<DeviceRegistrationRequest[]>('/api/devices/pending')
+}
+
+export async function createDeviceUrlToken(deviceName?: string): Promise<CreateTokenResponse> {
+  return request<CreateTokenResponse>('/api/devices/register/create-token', {
+    method: 'POST',
+    body: JSON.stringify({ device_name: deviceName }),
+  })
+}
+
+export async function createPermanentQr(deviceName?: string): Promise<CreatePermanentQrResponse> {
+  return request<CreatePermanentQrResponse>('/api/devices/register/create-permanent-qr', {
+    method: 'POST',
+    body: JSON.stringify({ device_name: deviceName }),
+  })
+}
+
+export async function approveDevice(id: string, deviceName?: string): Promise<ApproveDeviceResponse> {
+  return request<ApproveDeviceResponse>(`/api/devices/approve/${id}`, {
+    method: 'POST',
+    body: JSON.stringify({ device_name: deviceName }),
+  })
+}
+
+export async function approveDeviceByCode(code: string): Promise<ApproveDeviceResponse> {
+  return request<ApproveDeviceResponse>(`/api/devices/approve-by-code/${code}`, {
+    method: 'POST',
+  })
+}
+
+export async function rejectDevice(id: string): Promise<void> {
+  return request<void>(`/api/devices/reject/${id}`, { method: 'POST' })
+}
+
+export async function disableDevice(id: string): Promise<void> {
+  return request<void>(`/api/devices/disable/${id}`, { method: 'POST' })
+}
+
+export async function enableDevice(id: string): Promise<void> {
+  return request<void>(`/api/devices/enable/${id}`, { method: 'POST' })
+}
+
+export async function deleteDevice(id: string): Promise<void> {
+  return request<void>(`/api/devices/${id}`, { method: 'DELETE' })
 }

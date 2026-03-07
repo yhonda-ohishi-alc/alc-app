@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.alcoholchecker",
+      "sha256_cert_fingerprints": [
+        "2B:C9:78:EE:DC:C0:B3:D7:DD:8A:30:39:A9:D9:BC:A3:80:EE:AB:AD:96:5A:41:9A:F7:BB:1F:7D:DD:CA:51:99",
+        "65:CA:C4:F1:A3:E5:0A:7F:F5:C6:29:4D:28:39:5B:0D:F1:11:CC:51:48:5C:4F:ED:74:F7:8A:A1:B5:76:3D:7F"
+      ]
+    }
+  }
+]

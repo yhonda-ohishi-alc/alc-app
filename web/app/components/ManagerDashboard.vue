@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures' | 'timecard'
+type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures' | 'timecard' | 'devices'
 const activeTab = ref<TabKey>('tenko')
 const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 </script>
@@ -21,6 +21,7 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
             { key: 'baselines', label: '健康基準' },
             { key: 'failures', label: '故障記録' },
             { key: 'timecard', label: 'タイムカード' },
+            { key: 'devices', label: 'デバイス管理' },
           ]"
           :key="tab.key"
           class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
@@ -77,6 +78,10 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 
       <div v-if="activeTab === 'timecard'">
         <TimecardManager />
+      </div>
+
+      <div v-if="activeTab === 'devices'">
+        <DeviceRegistrationManager />
       </div>
     </div>
   </div>

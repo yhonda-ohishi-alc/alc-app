@@ -2,6 +2,7 @@ import type { AuthUser, AuthResponse, RefreshResponse } from '~/types'
 
 const REFRESH_TOKEN_KEY = 'alc_refresh_token'
 const DEVICE_TENANT_KEY = 'alc_device_tenant_id'
+const DEVICE_ID_KEY = 'alc_device_id'
 
 // シングルトン state (composable の外で定義して複数コンポーネント間で共有)
 const user = ref<AuthUser | null>(null)
@@ -10,6 +11,9 @@ const isLoading = ref(true)
 // モジュールロード時に即座に復元 (子コンポーネントの onMounted が app.vue の init() より先に走るため)
 const deviceTenantId = ref<string | null>(
   typeof window !== 'undefined' ? localStorage.getItem(DEVICE_TENANT_KEY) : null,
+)
+const deviceId = ref<string | null>(
+  typeof window !== 'undefined' ? localStorage.getItem(DEVICE_ID_KEY) : null,
 )
 
 let initialized = false
@@ -266,18 +270,22 @@ export function useAuth() {
   }
 
   /** 端末をテナントにアクティベート */
-  function activateDevice(tenantId: string) {
+  function activateDevice(tenantId: string, devId?: string) {
     deviceTenantId.value = tenantId
+    if (devId) deviceId.value = devId
     if (typeof window !== 'undefined') {
       localStorage.setItem(DEVICE_TENANT_KEY, tenantId)
+      if (devId) localStorage.setItem(DEVICE_ID_KEY, devId)
     }
   }
 
   /** 端末のアクティベーションを解除 */
   function deactivateDevice() {
     deviceTenantId.value = null
+    deviceId.value = null
     if (typeof window !== 'undefined') {
       localStorage.removeItem(DEVICE_TENANT_KEY)
+      localStorage.removeItem(DEVICE_ID_KEY)
     }
   }
 
@@ -287,6 +295,7 @@ export function useAuth() {
     isAuthenticated,
     isLoading: readonly(isLoading),
     deviceTenantId: readonly(deviceTenantId),
+    deviceId: readonly(deviceId),
     isDeviceActivated,
     init,
     loginWithGoogleRedirect,
