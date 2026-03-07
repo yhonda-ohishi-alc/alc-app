@@ -37,6 +37,7 @@ const employeeName = ref('')
 const manualIdInput = ref('')
 const useManualInput = ref(true)
 const manualError = ref<string | null>(null)
+const isSubmitting = ref(false)
 const step = ref<'nfc' | 'face_auth'>('nfc')
 
 
@@ -56,6 +57,8 @@ const roleLabel: Record<string, string> = {
 
 // NFC 読み取り
 async function onNfcRead(nfcId: string) {
+  if (isSubmitting.value) return
+  isSubmitting.value = true
   errorMessage.value = null
   try {
     const emp = await getEmployeeByNfcId(nfcId)
@@ -72,13 +75,16 @@ async function onNfcRead(nfcId: string) {
     step.value = 'face_auth'
   } catch {
     errorMessage.value = `乗務員が見つかりません (NFC ID: ${nfcId})`
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 // 手動入力
 async function onManualSubmit() {
   const input = manualIdInput.value.trim()
-  if (!input) return
+  if (!input || isSubmitting.value) return
+  isSubmitting.value = true
   manualError.value = null
   errorMessage.value = null
   try {
@@ -96,6 +102,8 @@ async function onManualSubmit() {
     step.value = 'face_auth'
   } catch {
     manualError.value = `社員番号「${input}」の乗務員が見つかりません`
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -151,6 +159,7 @@ function resetAuth() {
   manualIdInput.value = ''
   manualError.value = null
   useManualInput.value = true
+  isSubmitting.value = false
   step.value = 'nfc'
 }
 </script>
@@ -208,11 +217,11 @@ function resetAuth() {
             >
             <p v-if="manualError" class="mt-2 text-sm text-red-600">{{ manualError }}</p>
             <button
-              :disabled="!manualIdInput.trim()"
+              :disabled="!manualIdInput.trim() || isSubmitting"
               class="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors"
               @click="onManualSubmit"
             >
-              次へ
+              {{ isSubmitting ? '確認中...' : '次へ' }}
             </button>
             <button
               class="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 underline"
