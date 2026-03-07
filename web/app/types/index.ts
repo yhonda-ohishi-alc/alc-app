@@ -677,6 +677,7 @@ export interface TimePunch {
   employee_id: string
   device_id?: string
   device_name?: string
+  employee_name?: string
   punched_at: string
   created_at: string
 }

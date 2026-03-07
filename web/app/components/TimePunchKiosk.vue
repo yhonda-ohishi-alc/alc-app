@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TimePunchWithEmployee } from '~/types'
-import { punchTimecard } from '~/utils/api'
+import { punchTimecard, listTimePunches } from '~/utils/api'
 
 const nfc = useNfcWebSocket()
 const { deviceId } = useAuth()
@@ -11,7 +11,50 @@ const result = ref<TimePunchWithEmployee | null>(null)
 const errorMsg = ref('')
 let resetTimer: ReturnType<typeof setTimeout> | null = null
 
-onMounted(() => {
+const recentPunchers = ref<{ name: string; time: string }[]>([])
+
+const isLargeScreen = ref(false)
+function updateScreenSize() {
+  isLargeScreen.value = window.innerWidth >= 1024
+}
+
+const displayedPunchers = computed(() => {
+  const limit = isLargeScreen.value ? 10 : 5
+  return recentPunchers.value.slice(0, limit)
+})
+
+function updateRecentPunchers(name: string, punchedAt: string) {
+  const time = formatTime(punchedAt)
+  const idx = recentPunchers.value.findIndex(p => p.name === name)
+  if (idx >= 0) recentPunchers.value.splice(idx, 1)
+  recentPunchers.value.unshift({ name, time })
+  if (recentPunchers.value.length > 10) recentPunchers.value.length = 10
+}
+
+onMounted(async () => {
+  updateScreenSize()
+  window.addEventListener('resize', updateScreenSize)
+
+  // Fetch today's punches
+  try {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+    const res = await listTimePunches({ date_from: todayStart, per_page: 20 })
+    // Group by employee_name, keep latest per person
+    const byName = new Map<string, string>()
+    for (const p of res.punches) {
+      const name = p.employee_name
+      if (!name) continue
+      if (!byName.has(name)) byName.set(name, p.punched_at)
+    }
+    // punches are DESC, so first occurrence per name is latest
+    recentPunchers.value = Array.from(byName.entries()).map(([name, punchedAt]) => ({
+      name,
+      time: formatTime(punchedAt),
+    }))
+  }
+  catch { /* ignore fetch errors on mount */ }
+
   nfc.connect()
   nfc.onRead(async (event) => {
     if (step.value === 'processing') return
@@ -23,6 +66,7 @@ onMounted(() => {
       const res = await punchTimecard(cardId, deviceId.value)
       result.value = res
       step.value = 'done'
+      updateRecentPunchers(res.employee_name, res.punch.punched_at)
       scheduleReset()
     }
     catch (e: any) {
@@ -36,6 +80,10 @@ onMounted(() => {
       scheduleReset()
     }
   })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateScreenSize)
 })
 
 function scheduleReset() {
@@ -56,19 +104,48 @@ function formatTime(iso: string): string {
   <div class="flex flex-col items-center justify-center p-6 gap-6">
     <!-- 待機画面 -->
     <template v-if="step === 'waiting'">
-      <div class="text-center">
-        <div class="text-6xl mb-4">🪪</div>
-        <h2 class="text-2xl font-bold text-gray-800 mb-2">タイムカード</h2>
-        <p class="text-gray-500">ICカードまたは免許証をかざしてください</p>
-      </div>
-      <div class="mt-4 flex items-center gap-2 text-sm">
-        <span
-          class="w-2 h-2 rounded-full"
-          :class="nfc.isConnected.value ? 'bg-green-500' : 'bg-red-500'"
-        />
-        <span class="text-gray-500">
-          {{ nfc.isConnected.value ? 'NFC ブリッジ接続中' : 'NFC ブリッジ未接続' }}
-        </span>
+      <div
+        class="flex w-full max-w-2xl gap-8"
+        :class="recentPunchers.length ? 'flex-col lg:flex-row items-center lg:items-start' : 'flex-col items-center'"
+      >
+        <!-- 左: カードアイコン + 説明 -->
+        <div class="text-center flex-shrink-0">
+          <div class="text-6xl mb-4">🪪</div>
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">タイムカード</h2>
+          <p class="text-gray-500">ICカードまたは免許証をかざしてください</p>
+          <div class="mt-4 flex items-center justify-center gap-2 text-sm">
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="nfc.isConnected.value ? 'bg-green-500' : 'bg-red-500'"
+            />
+            <span class="text-gray-500">
+              {{ nfc.isConnected.value ? 'NFC ブリッジ接続中' : 'NFC ブリッジ未接続' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 右: 最近の打刻 -->
+        <div v-if="recentPunchers.length" class="w-full lg:max-w-sm">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 text-gray-400">
+                <th class="text-left py-2 px-3 font-medium">名前</th>
+                <th class="text-right py-2 px-3 font-medium">時刻</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(p, i) in displayedPunchers"
+                :key="p.name"
+                class="border-b border-gray-100"
+                :class="i === 0 ? 'bg-blue-50 text-gray-800 font-medium' : 'text-gray-600'"
+              >
+                <td class="py-2 px-3">{{ p.name }}</td>
+                <td class="py-2 px-3 text-right tabular-nums" :class="i === 0 ? 'text-blue-600' : 'text-gray-400'">{{ p.time }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
 
