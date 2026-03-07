@@ -653,3 +653,49 @@ export interface EquipmentFailuresResponse {
   page: number
   per_page: number
 }
+
+// --- タイムカード ---
+
+export interface TimecardCard {
+  id: string
+  tenant_id: string
+  employee_id: string
+  card_id: string
+  label?: string
+  created_at: string
+}
+
+export interface CreateTimecardCard {
+  employee_id: string
+  card_id: string
+  label?: string
+}
+
+export interface TimePunch {
+  id: string
+  tenant_id: string
+  employee_id: string
+  punched_at: string
+  created_at: string
+}
+
+export interface TimePunchWithEmployee {
+  punch: TimePunch
+  employee_name: string
+  today_punches: TimePunch[]
+}
+
+export interface TimePunchFilter {
+  employee_id?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export interface TimePunchesResponse {
+  punches: TimePunch[]
+  total: number
+  page: number
+  per_page: number
+}

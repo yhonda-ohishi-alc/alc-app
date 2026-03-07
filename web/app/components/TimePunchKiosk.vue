@@ -1,0 +1,116 @@
+<script setup lang="ts">
+import type { TimePunchWithEmployee } from '~/types'
+import { punchTimecard } from '~/utils/api'
+
+const nfc = useNfcWebSocket()
+
+type Step = 'waiting' | 'processing' | 'done' | 'error'
+const step = ref<Step>('waiting')
+const result = ref<TimePunchWithEmployee | null>(null)
+const errorMsg = ref('')
+let resetTimer: ReturnType<typeof setTimeout> | null = null
+
+onMounted(() => {
+  nfc.connect()
+  nfc.onRead(async (event) => {
+    if (step.value === 'processing') return
+    step.value = 'processing'
+    errorMsg.value = ''
+
+    try {
+      const cardId = event.employee_id
+      const res = await punchTimecard(cardId)
+      result.value = res
+      step.value = 'done'
+      scheduleReset()
+    }
+    catch (e: any) {
+      step.value = 'error'
+      if (e?.message?.includes('404') || e?.status === 404) {
+        errorMsg.value = 'このカードは登録されていません'
+      }
+      else {
+        errorMsg.value = '打刻に失敗しました'
+      }
+      scheduleReset()
+    }
+  })
+})
+
+function scheduleReset() {
+  if (resetTimer) clearTimeout(resetTimer)
+  resetTimer = setTimeout(() => {
+    step.value = 'waiting'
+    result.value = null
+    errorMsg.value = ''
+  }, 5000)
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+</script>
+
+<template>
+  <div class="flex flex-col items-center justify-center p-6 gap-6">
+    <!-- 待機画面 -->
+    <template v-if="step === 'waiting'">
+      <div class="text-center">
+        <div class="text-6xl mb-4">🪪</div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">タイムカード</h2>
+        <p class="text-gray-500">ICカードまたは免許証をかざしてください</p>
+      </div>
+      <div class="mt-4 flex items-center gap-2 text-sm">
+        <span
+          class="w-2 h-2 rounded-full"
+          :class="nfc.isConnected.value ? 'bg-green-500' : 'bg-red-500'"
+        />
+        <span class="text-gray-500">
+          {{ nfc.isConnected.value ? 'NFC ブリッジ接続中' : 'NFC ブリッジ未接続' }}
+        </span>
+      </div>
+    </template>
+
+    <!-- 処理中 -->
+    <template v-if="step === 'processing'">
+      <div class="text-center">
+        <div class="animate-spin text-4xl mb-4">⏳</div>
+        <p class="text-gray-600">処理中...</p>
+      </div>
+    </template>
+
+    <!-- 打刻完了 -->
+    <template v-if="step === 'done' && result">
+      <div class="text-center w-full max-w-sm">
+        <div class="text-5xl mb-3">✅</div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-1">{{ result.employee_name }}</h2>
+        <p class="text-lg text-green-600 font-medium mb-4">
+          {{ formatTime(result.punch.punched_at) }} 打刻しました
+        </p>
+
+        <!-- 当日の打刻一覧 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500 mb-2">本日の打刻</h3>
+          <div class="space-y-1">
+            <div
+              v-for="p in result.today_punches"
+              :key="p.id"
+              class="flex justify-between text-sm py-1 px-2 rounded"
+              :class="p.id === result.punch.id ? 'bg-green-100 text-green-800 font-medium' : 'text-gray-700'"
+            >
+              <span>{{ formatTime(p.punched_at) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- エラー -->
+    <template v-if="step === 'error'">
+      <div class="text-center">
+        <div class="text-5xl mb-3">❌</div>
+        <p class="text-lg text-red-600 font-medium">{{ errorMsg }}</p>
+      </div>
+    </template>
+  </div>
+</template>

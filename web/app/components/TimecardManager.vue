@@ -1,0 +1,297 @@
+<script setup lang="ts">
+import type { ApiEmployee, TimecardCard, TimePunch } from '~/types'
+import {
+  getEmployees, listTimecardCards, createTimecardCard, deleteTimecardCard,
+  listTimePunches, downloadTimePunchesCsv,
+} from '~/utils/api'
+
+type SubTab = 'cards' | 'punches'
+const subTab = ref<SubTab>('cards')
+
+// --- カード登録 ---
+const employees = ref<ApiEmployee[]>([])
+const cards = ref<TimecardCard[]>([])
+const selectedEmployeeId = ref('')
+const cardLabel = ref('')
+const isLoadingCards = ref(false)
+const isRegistering = ref(false)
+const cardError = ref('')
+const nfcCardId = ref<string | null>(null)
+
+const nfc = useNfcWebSocket()
+
+const employeeMap = computed(() => {
+  const map: Record<string, ApiEmployee> = {}
+  for (const e of employees.value) map[e.id] = e
+  return map
+})
+
+async function loadCards() {
+  isLoadingCards.value = true
+  try {
+    const [emps, crds] = await Promise.all([getEmployees(), listTimecardCards()])
+    employees.value = emps
+    cards.value = crds
+  }
+  catch { /* ignore */ }
+  finally { isLoadingCards.value = false }
+}
+
+onMounted(() => {
+  nfc.connect()
+  nfc.onRead((event) => {
+    nfcCardId.value = event.employee_id
+  })
+  loadCards()
+})
+
+async function registerCard() {
+  if (!selectedEmployeeId.value || !nfcCardId.value) return
+  isRegistering.value = true
+  cardError.value = ''
+  try {
+    await createTimecardCard({
+      employee_id: selectedEmployeeId.value,
+      card_id: nfcCardId.value,
+      label: cardLabel.value || undefined,
+    })
+    nfcCardId.value = null
+    cardLabel.value = ''
+    await loadCards()
+  }
+  catch (e: any) {
+    if (e?.message?.includes('409') || e?.status === 409) {
+      cardError.value = 'このカードは既に登録されています'
+    }
+    else {
+      cardError.value = 'カード登録に失敗しました'
+    }
+  }
+  finally { isRegistering.value = false }
+}
+
+const deletingCardId = ref<string | null>(null)
+
+async function removeCard(id: string) {
+  deletingCardId.value = id
+  try {
+    await deleteTimecardCard(id)
+    await loadCards()
+  }
+  catch { /* ignore */ }
+  finally { deletingCardId.value = null }
+}
+
+// --- 打刻履歴 ---
+const punches = ref<TimePunch[]>([])
+const punchTotal = ref(0)
+const punchPage = ref(1)
+const punchPerPage = 50
+const isLoadingPunches = ref(false)
+const filterDate = ref(new Date().toISOString().slice(0, 10))
+const filterEmployeeId = ref('')
+
+async function loadPunches() {
+  isLoadingPunches.value = true
+  try {
+    const dateFrom = `${filterDate.value}T00:00:00+09:00`
+    const dateTo = `${filterDate.value}T23:59:59+09:00`
+    const res = await listTimePunches({
+      date_from: dateFrom,
+      date_to: dateTo,
+      employee_id: filterEmployeeId.value || undefined,
+      page: punchPage.value,
+      per_page: punchPerPage,
+    })
+    punches.value = res.punches
+    punchTotal.value = res.total
+  }
+  catch { /* ignore */ }
+  finally { isLoadingPunches.value = false }
+}
+
+watch(subTab, (tab) => {
+  if (tab === 'punches') loadPunches()
+})
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function employeeName(employeeId: string): string {
+  return employeeMap.value[employeeId]?.name ?? employeeId.slice(0, 8)
+}
+
+async function exportCsv() {
+  const dateFrom = `${filterDate.value}T00:00:00+09:00`
+  const dateTo = `${filterDate.value}T23:59:59+09:00`
+  await downloadTimePunchesCsv({
+    date_from: dateFrom,
+    date_to: dateTo,
+    employee_id: filterEmployeeId.value || undefined,
+  })
+}
+</script>
+
+<template>
+  <div>
+    <!-- サブタブ -->
+    <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4 w-fit">
+      <button
+        v-for="t in ([{ key: 'cards' as const, label: 'カード登録' }, { key: 'punches' as const, label: '打刻履歴' }])"
+        :key="t.key"
+        class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+        :class="subTab === t.key ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'"
+        @click="subTab = t.key"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+
+    <!-- カード登録タブ -->
+    <template v-if="subTab === 'cards'">
+      <!-- 登録フォーム -->
+      <div class="bg-white border rounded-lg p-4 mb-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">カード登録</h3>
+        <div class="flex flex-wrap gap-3 items-end">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">社員</label>
+            <select v-model="selectedEmployeeId" class="border rounded px-3 py-2 text-sm">
+              <option value="">選択してください</option>
+              <option v-for="e in employees" :key="e.id" :value="e.id">
+                {{ e.name }} {{ e.code ? `(${e.code})` : '' }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">カードID</label>
+            <input
+              :value="nfcCardId ?? ''"
+              readonly
+              placeholder="カードをかざしてください"
+              class="border rounded px-3 py-2 text-sm bg-gray-50 w-56"
+            >
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">ラベル (任意)</label>
+            <input
+              v-model="cardLabel"
+              placeholder="例: 社員証"
+              class="border rounded px-3 py-2 text-sm w-32"
+            >
+          </div>
+          <button
+            :disabled="!selectedEmployeeId || !nfcCardId || isRegistering"
+            class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="registerCard"
+          >
+            {{ isRegistering ? '登録中...' : '登録' }}
+          </button>
+        </div>
+        <div class="mt-2 flex items-center gap-2 text-xs">
+          <span
+            class="w-2 h-2 rounded-full"
+            :class="nfc.isConnected.value ? 'bg-green-500' : 'bg-red-500'"
+          />
+          <span class="text-gray-500">{{ nfc.isConnected.value ? 'NFC 接続中' : 'NFC 未接続' }}</span>
+        </div>
+        <p v-if="cardError" class="text-red-600 text-sm mt-2">{{ cardError }}</p>
+      </div>
+
+      <!-- カード一覧 -->
+      <div class="bg-white border rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">社員名</th>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">カードID</th>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">ラベル</th>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">登録日</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="isLoadingCards">
+              <td colspan="5" class="px-4 py-6 text-center text-gray-500">読み込み中...</td>
+            </tr>
+            <tr v-else-if="cards.length === 0">
+              <td colspan="5" class="px-4 py-6 text-center text-gray-500">登録カードなし</td>
+            </tr>
+            <tr v-for="card in cards" :key="card.id" class="border-t">
+              <td class="px-4 py-2">{{ employeeName(card.employee_id) }}</td>
+              <td class="px-4 py-2 font-mono text-xs">{{ card.card_id }}</td>
+              <td class="px-4 py-2">{{ card.label ?? '-' }}</td>
+              <td class="px-4 py-2">{{ new Date(card.created_at).toLocaleDateString('ja-JP') }}</td>
+              <td class="px-4 py-2 text-right">
+                <button
+                  class="text-red-600 hover:text-red-800 text-xs"
+                  :disabled="deletingCardId === card.id"
+                  @click="removeCard(card.id)"
+                >
+                  {{ deletingCardId === card.id ? '削除中...' : '削除' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <!-- 打刻履歴タブ -->
+    <template v-if="subTab === 'punches'">
+      <div class="flex flex-wrap gap-3 items-end mb-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">日付</label>
+          <input v-model="filterDate" type="date" class="border rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">社員</label>
+          <select v-model="filterEmployeeId" class="border rounded px-3 py-2 text-sm">
+            <option value="">全員</option>
+            <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }}</option>
+          </select>
+        </div>
+        <button
+          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          @click="loadPunches"
+        >
+          検索
+        </button>
+        <button
+          class="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+          @click="exportCsv"
+        >
+          CSV出力
+        </button>
+      </div>
+
+      <div class="bg-white border rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">社員名</th>
+              <th class="text-left px-4 py-2 font-medium text-gray-600">打刻日時</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="isLoadingPunches">
+              <td colspan="2" class="px-4 py-6 text-center text-gray-500">読み込み中...</td>
+            </tr>
+            <tr v-else-if="punches.length === 0">
+              <td colspan="2" class="px-4 py-6 text-center text-gray-500">打刻記録なし</td>
+            </tr>
+            <tr v-for="p in punches" :key="p.id" class="border-t">
+              <td class="px-4 py-2">{{ employeeName(p.employee_id) }}</td>
+              <td class="px-4 py-2">{{ formatTime(p.punched_at) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="punchTotal > punchPerPage" class="px-4 py-2 border-t text-sm text-gray-500 flex gap-2 items-center">
+          <button :disabled="punchPage <= 1" class="px-2 py-1 border rounded disabled:opacity-50" @click="punchPage--; loadPunches()">前へ</button>
+          <span>{{ punchPage }} / {{ Math.ceil(punchTotal / punchPerPage) }}</span>
+          <button :disabled="punchPage * punchPerPage >= punchTotal" class="px-2 py-1 border rounded disabled:opacity-50" @click="punchPage++; loadPunches()">次へ</button>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>

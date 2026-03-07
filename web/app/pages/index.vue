@@ -26,12 +26,13 @@ const activeRole = ref<RoleTab>(
 )
 
 // --- 運行者サブタブ ---
-type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'demo' | 'remote_demo' | 'device'
+type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'timecard' | 'demo' | 'remote_demo' | 'device'
 const driverSubTab = ref<DriverSubTab>(
   route.query.tab === 'tenko' ? 'tenko'
   : route.query.tab === 'demo' ? 'demo'
   : route.query.tab === 'remote' ? 'remote'
   : route.query.tab === 'remote_demo' ? 'remote_demo'
+  : route.query.tab === 'timecard' ? 'timecard'
   : route.query.tab === 'device' ? 'device'
   : 'normal',
 )
@@ -49,6 +50,7 @@ watch(driverSubTab, (tab) => {
   if (tab === 'tenko') query.tab = 'tenko'
   else if (tab === 'demo') query.tab = 'demo'
   else if (tab === 'remote') query.tab = 'remote'
+  else if (tab === 'timecard') query.tab = 'timecard'
   else if (tab === 'device') query.tab = 'device'
   navigateTo({ path: '/', query }, { replace: true })
 })
@@ -128,6 +130,7 @@ function onRoleTabClick(role: RoleTab) {
               { key: 'normal' as const, label: '通常点呼' },
               { key: 'tenko' as const, label: '自動点呼' },
               { key: 'remote' as const, label: '遠隔点呼' },
+              { key: 'timecard' as const, label: 'タイムカード' },
             ])"
             :key="tab.key"
             class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -180,6 +183,7 @@ function onRoleTabClick(role: RoleTab) {
       <TenkoKiosk v-if="driverSubTab === 'remote'" :remote-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'remote_demo'" :remote-mode="true" :demo-mode="true" class="flex-1 min-h-0" />
       <TenkoKiosk v-if="driverSubTab === 'demo'" :demo-mode="true" class="flex-1 min-h-0" />
+      <TimePunchKiosk v-if="driverSubTab === 'timecard'" class="flex-1 min-h-0" />
       <DeviceSettings v-if="driverSubTab === 'device'" class="flex-1 min-h-0" />
 
       <!-- 画面共有: タブに関係なく常時フローティング表示 -->

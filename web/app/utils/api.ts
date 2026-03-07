@@ -10,6 +10,8 @@ import type {
   TenkoDashboard,
   EmployeeHealthBaseline, CreateHealthBaseline, UpdateHealthBaseline,
   EquipmentFailure, CreateEquipmentFailure, UpdateEquipmentFailure, EquipmentFailureFilter, EquipmentFailuresResponse,
+  // Timecard
+  TimecardCard, CreateTimecardCard, TimePunchWithEmployee, TimePunchFilter, TimePunchesResponse,
 } from '~/types'
 
 let apiBase = ''
@@ -555,4 +557,41 @@ export async function resolveFailure(id: string, data: UpdateEquipmentFailure): 
 
 export async function downloadFailuresCsv(filter: EquipmentFailureFilter = {}): Promise<void> {
   await downloadCsv(`/api/tenko/equipment-failures/csv${toParams(filter)}`, 'equipment-failures.csv')
+}
+
+// --- タイムカード ---
+
+export async function createTimecardCard(data: CreateTimecardCard): Promise<TimecardCard> {
+  return request<TimecardCard>('/api/timecard/cards', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function listTimecardCards(employeeId?: string): Promise<TimecardCard[]> {
+  const params = employeeId ? `?employee_id=${employeeId}` : ''
+  return request<TimecardCard[]>(`/api/timecard/cards${params}`)
+}
+
+export async function deleteTimecardCard(id: string): Promise<void> {
+  await request<void>(`/api/timecard/cards/${id}`, { method: 'DELETE' })
+}
+
+export async function getTimecardCardByCardId(cardId: string): Promise<TimecardCard> {
+  return request<TimecardCard>(`/api/timecard/cards/by-card/${encodeURIComponent(cardId)}`)
+}
+
+export async function punchTimecard(cardId: string): Promise<TimePunchWithEmployee> {
+  return request<TimePunchWithEmployee>('/api/timecard/punch', {
+    method: 'POST',
+    body: JSON.stringify({ card_id: cardId }),
+  })
+}
+
+export async function listTimePunches(filter: TimePunchFilter = {}): Promise<TimePunchesResponse> {
+  return request<TimePunchesResponse>(`/api/timecard/punches${toParams(filter)}`)
+}
+
+export async function downloadTimePunchesCsv(filter: TimePunchFilter = {}): Promise<void> {
+  await downloadCsv(`/api/timecard/punches/csv${toParams(filter)}`, 'time-punches.csv')
 }
