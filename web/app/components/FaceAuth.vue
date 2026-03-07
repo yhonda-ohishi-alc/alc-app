@@ -56,7 +56,17 @@ function startLoop() {
     if (status.value !== 'checking') return
     if (videoRef.value && isReady.value) {
       try {
+        const t0 = performance.now()
         const result = await detect(videoRef.value)
+        const gestureNames = (result.gesture ?? []).map((g: any) => g.gesture).join(', ')
+        const mesh = result.face?.[0]?.mesh
+        let eyeInfo = ''
+        if (mesh && mesh.length > 450) {
+          const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
+          const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
+          eyeInfo = ` eyeL=${openL.toFixed(3)} eyeR=${openR.toFixed(3)}`
+        }
+        console.log(`[FaceAuth] ${(performance.now() - t0).toFixed(0)}ms [${gestureNames}]${eyeInfo}`)
         updateChecks(result)
         drawOverlay(result)
         // Save the embedding from the check-passing frame
@@ -76,7 +86,7 @@ function startLoop() {
       }
       catch { /* ignore frame errors */ }
     }
-    loopTimer = setTimeout(loop, 200)
+    loopTimer = setTimeout(loop, 50)
   }
   loop()
 }
@@ -123,9 +133,13 @@ function updateChecks(result: any) {
   checks.facingCenter.status = facing?.gesture === 'facing center'
   checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
 
-  const blinkLeft = gestures.some((g: any) => g.gesture === 'blink left eye')
-  const blinkRight = gestures.some((g: any) => g.gesture === 'blink right eye')
-  if (blinkLeft || blinkRight) blinkDetected.value = true
+  // ライブラリの閾値(0.2)が厳しすぎるため、meshから直接判定(閾値0.26)
+  const mesh = face.mesh
+  if (mesh && mesh.length > 450) {
+    const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
+    const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
+    if (openL < 0.26 || openR < 0.26) blinkDetected.value = true
+  }
   checks.blink.status = blinkDetected.value
   checks.blink.val = blinkDetected.value ? '検出済' : '待機中'
 

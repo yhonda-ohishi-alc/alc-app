@@ -5,7 +5,7 @@ export const humanConfig: Partial<Config> = {
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   wasmPath: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/',
   debug: false,
-  cacheSensitivity: 0.9,
+  cacheSensitivity: 0,
   filter: { enabled: true, flip: false },
 
   face: {
@@ -18,7 +18,7 @@ export const humanConfig: Partial<Config> = {
       minConfidence: 0.5,
       iouThreshold: 0.1,
       return: false,
-      skipFrames: 10,
+      skipFrames: 0,
     },
     mesh: {
       enabled: true,
@@ -29,7 +29,7 @@ export const humanConfig: Partial<Config> = {
       enabled: true,
       modelPath: 'faceres.json',
       minConfidence: 0.1,
-      skipFrames: 15,
+      skipFrames: 0,
     },
     iris: { enabled: false },
     emotion: { enabled: false },
