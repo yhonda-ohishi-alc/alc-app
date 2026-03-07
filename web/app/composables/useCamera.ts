@@ -7,8 +7,13 @@ export function useCamera() {
   async function start(facingMode: 'user' | 'environment' = 'user') {
     error.value = null
     try {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode,
+          width: { ideal: isMobile ? 1280 : 1920 },
+          height: { ideal: isMobile ? 720 : 1080 },
+        },
         audio: false,
       })
       stream.value = mediaStream

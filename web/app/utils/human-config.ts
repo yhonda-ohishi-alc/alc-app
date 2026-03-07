@@ -1,7 +1,7 @@
 import type { Config } from '@vladmandic/human'
 
 export const humanConfig: Partial<Config> = {
-  backend: 'humangl',
+  backend: 'wasm',
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   wasmPath: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/',
   debug: false,
@@ -31,7 +31,7 @@ export const humanConfig: Partial<Config> = {
       minConfidence: 0.1,
       skipFrames: 15,
     },
-    iris: { enabled: true },
+    iris: { enabled: false },
     emotion: { enabled: false },
     antispoof: { enabled: false },
     liveness: { enabled: false },

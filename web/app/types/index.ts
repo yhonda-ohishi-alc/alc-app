@@ -162,6 +162,7 @@ export interface FaceDataEntry {
   face_embedding: number[]
   face_embedding_at: string
   face_model_version?: string
+  face_approval_status: string
 }
 
 /** API: 測定結果一覧レスポンス */

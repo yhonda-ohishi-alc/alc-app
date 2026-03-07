@@ -13,13 +13,15 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load, detect, NORM_W, NORM_H } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect, NORM_SIZE } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = useCamera()
 
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
 const waitingConfirm = ref(false)
+const blinkDetected = ref(false)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
+const lastGoodEmbedding = ref<number[] | null>(null)
 
 // --- Face detection checks ---
 const checks = reactive({
@@ -27,7 +29,7 @@ const checks = reactive({
   faceConfidence: { label: '信頼度', status: false, val: '' },
   faceSize: { label: '顔サイズ', status: false, val: '' },
   facingCenter: { label: '正面向き', status: false, val: '' },
-  lookingCenter: { label: '視線', status: false, val: '' },
+  blink: { label: 'まばたき', status: false, val: '' },
   descriptor: { label: '特徴量', status: false, val: '' },
 })
 
@@ -57,6 +59,11 @@ function startLoop() {
         const result = await detect(videoRef.value)
         updateChecks(result)
         drawOverlay(result)
+        // Save the embedding from the check-passing frame
+        const emb = result.face?.[0]?.embedding
+        if (emb && emb.length > 0) {
+          lastGoodEmbedding.value = Array.isArray(emb) ? emb : Array.from(emb as any)
+        }
         if (allChecksPassed.value) {
           if (props.mode === 'register') {
             waitingConfirm.value = true
@@ -95,8 +102,8 @@ function updateChecks(result: any) {
     checks.faceSize.val = ''
     checks.facingCenter.status = false
     checks.facingCenter.val = ''
-    checks.lookingCenter.status = false
-    checks.lookingCenter.val = ''
+    checks.blink.status = false
+    checks.blink.val = ''
     checks.descriptor.status = false
     checks.descriptor.val = ''
     return
@@ -107,17 +114,20 @@ function updateChecks(result: any) {
   checks.faceConfidence.val = `${(score * 100).toFixed(0)}%`
 
   const size = Math.max(face.box?.[2] ?? 0, face.box?.[3] ?? 0)
-  checks.faceSize.status = size >= 100
-  checks.faceSize.val = `${size.toFixed(0)}px`
+  checks.faceSize.status = size >= 400 && size <= 450
+  const sizeHint = size < 400 ? '近づいて' : size > 450 ? '離れて' : 'OK'
+  checks.faceSize.val = `${size.toFixed(0)}px ${sizeHint}`
 
   const gestures: any[] = result.gesture ?? []
   const facing = gestures.find((g: any) => g.gesture?.startsWith('facing'))
   checks.facingCenter.status = facing?.gesture === 'facing center'
   checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
 
-  const looking = gestures.find((g: any) => g.gesture?.startsWith('looking'))
-  checks.lookingCenter.status = looking?.gesture === 'looking center'
-  checks.lookingCenter.val = looking?.gesture?.replace('looking ', '') ?? '-'
+  const blinkLeft = gestures.some((g: any) => g.gesture === 'blink left eye')
+  const blinkRight = gestures.some((g: any) => g.gesture === 'blink right eye')
+  if (blinkLeft || blinkRight) blinkDetected.value = true
+  checks.blink.status = blinkDetected.value
+  checks.blink.val = blinkDetected.value ? '検出済' : '待機中'
 
   const hasDesc = (face.embedding?.length ?? 0) > 0
   checks.descriptor.status = hasDesc
@@ -147,8 +157,8 @@ function drawOverlay(result: any) {
   const face = result.face?.[0]
   if (!face?.box) return
 
-  const sx = w / NORM_W
-  const sy = h / NORM_H
+  const sx = w / NORM_SIZE
+  const sy = h / NORM_SIZE
   const [bx, by, bw, bh] = face.box
   const color = allChecksPassed.value ? '#22c55e' : '#ef4444'
 
@@ -192,8 +202,9 @@ async function doAuth() {
       }
     }
     else {
-      const result = await verify(props.employeeId, videoRef.value)
+      const result = await verify(props.employeeId, videoRef.value, lastGoodEmbedding.value ?? undefined)
       similarity.value = result.similarity
+      console.log('[FaceAuth] verify result: similarity=' + result.similarity.toFixed(3) + ' verified=' + result.verified)
       if (result.verified) {
         const snapshot = await takeSnapshotAsync()
         status.value = 'success'
@@ -231,7 +242,7 @@ function retry() {
 <template>
   <div class="flex flex-col items-center gap-4">
     <!-- Camera + canvas overlay -->
-    <div class="relative overflow-hidden rounded-2xl bg-black w-full max-h-[70vh]">
+    <div class="relative overflow-hidden rounded-2xl bg-black w-full aspect-square max-h-[70vh]">
       <video
         ref="videoRef"
         autoplay

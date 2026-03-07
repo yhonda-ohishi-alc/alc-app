@@ -23,9 +23,11 @@ export function useFaceSync() {
     try {
       // 1. サーバーの顔データ取得
       const serverData = await getFaceData()
+      console.log(`[FaceSync] server: ${serverData.length} 件 (approved)`, serverData.map(e => ({ id: e.id.slice(0, 8), status: e.face_approval_status, ts: e.face_embedding_at })))
 
       // 2. ローカルの顔データ取得
       const localRecords = await getAllDescriptorsWithTimestamp()
+      console.log(`[FaceSync] local: ${localRecords.length} 件`, localRecords.map(r => ({ id: r.employeeId.slice(0, 8), approval: r.approvalStatus, model: r.modelVersion, ts: new Date(r.updatedAt).toISOString() })))
 
       const serverMap = new Map<string, FaceDataEntry>()
       for (const entry of serverData) {
@@ -47,12 +49,15 @@ export function useFaceSync() {
         const local = localMap.get(empId)
 
         if (!local || serverTs > local.updatedAt) {
+          console.log(`[FaceSync] download: ${empId.slice(0, 8)} (${!local ? 'new' : 'server newer'}, serverTs=${new Date(serverTs).toISOString()}, localTs=${local ? new Date(local.updatedAt).toISOString() : 'none'})`)
           toDownload.push({
             employeeId: empId,
             descriptor: serverEntry.face_embedding,
             updatedAt: serverTs,
             modelVersion: serverEntry.face_model_version ?? undefined,
           })
+        } else {
+          console.log(`[FaceSync] skip download: ${empId.slice(0, 8)} (local newer or equal, serverTs=${new Date(serverTs).toISOString()}, localTs=${new Date(local.updatedAt).toISOString()})`)
         }
       }
 
@@ -69,7 +74,6 @@ export function useFaceSync() {
           console.warn(`[FaceSync] ${empId} は UUID でないためスキップ`)
           continue
         }
-        // 今回ダウンロードした or サーバーに承認済みあり → 再アップロードしない
         if (downloadedIds.has(empId)) continue
         if (serverMap.has(empId)) continue
 
