@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load, detect } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect, NORM_W, NORM_H } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = useCamera()
 
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
@@ -147,8 +147,8 @@ function drawOverlay(result: any) {
   const face = result.face?.[0]
   if (!face?.box) return
 
-  const sx = w / (video.videoWidth || w)
-  const sy = h / (video.videoHeight || h)
+  const sx = w / NORM_W
+  const sy = h / NORM_H
   const [bx, by, bw, bh] = face.box
   const color = allChecksPassed.value ? '#22c55e' : '#ef4444'
 

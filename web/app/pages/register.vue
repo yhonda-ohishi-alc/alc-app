@@ -2,6 +2,7 @@
 import type { ApiEmployee } from '~/types'
 import { initApi, getEmployees, getEmployeeByNfcId, uploadFacePhoto, updateEmployeeFace } from '~/utils/api'
 import { getFaceDescriptor } from '~/utils/face-db'
+import { FACE_MODEL_VERSION } from '~/composables/useFaceDetection'
 
 const config = useRuntimeConfig()
 const { isAuthenticated, isLoading, accessToken, deviceTenantId, refreshAccessToken } = useAuth()
@@ -59,7 +60,7 @@ async function onRegistered(snapshot: Blob | null) {
         url = await uploadFacePhoto(snapshot)
       }
       const embedding = await getFaceDescriptor(selectedEmployee.value.id)
-      await updateEmployeeFace(selectedEmployee.value.id, url, embedding ?? undefined)
+      await updateEmployeeFace(selectedEmployee.value.id, url, embedding ?? undefined, FACE_MODEL_VERSION)
     } catch (e) {
       uploadError.value = e instanceof Error ? e.message : '顔写真アップロードエラー'
     } finally {

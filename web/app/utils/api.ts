@@ -206,12 +206,14 @@ export async function updateEmployeeFace(
   id: string,
   facePhotoUrl?: string,
   faceEmbedding?: number[],
+  faceModelVersion?: string,
 ): Promise<ApiEmployee> {
   return request<ApiEmployee>(`/api/employees/${id}/face`, {
     method: 'PUT',
     body: JSON.stringify({
       face_photo_url: facePhotoUrl ?? null,
       face_embedding: faceEmbedding ?? null,
+      face_model_version: faceModelVersion ?? null,
     }),
   })
 }

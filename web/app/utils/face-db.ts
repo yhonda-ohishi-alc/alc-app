@@ -22,6 +22,7 @@ export async function saveFaceDescriptor(
   employeeId: string,
   descriptor: number[],
   approvalStatus: FaceRecord['approvalStatus'] = 'approved',
+  modelVersion?: string,
 ): Promise<void> {
   const db = await openDb()
   const record: FaceRecord = {
@@ -29,6 +30,7 @@ export async function saveFaceDescriptor(
     descriptor: new Float32Array(descriptor),
     updatedAt: Date.now(),
     approvalStatus,
+    modelVersion,
   }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -38,8 +40,8 @@ export async function saveFaceDescriptor(
   })
 }
 
-/** approved のみ返す (顔認証用) */
-export async function getFaceDescriptor(employeeId: string): Promise<number[] | null> {
+/** approved かつ現行モデルバージョンのみ返す (顔認証用) */
+export async function getFaceDescriptor(employeeId: string, currentModelVersion?: string): Promise<number[] | null> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
@@ -48,6 +50,7 @@ export async function getFaceDescriptor(employeeId: string): Promise<number[] | 
       const record = request.result as FaceRecord | undefined
       if (!record) return resolve(null)
       if (record.approvalStatus && record.approvalStatus !== 'approved') return resolve(null)
+      if (currentModelVersion && record.modelVersion && record.modelVersion !== currentModelVersion) return resolve(null)
       resolve(Array.from(record.descriptor))
     }
     request.onerror = () => reject(request.error)
@@ -68,7 +71,7 @@ export async function getRawFaceDescriptor(employeeId: string): Promise<number[]
   })
 }
 
-export async function getAllDescriptors(): Promise<{ employeeId: string; descriptor: number[] }[]> {
+export async function getAllDescriptors(currentModelVersion?: string): Promise<{ employeeId: string; descriptor: number[] }[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
@@ -77,6 +80,7 @@ export async function getAllDescriptors(): Promise<{ employeeId: string; descrip
       const records = request.result as FaceRecord[]
       resolve(records
         .filter(r => !r.approvalStatus || r.approvalStatus === 'approved')
+        .filter(r => !currentModelVersion || !r.modelVersion || r.modelVersion === currentModelVersion)
         .map(r => ({
           employeeId: r.employeeId,
           descriptor: Array.from(r.descriptor),
@@ -99,7 +103,7 @@ export async function getAllDescriptorsWithTimestamp(): Promise<FaceRecord[]> {
 }
 
 export async function bulkSaveFaceDescriptors(
-  records: { employeeId: string; descriptor: number[]; updatedAt: number }[],
+  records: { employeeId: string; descriptor: number[]; updatedAt: number; modelVersion?: string }[],
 ): Promise<void> {
   if (records.length === 0) return
   const db = await openDb()
@@ -112,6 +116,7 @@ export async function bulkSaveFaceDescriptors(
         descriptor: new Float32Array(r.descriptor),
         updatedAt: r.updatedAt,
         approvalStatus: 'approved',
+        modelVersion: r.modelVersion,
       } satisfies FaceRecord)
     }
     tx.oncomplete = () => resolve()

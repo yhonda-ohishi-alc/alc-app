@@ -112,6 +112,7 @@ export interface FaceRecord {
   descriptor: Float32Array
   updatedAt: number
   approvalStatus?: 'pending' | 'approved' | 'rejected'
+  modelVersion?: string
 }
 
 /** API: 測定結果 (サーバー側) */
@@ -160,6 +161,7 @@ export interface FaceDataEntry {
   id: string
   face_embedding: number[]
   face_embedding_at: string
+  face_model_version?: string
 }
 
 /** API: 測定結果一覧レスポンス */

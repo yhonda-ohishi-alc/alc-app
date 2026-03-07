@@ -1,5 +1,6 @@
 import type { FaceAuthResult } from '~/types'
 import { saveFaceDescriptor, getFaceDescriptor, getAllDescriptors } from '~/utils/face-db'
+import { FACE_MODEL_VERSION } from '~/composables/useFaceDetection'
 
 const THRESHOLD = 0.55
 
@@ -15,7 +16,7 @@ export function useFaceAuth() {
     const embedding = result.face[0].embedding
     if (!embedding || embedding.length === 0) return false
 
-    await saveFaceDescriptor(employeeId, embedding, 'pending')
+    await saveFaceDescriptor(employeeId, embedding, 'pending', FACE_MODEL_VERSION)
     return true
   }
 
@@ -23,7 +24,7 @@ export function useFaceAuth() {
     await load()
     const human = getHuman()!
 
-    const stored = await getFaceDescriptor(employeeId)
+    const stored = await getFaceDescriptor(employeeId, FACE_MODEL_VERSION)
     if (!stored) {
       return { verified: false, similarity: 0 }
     }
@@ -50,7 +51,7 @@ export function useFaceAuth() {
     await load()
     const human = getHuman()!
 
-    const all = await getAllDescriptors()
+    const all = await getAllDescriptors(FACE_MODEL_VERSION)
     if (all.length === 0) return null
 
     const result = await detect(video)

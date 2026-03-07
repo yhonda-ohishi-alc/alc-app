@@ -4,6 +4,7 @@ import {
   bulkSaveFaceDescriptors,
 } from '~/utils/face-db'
 import { getFaceData, updateEmployeeFace } from '~/utils/api'
+import { FACE_MODEL_VERSION } from '~/composables/useFaceDetection'
 
 // モジュールスコープ: 複数コンポーネントから同時に sync() が走らないようにする
 let globalSyncing = false
@@ -40,7 +41,7 @@ export function useFaceSync() {
       }
 
       // 3. Remote → Local: サーバーが新しければダウンロード
-      const toDownload: { employeeId: string; descriptor: number[]; updatedAt: number }[] = []
+      const toDownload: { employeeId: string; descriptor: number[]; updatedAt: number; modelVersion?: string }[] = []
       for (const [empId, serverEntry] of serverMap) {
         const serverTs = new Date(serverEntry.face_embedding_at).getTime()
         const local = localMap.get(empId)
@@ -50,6 +51,7 @@ export function useFaceSync() {
             employeeId: empId,
             descriptor: serverEntry.face_embedding,
             updatedAt: serverTs,
+            modelVersion: serverEntry.face_model_version ?? undefined,
           })
         }
       }
@@ -72,7 +74,7 @@ export function useFaceSync() {
         if (serverMap.has(empId)) continue
 
         try {
-          await updateEmployeeFace(empId, undefined, localEntry.descriptor)
+          await updateEmployeeFace(empId, undefined, localEntry.descriptor, FACE_MODEL_VERSION)
           console.log(`[FaceSync] ${empId} アップロード (新規)`)
         } catch (e) {
           console.error(`[FaceSync] ${empId} のアップロード失敗:`, e)

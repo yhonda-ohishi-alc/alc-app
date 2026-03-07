@@ -2,6 +2,7 @@
 import type { ApiEmployee } from '~/types'
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, uploadFacePhoto, updateEmployeeFace, approveFace, rejectFace } from '~/utils/api'
 import { getRawFaceDescriptor, getAllDescriptorsWithTimestamp } from '~/utils/face-db'
+import { FACE_MODEL_VERSION } from '~/composables/useFaceDetection'
 
 interface TenkoCallDriver {
   id: number
@@ -138,7 +139,7 @@ async function onFaceRegistered(snapshot: Blob | null) {
       url = await uploadFacePhoto(snapshot)
     }
     const embedding = await getRawFaceDescriptor(faceRegEmployee.value.id)
-    await updateEmployeeFace(faceRegEmployee.value.id, url, embedding ?? undefined)
+    await updateEmployeeFace(faceRegEmployee.value.id, url, embedding ?? undefined, FACE_MODEL_VERSION)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '顔写真アップロードエラー'
   } finally {
@@ -170,7 +171,7 @@ async function handleSyncToServer(emp: ApiEmployee) {
       error.value = 'ローカルに顔データが見つかりません'
       return
     }
-    await updateEmployeeFace(emp.id, undefined, embedding)
+    await updateEmployeeFace(emp.id, undefined, embedding, FACE_MODEL_VERSION)
     await fetchData()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '同期エラー'
