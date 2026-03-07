@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { claimDeviceRegistration, checkDeviceRegistrationStatus } from '~/utils/api'
+import { initApi, claimDeviceRegistration, checkDeviceRegistrationStatus } from '~/utils/api'
 import type { DeviceFlowType } from '~/types'
 
+const config = useRuntimeConfig()
 const route = useRoute()
-const { activateDevice } = useAuth()
+const { activateDevice, accessToken, deviceTenantId, refreshAccessToken } = useAuth()
+
+// API 初期化 (device-claim は index.vue を経由しない場合がある)
+initApi(
+  config.public.apiBase as string,
+  () => accessToken.value,
+  () => deviceTenantId.value,
+  () => refreshAccessToken(),
+)
 
 const token = computed(() => route.query.token as string || '')
 const phoneNumber = ref('')
@@ -77,7 +86,19 @@ function stopPolling() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 登録情報を事前取得し、管理者が設定したデバイス名をプリセット
+  if (token.value) {
+    try {
+      console.log('[device-claim] fetching status for token:', token.value.slice(0, 8))
+      const info = await checkDeviceRegistrationStatus(token.value)
+      console.log('[device-claim] status response:', JSON.stringify(info))
+      if (info.device_name) deviceName.value = info.device_name
+    } catch (e) {
+      console.error('[device-claim] status fetch failed:', e)
+    }
+  }
+
   const android = (window as any).Android
   if (android?.getPhoneNumber) {
     try {

@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { checkDeviceRegistrationStatus, approveDeviceByCode } from '~/utils/api'
+import { initApi, checkDeviceRegistrationStatus, approveDeviceByCode } from '~/utils/api'
 
+const config = useRuntimeConfig()
 const route = useRoute()
-const { isAuthenticated, loginWithGoogleRedirect, user } = useAuth()
+const { isAuthenticated, loginWithGoogleRedirect, user, accessToken, deviceTenantId, refreshAccessToken } = useAuth()
+
+initApi(
+  config.public.apiBase as string,
+  () => accessToken.value,
+  () => deviceTenantId.value,
+  () => refreshAccessToken(),
+)
 
 const code = computed(() => route.query.code as string || '')
 const status = ref<'loading' | 'approving' | 'approved' | 'error'>('loading')

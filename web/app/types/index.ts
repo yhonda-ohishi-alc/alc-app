@@ -743,6 +743,7 @@ export interface RegistrationStatusResponse {
   status: RegistrationStatus
   device_id?: string
   tenant_id?: string
+  device_name?: string
 }
 
 export interface ClaimRegistrationRequest {

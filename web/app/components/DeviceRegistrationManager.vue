@@ -12,6 +12,15 @@ const pending = ref<DeviceRegistrationRequest[]>([])
 const loading = ref(false)
 const error = ref('')
 
+// 承認待ち = qr_permanent のみ (url は即承認なので除外)
+const pendingForApproval = computed(() =>
+  pending.value.filter(r => r.flow_type === 'qr_permanent')
+)
+// QR一時/URL生成済み未使用トークン
+const pendingUrlTokens = computed(() =>
+  pending.value.filter(r => r.flow_type === 'url')
+)
+
 // URL トークン生成
 const urlTokenName = ref('')
 const generatedUrl = ref('')
@@ -21,6 +30,7 @@ const urlCopied = ref(false)
 const qrTempName = ref('')
 const qrTempCode = ref('')
 const qrTempDataUrl = ref('')
+const qrTempDeviceName = ref('')
 
 // QR永久生成
 const permanentQrName = ref('')
@@ -63,6 +73,7 @@ async function handleCreateQrTemp() {
   try {
     const res = await createDeviceUrlToken(qrTempName.value || undefined)
     qrTempCode.value = res.registration_code
+    qrTempDeviceName.value = qrTempName.value || ''
     const claimUrl = `${window.location.origin}${res.registration_url}`
     qrTempDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
     qrTempName.value = ''
@@ -152,6 +163,19 @@ async function handleDelete(id: string) {
   }
 }
 
+// 生成済みトークンのQR再表示用
+const tokenQrUrls = ref<Record<string, string>>({})
+
+async function toggleQr(code: string) {
+  if (tokenQrUrls.value[code]) {
+    delete tokenQrUrls.value[code]
+    tokenQrUrls.value = { ...tokenQrUrls.value }
+    return
+  }
+  const claimUrl = `${window.location.origin}/device-claim?token=${code}`
+  tokenQrUrls.value[code] = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
+}
+
 onMounted(() => refresh())
 </script>
 
@@ -210,8 +234,41 @@ onMounted(() => refresh())
         </button>
       </div>
       <div v-if="qrTempDataUrl" class="mt-3 text-center space-y-2">
+        <p v-if="qrTempDeviceName" class="text-sm font-medium text-gray-800">{{ qrTempDeviceName }}</p>
         <img :src="qrTempDataUrl" alt="QR Temp" class="mx-auto" />
         <p class="text-xs text-gray-500">Code: {{ qrTempCode.slice(0, 8) }}...</p>
+      </div>
+
+      <!-- 生成済みQR (未登録) -->
+      <div v-if="pendingUrlTokens.length > 0" class="mt-4 border-t pt-3">
+        <h4 class="text-xs font-medium text-gray-600 mb-2">生成済み・未登録 ({{ pendingUrlTokens.length }})</h4>
+        <div class="space-y-2">
+          <div v-for="req in pendingUrlTokens" :key="req.id" class="bg-gray-50 rounded-lg p-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-gray-800">{{ req.device_name || '(名前なし)' }}</p>
+                <p class="text-xs text-gray-400">{{ req.created_at?.slice(0, 16) }}</p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-white"
+                  @click="toggleQr(req.registration_code)"
+                >
+                  {{ tokenQrUrls[req.registration_code] ? 'QR非表示' : 'QR表示' }}
+                </button>
+                <button
+                  class="px-3 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
+                  @click="handleReject(req.id)"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+            <div v-if="tokenQrUrls[req.registration_code]" class="mt-2 text-center">
+              <img :src="tokenQrUrls[req.registration_code]" alt="QR" class="mx-auto" />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -245,17 +302,17 @@ onMounted(() => refresh())
       </div>
     </div>
 
-    <!-- 承認待ちリクエスト -->
-    <div v-if="pending.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <!-- 承認待ちリクエスト (QR永久のみ) -->
+    <div v-if="pendingForApproval.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="px-4 py-3 bg-yellow-50 border-b">
-        <h3 class="text-sm font-medium text-yellow-800">承認待ち ({{ pending.length }})</h3>
+        <h3 class="text-sm font-medium text-yellow-800">承認待ち ({{ pendingForApproval.length }})</h3>
       </div>
       <div class="divide-y divide-gray-100">
-        <div v-for="req in pending" :key="req.id" class="px-4 py-3 flex items-center justify-between">
+        <div v-for="req in pendingForApproval" :key="req.id" class="px-4 py-3 flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-800">{{ req.device_name || '(名前なし)' }}</p>
             <p class="text-xs text-gray-500">
-              {{ req.flow_type === 'qr_permanent' ? 'QR永久' : req.flow_type === 'url' ? 'URL' : 'QR一時' }}
+              QR永久
               <span v-if="req.phone_number"> / {{ req.phone_number }}</span>
             </p>
           </div>
