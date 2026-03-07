@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import type { TimePunchWithEmployee } from '~/types'
-import { punchTimecard, listTimePunches } from '~/utils/api'
+import type { ApiEmployee, TimePunchWithEmployee } from '~/types'
+import { punchTimecard, listTimePunches, getEmployees } from '~/utils/api'
 
 const nfc = useNfcWebSocket()
 const { deviceId } = useAuth()
+const employees = ref<ApiEmployee[]>([])
+const employeeMap = computed(() => {
+  const map: Record<string, string> = {}
+  for (const e of employees.value) map[e.id] = e.name
+  return map
+})
 
 type Step = 'waiting' | 'processing' | 'done' | 'error'
 const step = ref<Step>('waiting')
@@ -11,49 +17,37 @@ const result = ref<TimePunchWithEmployee | null>(null)
 const errorMsg = ref('')
 let resetTimer: ReturnType<typeof setTimeout> | null = null
 
-const recentPunchers = ref<{ name: string; time: string }[]>([])
+const recentPunches = ref<{ name: string; time: string }[]>([])
 
 const isLargeScreen = ref(false)
 function updateScreenSize() {
   isLargeScreen.value = window.innerWidth >= 1024
 }
 
-const displayedPunchers = computed(() => {
-  const limit = isLargeScreen.value ? 10 : 5
-  return recentPunchers.value.slice(0, limit)
+const displayedPunches = computed(() => {
+  const limit = isLargeScreen.value ? 20 : 10
+  return recentPunches.value.slice(0, limit)
 })
-
-function updateRecentPunchers(name: string, punchedAt: string) {
-  const time = formatTime(punchedAt)
-  const idx = recentPunchers.value.findIndex(p => p.name === name)
-  if (idx >= 0) recentPunchers.value.splice(idx, 1)
-  recentPunchers.value.unshift({ name, time })
-  if (recentPunchers.value.length > 10) recentPunchers.value.length = 10
-}
 
 onMounted(async () => {
   updateScreenSize()
   window.addEventListener('resize', updateScreenSize)
 
-  // Fetch today's punches
+  // Fetch employees + today's punches
   try {
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-    const res = await listTimePunches({ date_from: todayStart, per_page: 20 })
-    // Group by employee_name, keep latest per person
-    const byName = new Map<string, string>()
-    for (const p of res.punches) {
-      const name = p.employee_name
-      if (!name) continue
-      if (!byName.has(name)) byName.set(name, p.punched_at)
-    }
-    // punches are DESC, so first occurrence per name is latest
-    recentPunchers.value = Array.from(byName.entries()).map(([name, punchedAt]) => ({
-      name,
-      time: formatTime(punchedAt),
+    const [emps, res] = await Promise.all([
+      getEmployees(),
+      listTimePunches({ date_from: todayStart, per_page: 200 }),
+    ])
+    employees.value = emps
+    recentPunches.value = res.punches.map(p => ({
+      name: employeeMap.value[p.employee_id] || p.employee_name || p.employee_id.slice(0, 8),
+      time: formatTime(p.punched_at),
     }))
   }
-  catch { /* ignore fetch errors on mount */ }
+  catch (e) { console.error('[TimePunchKiosk] Failed to load today punches:', e) }
 
   nfc.connect()
   nfc.onRead(async (event) => {
@@ -66,7 +60,10 @@ onMounted(async () => {
       const res = await punchTimecard(cardId, deviceId.value)
       result.value = res
       step.value = 'done'
-      updateRecentPunchers(res.employee_name, res.punch.punched_at)
+      recentPunches.value.unshift({
+        name: res.employee_name,
+        time: formatTime(res.punch.punched_at),
+      })
       scheduleReset()
     }
     catch (e: any) {
@@ -106,7 +103,7 @@ function formatTime(iso: string): string {
     <template v-if="step === 'waiting'">
       <div
         class="flex w-full max-w-2xl gap-8"
-        :class="recentPunchers.length ? 'flex-col lg:flex-row items-center lg:items-start' : 'flex-col items-center'"
+        :class="recentPunches.length ? 'flex-col lg:flex-row items-center lg:items-start' : 'flex-col items-center'"
       >
         <!-- 左: カードアイコン + 説明 -->
         <div class="text-center flex-shrink-0">
@@ -125,7 +122,7 @@ function formatTime(iso: string): string {
         </div>
 
         <!-- 右: 最近の打刻 -->
-        <div v-if="recentPunchers.length" class="w-full lg:max-w-sm">
+        <div v-if="recentPunches.length" class="w-full lg:max-w-sm">
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-gray-200 text-gray-400">
@@ -135,8 +132,8 @@ function formatTime(iso: string): string {
             </thead>
             <tbody>
               <tr
-                v-for="(p, i) in displayedPunchers"
-                :key="p.name"
+                v-for="(p, i) in displayedPunches"
+                :key="i"
                 class="border-b border-gray-100"
                 :class="i === 0 ? 'bg-blue-50 text-gray-800 font-medium' : 'text-gray-600'"
               >
