@@ -77,6 +77,22 @@ function stopPolling() {
   }
 }
 
+onMounted(() => {
+  const android = (window as any).Android
+  if (android?.getPhoneNumber) {
+    try {
+      const number = android.getPhoneNumber()
+      if (number) phoneNumber.value = number
+    } catch (e) {
+      console.warn('Failed to get phone number:', e)
+    }
+    // パーミッション許可後にAndroid側からイベントが来る
+    window.addEventListener('phone-number', ((e: CustomEvent) => {
+      if (e.detail && !phoneNumber.value) phoneNumber.value = e.detail
+    }) as EventListener)
+  }
+})
+
 onUnmounted(() => stopPolling())
 </script>
 
