@@ -20,6 +20,8 @@ const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
 const waitingConfirm = ref(false)
 const blinkDetected = ref(false)
+const eyeBaselineSamples = ref<number[]>([])
+const eyeBaseline = ref<number | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const lastGoodEmbedding = ref<number[] | null>(null)
 const frameCount = ref(0)
@@ -135,19 +137,35 @@ function updateChecks(result: any) {
   checks.facingCenter.status = facing?.gesture === 'facing center'
   checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
 
-  // 最初の10フレームはmeshが不安定なのでまばたき判定をスキップ
-  if (frameCount.value > 10) {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    const blinkThreshold = isMobile ? 0.21 : 0.26
-    const mesh = face.mesh
-    if (mesh && mesh.length > 450) {
-      const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
-      const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
-      if (openL < blinkThreshold || openR < blinkThreshold) blinkDetected.value = true
+  // まばたき検出: 相対変化方式 (照明条件に自動適応)
+  // frameCountではなくサンプル数ベースで制御 (顔未検出フレームに影響されない)
+  const mesh = face.mesh
+  if (mesh && mesh.length > 450) {
+    const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
+    const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
+    const avgOpen = (openL + openR) / 2
+
+    if (eyeBaselineSamples.value.length < 4) {
+      // 顔検出された最初の4フレーム蓄積 (先頭1捨て + 残り3の最大値でベースライン)
+      eyeBaselineSamples.value.push(avgOpen)
+      if (eyeBaselineSamples.value.length >= 4) {
+        const valid = eyeBaselineSamples.value.slice(1)
+        eyeBaseline.value = Math.max(...valid)
+      }
+    } else if (!blinkDetected.value && eyeBaseline.value !== null) {
+      // ベースライン確定後: 相対低下で検出
+      const ratio = avgOpen / eyeBaseline.value
+      if (ratio < 0.88) blinkDetected.value = true
     }
   }
   checks.blink.status = blinkDetected.value
-  checks.blink.val = blinkDetected.value ? '検出済' : '待機中'
+  if (blinkDetected.value) {
+    checks.blink.val = '検出済'
+  } else if (eyeBaselineSamples.value.length < 4) {
+    checks.blink.val = '準備中'
+  } else {
+    checks.blink.val = '瞬きしてください'
+  }
 
   const hasDesc = (face.embedding?.length ?? 0) > 0
   checks.descriptor.status = hasDesc
