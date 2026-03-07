@@ -20,8 +20,6 @@ const { isAuthenticated } = useAuth()
 const { setManagerId } = useManagerAuth()
 const { sync: faceSync, isSyncing: isFaceSyncing } = useFaceSync()
 
-onUnmounted(() => setManagerId(null))
-
 // 認証状態
 const authState = ref<'pending' | 'authenticated' | 'denied'>('pending')
 

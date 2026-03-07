@@ -39,20 +39,18 @@ const driverSubTab = ref<DriverSubTab>(
 
 // URL クエリ同期
 watch(activeRole, (role) => {
-  const query: Record<string, string> = {}
-  if (role !== 'driver') query.role = role
-  navigateTo({ path: '/', query }, { replace: true })
+  const params = new URLSearchParams()
+  if (role !== 'driver') params.set('role', role)
+  const qs = params.toString()
+  window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
 })
 
 watch(driverSubTab, (tab) => {
   if (activeRole.value !== 'driver') return
-  const query: Record<string, string> = {}
-  if (tab === 'tenko') query.tab = 'tenko'
-  else if (tab === 'demo') query.tab = 'demo'
-  else if (tab === 'remote') query.tab = 'remote'
-  else if (tab === 'timecard') query.tab = 'timecard'
-  else if (tab === 'device') query.tab = 'device'
-  navigateTo({ path: '/', query }, { replace: true })
+  const params = new URLSearchParams()
+  if (tab !== 'normal') params.set('tab', tab)
+  const qs = params.toString()
+  window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
 })
 
 const roleLabels: Record<RoleTab, string> = {
