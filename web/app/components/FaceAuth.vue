@@ -22,6 +22,7 @@ const waitingConfirm = ref(false)
 const blinkDetected = ref(false)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const lastGoodEmbedding = ref<number[] | null>(null)
+const frameCount = ref(0)
 
 // --- Face detection checks ---
 const checks = reactive({
@@ -67,6 +68,7 @@ function startLoop() {
           eyeInfo = ` eyeL=${openL.toFixed(3)} eyeR=${openR.toFixed(3)}`
         }
         console.log(`[FaceAuth] ${(performance.now() - t0).toFixed(0)}ms [${gestureNames}]${eyeInfo}`)
+        frameCount.value++
         updateChecks(result)
         drawOverlay(result)
         // Save the embedding from the check-passing frame
@@ -133,12 +135,16 @@ function updateChecks(result: any) {
   checks.facingCenter.status = facing?.gesture === 'facing center'
   checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
 
-  // ライブラリの閾値(0.2)が厳しすぎるため、meshから直接判定(閾値0.26)
-  const mesh = face.mesh
-  if (mesh && mesh.length > 450) {
-    const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
-    const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
-    if (openL < 0.26 || openR < 0.26) blinkDetected.value = true
+  // 最初の10フレームはmeshが不安定なのでまばたき判定をスキップ
+  if (frameCount.value > 10) {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    const blinkThreshold = isMobile ? 0.21 : 0.26
+    const mesh = face.mesh
+    if (mesh && mesh.length > 450) {
+      const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
+      const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
+      if (openL < blinkThreshold || openR < blinkThreshold) blinkDetected.value = true
+    }
   }
   checks.blink.status = blinkDetected.value
   checks.blink.val = blinkDetected.value ? '検出済' : '待機中'
@@ -240,14 +246,26 @@ function confirmRegister() {
   doAuth()
 }
 
+function resetChecks() {
+  blinkDetected.value = false
+  lastGoodEmbedding.value = null
+  frameCount.value = 0
+  for (const key of Object.keys(checks) as (keyof typeof checks)[]) {
+    checks[key].status = false
+    checks[key].val = ''
+  }
+}
+
 function retryConfirm() {
   waitingConfirm.value = false
+  resetChecks()
   startLoop()
 }
 
 function retry() {
   status.value = 'checking'
   waitingConfirm.value = false
+  resetChecks()
   startLoop()
 }
 
