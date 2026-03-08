@@ -291,6 +291,14 @@ function retry() {
   startLoop()
 }
 
+function fullReset() {
+  status.value = 'checking'
+  waitingConfirm.value = false
+  eyeBaseline.value = null
+  resetChecks()
+  startLoop()
+}
+
 async function retryCamera() {
   cameraError.value = null
   try {
@@ -319,6 +327,17 @@ async function retryCamera() {
         ref="overlayCanvas"
         class="absolute inset-0 w-full h-full pointer-events-none"
       />
+      <!-- Reload button (top-right) -->
+      <button
+        v-if="!cameraError"
+        class="absolute top-2 right-2 z-10 bg-white/30 hover:bg-white/50 rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+        @click="fullReset"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2v6h-6" /><path d="M21 8A9 9 0 0 0 5.64 5.64L3 8" /><path d="M3 22v-6h6" /><path d="M3 16a9 9 0 0 0 15.36 2.36L21 16" />
+        </svg>
+      </button>
+
       <div
         v-if="cameraError"
         class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white gap-3 p-4"
