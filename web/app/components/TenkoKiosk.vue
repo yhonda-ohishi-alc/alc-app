@@ -324,6 +324,7 @@ onUnmounted(() => {
             {{ isPreOperation ? '業務前' : '業務後' }}
           </span>
         </p>
+        <p v-if="employeeName && step !== 'nfc'" class="mt-1 text-sm font-medium text-gray-600">{{ employeeName }}</p>
 
         <!-- ステップインジケーター -->
         <div v-if="step !== 'nfc'" :class="['flex items-center mt-3 flex-wrap gap-y-1', landscape ? 'justify-center gap-x-0.5' : 'justify-center']">
@@ -377,7 +378,7 @@ onUnmounted(() => {
 
       <!-- Step 1: NFC / 手動入力 -->
       <div v-else-if="step === 'nfc'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">乗務員ID</h2>
 
           <div v-if="!useManualInput && !isDemoMode">
@@ -422,7 +423,7 @@ onUnmounted(() => {
 
       <!-- Step 2: スケジュール選択 -->
       <div v-else-if="step === 'schedule_select'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">点呼予定選択</h2>
           <TenkoScheduleSelect
             :schedules="pendingSchedules"
@@ -434,9 +435,8 @@ onUnmounted(() => {
 
       <!-- Step 3: 顔認証 -->
       <div v-else-if="step === 'face_auth'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">顔認証</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <FaceAuth
             :employee-id="employeeId"
             mode="verify"
@@ -456,9 +456,8 @@ onUnmounted(() => {
 
       <!-- Step 4: アルコール測定 -->
       <div v-else-if="step === 'alcohol'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <AlcMeasurement
             :employee-id="employeeId"
             :demo-mode="isDemoMode"
@@ -469,9 +468,8 @@ onUnmounted(() => {
 
       <!-- Step 5: 体温・血圧 (業務前のみ) -->
       <div v-else-if="step === 'medical'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-2">体温・血圧</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
 
           <!-- タブ切替 (デモ時は BLE タブ非表示) -->
           <div v-if="!isDemoMode" class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
@@ -506,27 +504,24 @@ onUnmounted(() => {
 
       <!-- Step 6: 自己申告 (業務前のみ) -->
       <div v-else-if="step === 'self_declaration'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">自己申告</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <TenkoSelfDeclaration @submit="onSelfDeclarationSubmit" />
         </div>
       </div>
 
       <!-- Step 7: 日常点検 (業務前のみ) -->
       <div v-else-if="step === 'daily_inspection'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">日常点検</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <TenkoDailyInspection @submit="onDailyInspectionSubmit" />
         </div>
       </div>
 
       <!-- Step 8: 指示確認 -->
       <div v-else-if="step === 'instruction'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">指示事項</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <TenkoInstruction
             :instruction="selectedSchedule?.instruction ?? null"
             :manager-name="selectedSchedule?.responsible_manager_name ?? ''"
@@ -537,16 +532,15 @@ onUnmounted(() => {
 
       <!-- Step 9: 運行報告 (業務後のみ) -->
       <div v-else-if="step === 'report'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">運行報告</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
           <TenkoOperationReport @submit="onReportSubmit" />
         </div>
       </div>
 
       <!-- 完了 -->
       <div v-else-if="step === 'completed' && session" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <TenkoCompleted
             :session="session"
             :employee-name="employeeName"
@@ -569,7 +563,7 @@ onUnmounted(() => {
 
       <!-- 中断 (安全判定失敗 etc.) -->
       <div v-else-if="step === 'interrupted'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <TenkoInterrupted
             :employee-name="employeeName"
             :safety-judgment="safetyJudgment"
@@ -580,7 +574,7 @@ onUnmounted(() => {
 
       <!-- キャンセル (アルコール検知 / 日常点検NG) -->
       <div v-else-if="step === 'cancelled'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
           <TenkoInterrupted
             :employee-name="employeeName"
             :reason="session?.cancel_reason ?? '点呼がキャンセルされました'"

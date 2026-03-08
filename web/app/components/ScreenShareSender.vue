@@ -22,7 +22,7 @@ const statusLabel = computed(() => {
 
 <template>
   <!-- 固定フローティング UI: タブ切り替えに関係なく常時表示 -->
-  <div class="fixed bottom-14 right-4 z-50">
+  <div class="fixed top-1 right-14 z-50">
     <!-- 共有中: コンパクトパネル -->
     <div
       v-if="isSharing"

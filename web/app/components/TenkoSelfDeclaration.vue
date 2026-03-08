@@ -39,19 +39,21 @@ function getModel(key: 'illness' | 'fatigue' | 'sleepDeprivation') {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-2">
     <p class="text-sm text-gray-500">以下の項目について回答してください</p>
 
     <div
       v-for="item in items"
       :key="item.key"
-      class="rounded-xl border border-gray-200 p-4"
+      class="flex items-center gap-3 py-2 border-b border-gray-100"
     >
-      <p class="font-medium text-gray-700 text-sm">{{ item.label }}</p>
-      <p class="text-xs text-gray-400 mt-0.5">{{ item.description }}</p>
-      <div class="flex gap-3 mt-3">
+      <div class="flex-1 min-w-0">
+        <span class="font-medium text-gray-700 text-sm">{{ item.label }}</span>
+        <span class="text-xs text-gray-400 ml-1">{{ item.description }}</span>
+      </div>
+      <div class="flex gap-2 shrink-0">
         <button
-          class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
+          class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
           :class="getModel(item.key).value === false
             ? 'bg-green-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -60,7 +62,7 @@ function getModel(key: 'illness' | 'fatigue' | 'sleepDeprivation') {
           いいえ
         </button>
         <button
-          class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
+          class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
           :class="getModel(item.key).value === true
             ? 'bg-red-600 text-white'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
@@ -73,7 +75,7 @@ function getModel(key: 'illness' | 'fatigue' | 'sleepDeprivation') {
 
     <button
       :disabled="!allAnswered"
-      class="w-full py-3 rounded-xl font-medium transition-colors"
+      class="w-full py-2.5 rounded-xl font-medium transition-colors mt-2"
       :class="allAnswered
         ? 'bg-blue-600 text-white hover:bg-blue-700'
         : 'bg-gray-200 text-gray-400 cursor-not-allowed'"

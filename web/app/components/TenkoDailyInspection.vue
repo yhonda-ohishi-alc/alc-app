@@ -58,7 +58,7 @@ function handleSubmit() {
   <div class="flex flex-col gap-3">
     <p class="text-sm text-gray-500">各項目を点検し、結果を選択してください</p>
 
-    <div class="grid grid-cols-1 gap-2">
+    <div class="grid grid-cols-2 gap-2">
       <div
         v-for="item in items"
         :key="item.key"
