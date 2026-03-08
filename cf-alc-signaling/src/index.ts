@@ -42,7 +42,9 @@ export default {
     if (url.pathname === '/watch-rooms') {
       const id = env.ROOM_REGISTRY.idFromName('registry');
       const stub = env.ROOM_REGISTRY.get(id);
-      return stub.fetch(new Request('https://registry/watch', request));
+      // Forward device_id query param to DO
+      const deviceId = url.searchParams.get('device_id') || '';
+      return stub.fetch(new Request(`https://registry/watch?device_id=${encodeURIComponent(deviceId)}`, request));
     }
 
     // WebSocket endpoint: /room/:roomId
