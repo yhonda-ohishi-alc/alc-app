@@ -15,6 +15,7 @@ import type {
   // Device Registration
   Device, DeviceRegistrationRequest, CreateRegistrationResponse, RegistrationStatusResponse,
   ClaimRegistrationRequest, ClaimRegistrationResponse, CreateTokenResponse, CreatePermanentQrResponse, ApproveDeviceResponse,
+  DeviceSettingsResponse, CallSchedule,
 } from '~/types'
 
 let apiBase = ''
@@ -672,4 +673,19 @@ export async function enableDevice(id: string): Promise<void> {
 
 export async function deleteDevice(id: string): Promise<void> {
   return request<void>(`/api/devices/${id}`, { method: 'DELETE' })
+}
+
+export async function getDeviceSettings(deviceId: string): Promise<DeviceSettingsResponse> {
+  return request<DeviceSettingsResponse>(`/api/devices/settings/${deviceId}`)
+}
+
+export async function updateDeviceCallSettings(
+  id: string,
+  callEnabled: boolean,
+  callSchedule?: CallSchedule | null,
+): Promise<void> {
+  return request<void>(`/api/devices/${id}/call-settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ call_enabled: callEnabled, call_schedule: callSchedule }),
+  })
 }

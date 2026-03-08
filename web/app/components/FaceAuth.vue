@@ -19,6 +19,7 @@ const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = u
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
 const waitingConfirm = ref(false)
+const cameraError = ref<string | null>(null)
 const blinkDetected = ref(false)
 const eyeBaselineSamples = ref<number[]>([])
 const eyeBaseline = ref<number | null>(null)
@@ -44,9 +45,14 @@ const allChecksPassed = computed(() =>
 let loopTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(async () => {
-  await start()
-  load()
-  startLoop()
+  try {
+    await start()
+    load()
+    startLoop()
+  } catch (e) {
+    cameraError.value = e instanceof Error ? e.message : 'カメラの起動に失敗しました'
+    console.error('[FaceAuth] camera start failed:', e)
+  }
 })
 
 onUnmounted(() => {
@@ -287,6 +293,17 @@ function retry() {
   startLoop()
 }
 
+async function retryCamera() {
+  cameraError.value = null
+  try {
+    await start()
+    load()
+    startLoop()
+  } catch (e) {
+    cameraError.value = e instanceof Error ? e.message : 'カメラの起動に失敗しました'
+  }
+}
+
 </script>
 
 <template>
@@ -305,7 +322,19 @@ function retry() {
         class="absolute inset-0 w-full h-full pointer-events-none"
       />
       <div
-        v-if="!isCameraActive"
+        v-if="cameraError"
+        class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white gap-3 p-4"
+      >
+        <span class="text-red-400 text-sm text-center">{{ cameraError }}</span>
+        <button
+          class="px-4 py-2 bg-blue-600 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+          @click="retryCamera"
+        >
+          再試行
+        </button>
+      </div>
+      <div
+        v-else-if="!isCameraActive"
         class="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-400"
       >
         <span>カメラ待機中...</span>

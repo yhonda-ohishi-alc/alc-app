@@ -275,7 +275,14 @@ export function useAuth() {
     if (devId) deviceId.value = devId
     if (typeof window !== 'undefined') {
       localStorage.setItem(DEVICE_TENANT_KEY, tenantId)
-      if (devId) localStorage.setItem(DEVICE_ID_KEY, devId)
+      if (devId) {
+        localStorage.setItem(DEVICE_ID_KEY, devId)
+        // Android SharedPreferences にも保存 (アプリ起動時の自動接続判断用)
+        const android = (window as any).Android
+        if (android?.setDeviceId) {
+          android.setDeviceId(devId)
+        }
+      }
     }
   }
 
@@ -286,6 +293,10 @@ export function useAuth() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(DEVICE_TENANT_KEY)
       localStorage.removeItem(DEVICE_ID_KEY)
+      const android = (window as any).Android
+      if (android?.setDeviceId) {
+        android.setDeviceId('')
+      }
     }
   }
 

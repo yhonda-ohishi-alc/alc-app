@@ -62,6 +62,28 @@ export class RoomRegistry extends DurableObject {
       return new Response(null, { status: 204 });
     }
 
+    // PUT /schedule/:deviceId → 外部からスケジュール更新
+    const scheduleMatch = url.pathname.match(/^\/schedule\/([^/]+)$/);
+    if (request.method === 'PUT' && scheduleMatch) {
+      const deviceId = scheduleMatch[1];
+      try {
+        const body = await request.json<CallSchedule>();
+        const schedule: CallSchedule = {
+          enabled: !!body.enabled,
+          startHour: body.startHour ?? 8,
+          startMin: body.startMin ?? 0,
+          endHour: body.endHour ?? 17,
+          endMin: body.endMin ?? 0,
+          days: Array.isArray(body.days) ? body.days : [1, 2, 3, 4, 5],
+        };
+        await this.ctx.storage.put(`schedule:${deviceId}`, schedule);
+        console.log(`Schedule updated via HTTP for ${deviceId}: ${JSON.stringify(schedule)}`);
+        return new Response(null, { status: 204 });
+      } catch {
+        return new Response('Invalid JSON', { status: 400 });
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   }
 

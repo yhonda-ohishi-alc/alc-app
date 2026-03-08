@@ -28,25 +28,6 @@ const modalEmployeeName = ref('')
 const modalIdInput = ref('')
 const modalIdError = ref<string | null>(null)
 
-// Android着信通知
-const isAndroid = typeof (window as any).Android !== 'undefined'
-const callNotifyEnabled = ref(isAndroid ? (window as any).Android.isCallEnabled() : false)
-const wsConnected = ref(isAndroid ? (window as any).Android.isCallConnected?.() ?? false : false)
-
-function toggleCallNotify() {
-  callNotifyEnabled.value = !callNotifyEnabled.value
-  if (isAndroid) {
-    ;(window as any).Android.setCallEnabled(callNotifyEnabled.value)
-  }
-}
-
-// WebSocket接続状態の変更をリッスン
-if (isAndroid) {
-  window.addEventListener('ws-connection-changed', ((e: CustomEvent) => {
-    wsConnected.value = e.detail.connected
-  }) as EventListener)
-}
-
 // HTTP用: wss://→https:// または ws://→http://
 const signalingHttpUrl = (config.public.signalingUrl as string).replace(/^wss/, 'https').replace(/^ws:/, 'http:')
 // WebSocket用: https://→wss:// または http://→ws://
@@ -222,31 +203,14 @@ onUnmounted(() => {
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-bold text-gray-800">遠隔点呼モニター</h2>
-      <div class="flex items-center gap-2">
-        <button
-          v-if="isAndroid"
-          class="text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
-          :class="callNotifyEnabled
-            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
-          @click="toggleCallNotify"
-        >
-          {{ callNotifyEnabled ? '着信通知 ON' : '着信通知 OFF' }}
-          <span v-if="callNotifyEnabled" class="ml-1" :class="wsConnected ? 'text-green-600' : 'text-orange-500'">
-            {{ wsConnected ? '(接続中)' : '(切断)' }}
-          </span>
-        </button>
-        <button
-          class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-          :disabled="isLoading"
-          @click="loadActiveRooms"
-        >
-          更新
-        </button>
-      </div>
+      <button
+        class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+        :disabled="isLoading"
+        @click="loadActiveRooms"
+      >
+        更新
+      </button>
     </div>
-
-    <CallScheduleSettings v-if="isAndroid" />
 
     <div v-if="loadError" class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
       {{ loadError }}

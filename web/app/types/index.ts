@@ -712,6 +712,15 @@ export type DeviceFlowType = 'qr_temp' | 'qr_permanent' | 'url'
 export type DeviceStatus = 'active' | 'disabled'
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected' | 'expired'
 
+export interface CallSchedule {
+  enabled: boolean
+  startHour: number
+  startMin: number
+  endHour: number
+  endMin: number
+  days: number[]
+}
+
 export interface Device {
   id: string
   tenant_id: string
@@ -723,8 +732,16 @@ export interface Device {
   approved_by?: string
   approved_at?: string
   last_seen_at?: string
+  call_enabled: boolean
+  call_schedule?: CallSchedule | null
   created_at: string
   updated_at: string
+}
+
+export interface DeviceSettingsResponse {
+  call_enabled: boolean
+  call_schedule?: CallSchedule | null
+  status: string
 }
 
 export interface DeviceRegistrationRequest {

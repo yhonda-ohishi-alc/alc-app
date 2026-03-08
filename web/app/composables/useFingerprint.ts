@@ -1,14 +1,14 @@
 const STORAGE_KEY = 'fingerprint_device_employees'
 
 interface AndroidBridge {
-  getDeviceId(): string
+  getAndroidId(): string
   isFingerprintAvailable(): boolean
   requestFingerprint(): void
 }
 
 function getAndroid(): AndroidBridge | null {
   const w = window as any
-  if (typeof w.Android?.getDeviceId === 'function') return w.Android
+  if (typeof w.Android?.getAndroidId === 'function') return w.Android
   return null
 }
 
@@ -18,7 +18,7 @@ function getAuthorizedEmployees(): Set<string> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return new Set()
     const map: Record<string, string[]> = JSON.parse(raw)
-    const deviceId = getAndroid()?.getDeviceId()
+    const deviceId = getAndroid()?.getAndroidId()
     if (!deviceId) return new Set()
     return new Set(map[deviceId] ?? [])
   } catch {
@@ -29,7 +29,7 @@ function getAuthorizedEmployees(): Set<string> {
 function saveAuthorizedEmployee(employeeId: string) {
   const android = getAndroid()
   if (!android) return
-  const deviceId = android.getDeviceId()
+  const deviceId = android.getAndroidId()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const map: Record<string, string[]> = raw ? JSON.parse(raw) : {}
@@ -44,7 +44,7 @@ export function useFingerprint() {
   const isAndroidApp = computed(() => !!getAndroid())
   const isFingerprintAvailable = computed(() => getAndroid()?.isFingerprintAvailable() ?? false)
 
-  const deviceId = computed(() => getAndroid()?.getDeviceId() ?? null)
+  const deviceId = computed(() => getAndroid()?.getAndroidId() ?? null)
 
   /** この社員がこの端末で顔認証済みか（指紋認証を許可してよいか） */
   function isEmployeeAuthorized(employeeId: string): boolean {

@@ -29,6 +29,35 @@ export default {
       });
     }
 
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
+
+    // PUT /device-schedule/:deviceId → update schedule in RoomRegistry DO
+    const scheduleMatch = url.pathname.match(/^\/device-schedule\/([^/]+)$/);
+    if (request.method === 'PUT' && scheduleMatch) {
+      const deviceId = scheduleMatch[1];
+      const id = env.ROOM_REGISTRY.idFromName('registry');
+      const stub = env.ROOM_REGISTRY.get(id);
+      await stub.fetch(new Request(`https://registry/schedule/${deviceId}`, {
+        method: 'PUT',
+        body: await request.text(),
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      return new Response(null, {
+        status: 204,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
     // DELETE /active-rooms/:roomId → manually remove stale room
     const delRoomMatch = url.pathname.match(/^\/active-rooms\/([a-zA-Z0-9_-]+)$/);
     if (request.method === 'DELETE' && delRoomMatch) {

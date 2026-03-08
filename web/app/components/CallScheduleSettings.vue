@@ -1,35 +1,23 @@
 <script setup lang="ts">
-const STORAGE_KEY = 'call_schedule'
+import type { CallSchedule } from '~/types'
 
 const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
-interface CallSchedule {
-  enabled: boolean
-  startHour: number
-  startMin: number
-  endHour: number
-  endMin: number
-  days: number[] // 0=日, 1=月, ..., 6=土
-}
+const props = defineProps<{
+  modelValue: CallSchedule
+}>()
 
-const defaultSchedule: CallSchedule = {
-  enabled: false,
-  startHour: 8,
-  startMin: 0,
-  endHour: 17,
-  endMin: 0,
-  days: [1, 2, 3, 4, 5],
-}
+const emit = defineEmits<{
+  'update:modelValue': [value: CallSchedule]
+}>()
 
-const schedule = ref<CallSchedule>(loadSchedule())
+const schedule = computed(() => props.modelValue)
 
 const startTime = computed({
   get: () => `${String(schedule.value.startHour).padStart(2, '0')}:${String(schedule.value.startMin).padStart(2, '0')}`,
   set: (v: string) => {
     const [h, m] = v.split(':').map(Number)
-    schedule.value.startHour = h
-    schedule.value.startMin = m
-    save()
+    emit('update:modelValue', { ...schedule.value, startHour: h, startMin: m })
   },
 })
 
@@ -37,57 +25,28 @@ const endTime = computed({
   get: () => `${String(schedule.value.endHour).padStart(2, '0')}:${String(schedule.value.endMin).padStart(2, '0')}`,
   set: (v: string) => {
     const [h, m] = v.split(':').map(Number)
-    schedule.value.endHour = h
-    schedule.value.endMin = m
-    save()
+    emit('update:modelValue', { ...schedule.value, endHour: h, endMin: m })
   },
 })
 
-function loadSchedule(): CallSchedule {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...defaultSchedule, ...JSON.parse(raw) }
-  } catch { /* ignore */ }
-  return { ...defaultSchedule }
-}
-
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(schedule.value))
-  sendToAndroid()
-}
-
 function toggleEnabled() {
-  schedule.value.enabled = !schedule.value.enabled
-  save()
+  emit('update:modelValue', { ...schedule.value, enabled: !schedule.value.enabled })
 }
 
 function toggleDay(day: number) {
-  const idx = schedule.value.days.indexOf(day)
+  const days = [...schedule.value.days]
+  const idx = days.indexOf(day)
   if (idx >= 0) {
-    schedule.value.days.splice(idx, 1)
+    days.splice(idx, 1)
   } else {
-    schedule.value.days.push(day)
+    days.push(day)
   }
-  save()
+  emit('update:modelValue', { ...schedule.value, days })
 }
-
-function sendToAndroid() {
-  const android = (window as any).Android
-  if (android?.setCallSchedule) {
-    android.setCallSchedule(JSON.stringify(schedule.value))
-  }
-}
-
-/** 外部から現在のスケジュールを取得 */
-function getSchedule(): CallSchedule {
-  return schedule.value
-}
-
-defineExpose({ getSchedule })
 </script>
 
 <template>
-  <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-3">
+  <div class="space-y-3">
     <div class="flex items-center justify-between">
       <span class="text-sm font-medium text-gray-700">着信スケジュール</span>
       <button

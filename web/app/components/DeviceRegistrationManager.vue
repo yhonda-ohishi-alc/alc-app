@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import QRCode from 'qrcode'
-import type { Device, DeviceRegistrationRequest } from '~/types'
+import type { Device, DeviceRegistrationRequest, CallSchedule } from '~/types'
 import {
   listDevices, listPendingDeviceRegistrations,
   createDeviceUrlToken, createPermanentQr,
   approveDevice, rejectDevice, disableDevice, enableDevice, deleteDevice,
+  updateDeviceCallSettings,
 } from '~/utils/api'
 
 const devices = ref<Device[]>([])
@@ -174,6 +175,77 @@ async function toggleQr(code: string) {
   }
   const claimUrl = `${window.location.origin}/device-claim?token=${code}`
   tokenQrUrls.value[code] = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
+}
+
+// 着信設定
+const expandedCallSettings = ref<Set<string>>(new Set())
+const editingSchedules = ref<Record<string, CallSchedule>>({})
+const signalingUrl = useRuntimeConfig().public.signalingUrl as string || ''
+
+const defaultSchedule: CallSchedule = {
+  enabled: false,
+  startHour: 8,
+  startMin: 0,
+  endHour: 17,
+  endMin: 0,
+  days: [1, 2, 3, 4, 5],
+}
+
+function toggleCallSettings(dev: Device) {
+  const id = dev.id
+  if (expandedCallSettings.value.has(id)) {
+    expandedCallSettings.value.delete(id)
+    expandedCallSettings.value = new Set(expandedCallSettings.value)
+  } else {
+    editingSchedules.value[id] = dev.call_schedule
+      ? { ...dev.call_schedule }
+      : { ...defaultSchedule }
+    expandedCallSettings.value.add(id)
+    expandedCallSettings.value = new Set(expandedCallSettings.value)
+  }
+}
+
+function updateScheduleForDevice(deviceId: string, schedule: CallSchedule) {
+  editingSchedules.value[deviceId] = schedule
+}
+
+async function toggleCallEnabled(dev: Device) {
+  const newEnabled = !dev.call_enabled
+  try {
+    await updateDeviceCallSettings(dev.id, newEnabled, dev.call_schedule)
+    // DOにも通知
+    await syncScheduleToDO(dev.id, newEnabled ? (dev.call_schedule || defaultSchedule) : { ...defaultSchedule, enabled: false })
+    await refresh()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '着信設定の更新に失敗しました'
+  }
+}
+
+async function saveCallSchedule(dev: Device) {
+  const schedule = editingSchedules.value[dev.id]
+  if (!schedule) return
+  try {
+    await updateDeviceCallSettings(dev.id, dev.call_enabled, schedule)
+    // DOにも通知
+    await syncScheduleToDO(dev.id, schedule)
+    await refresh()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'スケジュール保存に失敗しました'
+  }
+}
+
+async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
+  if (!signalingUrl) return
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    await fetch(`${url}/device-schedule/${deviceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(schedule),
+    })
+  } catch {
+    // DO通知失敗は致命的でない (次回接続時にRoomWatcherが同期)
+  }
 }
 
 onMounted(() => refresh())
@@ -357,6 +429,23 @@ onMounted(() => refresh())
               </div>
             </div>
             <div class="flex gap-1">
+              <!-- 着信ON/OFF -->
+              <button
+                class="px-2 py-1 text-xs rounded"
+                :class="dev.call_enabled
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                @click="toggleCallEnabled(dev)"
+              >
+                着信{{ dev.call_enabled ? 'ON' : 'OFF' }}
+              </button>
+              <!-- スケジュール展開 -->
+              <button
+                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                @click="toggleCallSettings(dev)"
+              >
+                {{ expandedCallSettings.has(dev.id) ? '閉じる' : '時間帯' }}
+              </button>
               <button
                 v-if="dev.status === 'active'"
                 class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
@@ -378,6 +467,19 @@ onMounted(() => refresh())
                 削除
               </button>
             </div>
+          </div>
+          <!-- 着信スケジュール設定 (展開時) -->
+          <div v-if="expandedCallSettings.has(dev.id)" class="mt-3 ml-4 border-l-2 border-blue-200 pl-3">
+            <CallScheduleSettings
+              :model-value="editingSchedules[dev.id] || defaultSchedule"
+              @update:model-value="updateScheduleForDevice(dev.id, $event)"
+            />
+            <button
+              class="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+              @click="saveCallSchedule(dev)"
+            >
+              保存
+            </button>
           </div>
         </div>
       </div>
