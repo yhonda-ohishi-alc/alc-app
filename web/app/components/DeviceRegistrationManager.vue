@@ -5,7 +5,7 @@ import {
   listDevices, listPendingDeviceRegistrations,
   createDeviceUrlToken, createPermanentQr,
   approveDevice, rejectDevice, disableDevice, enableDevice, deleteDevice,
-  updateDeviceCallSettings,
+  updateDeviceCallSettings, testFcmNotification,
 } from '~/utils/api'
 
 const devices = ref<Device[]>([])
@@ -298,6 +298,28 @@ async function testCall(deviceId: string) {
   }
 }
 
+// FCM テスト
+const fcmTestingDevice = ref<string | null>(null)
+const fcmTestResult = ref<{ deviceId: string; success: boolean; message: string } | null>(null)
+
+async function testFcm(deviceId: string) {
+  fcmTestingDevice.value = deviceId
+  fcmTestResult.value = null
+  try {
+    const res = await testFcmNotification(deviceId)
+    if (res.success) {
+      fcmTestResult.value = { deviceId, success: true, message: 'FCM テスト送信しました' }
+    } else {
+      fcmTestResult.value = { deviceId, success: false, message: res.error || 'FCM 送信に失敗しました' }
+    }
+  } catch {
+    fcmTestResult.value = { deviceId, success: false, message: 'FCM 送信に失敗しました' }
+  } finally {
+    fcmTestingDevice.value = null
+    setTimeout(() => { fcmTestResult.value = null }, 3000)
+  }
+}
+
 async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
@@ -515,6 +537,10 @@ onMounted(() => refresh())
                   {{ dev.device_type }}
                   <span v-if="dev.phone_number"> / {{ dev.phone_number }}</span>
                   <span class="ml-1 text-gray-400">{{ dev.created_at?.slice(0, 10) }}</span>
+                  <span
+                    class="ml-1 px-1 rounded text-[10px] font-medium"
+                    :class="dev.fcm_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
+                  >{{ dev.fcm_token ? 'FCM' : 'FCM未' }}</span>
                 </p>
               </div>
             </div>
@@ -539,6 +565,18 @@ onMounted(() => refresh())
                 @click="testCall(dev.id)"
               >
                 {{ testingDevice === dev.id ? '送信中...' : 'テスト' }}
+              </button>
+              <!-- FCMテスト -->
+              <button
+                v-if="dev.fcm_token"
+                class="px-2 py-1 text-xs rounded"
+                :class="fcmTestingDevice === dev.id
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-green-100 text-green-700 hover:bg-green-200'"
+                :disabled="fcmTestingDevice === dev.id"
+                @click="testFcm(dev.id)"
+              >
+                {{ fcmTestingDevice === dev.id ? '送信中...' : 'FCM' }}
               </button>
               <!-- スケジュール展開 -->
               <button
@@ -576,6 +614,14 @@ onMounted(() => refresh())
             :class="testResult.success ? 'text-green-600' : 'text-red-600'"
           >
             {{ testResult.message }}
+          </p>
+          <!-- FCMテスト結果 -->
+          <p
+            v-if="fcmTestResult && fcmTestResult.deviceId === dev.id"
+            class="mt-1 text-xs"
+            :class="fcmTestResult.success ? 'text-green-600' : 'text-red-600'"
+          >
+            {{ fcmTestResult.message }}
           </p>
           <!-- 着信スケジュール設定 (展開時) -->
           <div v-if="expandedCallSettings.has(dev.id)" class="mt-3 ml-4 border-l-2 border-blue-200 pl-3">

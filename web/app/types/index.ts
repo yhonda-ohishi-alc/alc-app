@@ -734,6 +734,7 @@ export interface Device {
   last_seen_at?: string
   call_enabled: boolean
   call_schedule?: CallSchedule | null
+  fcm_token?: string | null
   created_at: string
   updated_at: string
 }

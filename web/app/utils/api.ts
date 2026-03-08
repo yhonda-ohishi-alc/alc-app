@@ -689,3 +689,9 @@ export async function updateDeviceCallSettings(
     body: JSON.stringify({ call_enabled: callEnabled, call_schedule: callSchedule }),
   })
 }
+
+export async function testFcmNotification(id: string): Promise<{ success: boolean; error?: string }> {
+  return request<{ success: boolean; error?: string }>(`/api/devices/${id}/test-fcm`, {
+    method: 'POST',
+  })
+}
