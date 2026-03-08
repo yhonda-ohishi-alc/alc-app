@@ -97,7 +97,7 @@ function startLoop() {
       }
       catch { /* ignore frame errors */ }
     }
-    loopTimer = setTimeout(loop, 50)
+    loopTimer = setTimeout(loop, 0)
   }
   loop()
 }
@@ -152,10 +152,10 @@ function updateChecks(result: any) {
     const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
     const avgOpen = (openL + openR) / 2
 
-    if (eyeBaselineSamples.value.length < 4) {
-      // 顔検出された最初の4フレーム蓄積 (先頭1捨て + 残り3の最大値でベースライン)
+    if (eyeBaselineSamples.value.length < 3) {
+      // 顔検出された最初の3フレーム蓄積 (先頭1捨て + 残り2の最大値でベースライン)
       eyeBaselineSamples.value.push(avgOpen)
-      if (eyeBaselineSamples.value.length >= 4) {
+      if (eyeBaselineSamples.value.length >= 3) {
         const valid = eyeBaselineSamples.value.slice(1)
         eyeBaseline.value = Math.max(...valid)
       }
@@ -168,7 +168,7 @@ function updateChecks(result: any) {
   checks.blink.status = blinkDetected.value
   if (blinkDetected.value) {
     checks.blink.val = '検出済'
-  } else if (eyeBaselineSamples.value.length < 4) {
+  } else if (eyeBaselineSamples.value.length < 3) {
     checks.blink.val = '準備中'
   } else {
     checks.blink.val = '瞬きしてください'
