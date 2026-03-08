@@ -485,34 +485,44 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </div>
       </div>
 
-      <!-- Step 2: 顔認証 -->
-      <div v-if="step === 'face_auth'" class="flex flex-col gap-4">
-        <div class="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-gray-700 mb-4">顔認証</h2>
-          <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
-          <FaceAuth
-            :employee-id="employeeId"
-            mode="verify"
-            :demo-mode="isDemoMode"
-            @result="onFaceAuthResult"
-          />
-          <button
-            v-if="canUseFingerprint"
-            class="w-full mt-4 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-            @click="requestFingerprint"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v3c0 1.66-1.34 3-3 3"/><path d="M8 15V11c0-2.21 1.79-4 4-4s4 1.79 4 4"/><path d="M2 11c0-5.52 4.48-10 10-10s10 4.48 10 10v3c0 3.31-2.69 6-6 6"/><path d="M12 11v4c0 .55-.45 1-1 1"/><path d="M6 11c0-3.31 2.69-6 6-6s6 2.69 6 6v2"/></svg>
-            指紋認証で本人確認
-          </button>
-          <button
-            v-if="!isDemoMode"
-            class="w-full mt-4 px-4 py-2 border border-gray-300 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition-colors"
-            @click="onFaceAuthSkip"
-          >
-            顔認証をスキップ
-          </button>
+      <!-- Step 2: 顔認証 (フルスクリーンオーバーレイ) -->
+      <Teleport to="body">
+        <div v-if="step === 'face_auth'" class="fixed inset-0 z-50 bg-black flex flex-col">
+          <!-- ヘッダー -->
+          <div class="flex items-center justify-between px-4 py-2 bg-black/80 text-white">
+            <div>
+              <h2 class="text-base font-semibold">顔認証</h2>
+              <p class="text-xs text-gray-300">{{ employeeName }}</p>
+            </div>
+            <button
+              v-if="!isDemoMode"
+              class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+              @click="onFaceAuthSkip"
+            >
+              スキップ
+            </button>
+          </div>
+          <!-- カメラ (残り全体を使用) -->
+          <div class="flex-1 min-h-0">
+            <FaceAuth
+              :employee-id="employeeId"
+              mode="verify"
+              :demo-mode="isDemoMode"
+              @result="onFaceAuthResult"
+            />
+          </div>
+          <!-- フッター: 指紋認証 -->
+          <div v-if="canUseFingerprint" class="px-4 py-3 bg-black/80">
+            <button
+              class="w-full px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              @click="requestFingerprint"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v3c0 1.66-1.34 3-3 3"/><path d="M8 15V11c0-2.21 1.79-4 4-4s4 1.79 4 4"/><path d="M2 11c0-5.52 4.48-10 10-10s10 4.48 10 10v3c0 3.31-2.69 6-6 6"/><path d="M12 11v4c0 .55-.45 1-1 1"/><path d="M6 11c0-3.31 2.69-6 6-6s6 2.69 6 6v2"/></svg>
+              指紋認証で本人確認
+            </button>
+          </div>
         </div>
-      </div>
+      </Teleport>
 
       <!-- Step 3: 体温・血圧 (BLE Medical Gateway / 手動入力) -->
       <div v-if="step === 'medical'" class="flex flex-col gap-4">

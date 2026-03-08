@@ -307,9 +307,9 @@ async function retryCamera() {
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-4">
+  <div class="flex flex-col items-center gap-4 h-full">
     <!-- Camera + canvas overlay -->
-    <div class="relative overflow-hidden rounded-2xl bg-black w-full aspect-square max-h-[70vh]">
+    <div class="relative overflow-hidden rounded-2xl bg-black w-full flex-1 min-h-0">
       <video
         ref="videoRef"
         autoplay
@@ -348,18 +348,17 @@ async function retryCamera() {
       >
         モデル読み込み中...
       </div>
-    </div>
-
-    <!-- Check status grid -->
-    <div class="w-full grid grid-cols-2 gap-1.5">
-      <div
-        v-for="(check, key) in checks"
-        :key="key"
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-        :class="check.status ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-      >
-        <span class="text-sm leading-none">{{ check.status ? '\u2713' : '\u2717' }}</span>
-        <span class="truncate">{{ check.label }}: {{ check.val || (check.status ? 'ok' : 'fail') }}</span>
+      <!-- Check status grid (overlay on camera) -->
+      <div class="absolute bottom-0 inset-x-0 bg-black/60 p-2 grid grid-cols-2 gap-1 pointer-events-none">
+        <div
+          v-for="(check, key) in checks"
+          :key="key"
+          class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+          :class="check.status ? 'text-green-400' : 'text-red-400'"
+        >
+          <span class="text-xs leading-none">{{ check.status ? '✓' : '✗' }}</span>
+          <span class="truncate">{{ check.label }}: {{ check.val || (check.status ? 'ok' : 'fail') }}</span>
+        </div>
       </div>
     </div>
 
