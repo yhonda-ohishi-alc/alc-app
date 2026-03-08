@@ -53,6 +53,14 @@ export class RoomRegistry extends DurableObject {
       return new Response(null, { status: 204 });
     }
 
+    // POST /rooms/:roomId/answered → broadcast that room was answered
+    const answeredMatch = url.pathname.match(/^\/rooms\/([^/]+)\/answered$/);
+    if (request.method === 'POST' && answeredMatch) {
+      const roomId = answeredMatch[1];
+      await this.broadcastRoomAnswered(roomId);
+      return new Response(null, { status: 204 });
+    }
+
     // DELETE /rooms/:roomId → unregister room
     const delMatch = url.pathname.match(/^\/rooms\/([^/]+)$/);
     if (request.method === 'DELETE' && delMatch) {
@@ -236,6 +244,10 @@ export class RoomRegistry extends DurableObject {
     if (typeof message !== 'string') return;
     try {
       const data = JSON.parse(message);
+      if (data.type === 'call_answered' && data.roomId) {
+        await this.broadcastRoomAnswered(data.roomId);
+        return;
+      }
       if (data.type === 'set_schedule') {
         const deviceId = this.getDeviceId(ws);
         const schedule: CallSchedule = {
@@ -274,6 +286,16 @@ export class RoomRegistry extends DurableObject {
     const deviceId = this.getDeviceId(ws);
     if (!deviceId) return null;
     return await this.ctx.storage.get<CallSchedule>(`schedule:${deviceId}`) ?? null;
+  }
+
+  private async broadcastRoomAnswered(roomId: string) {
+    const msg = JSON.stringify({ type: 'room_answered', roomId });
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.send(msg);
+      } catch { /* ignore closed */ }
+    }
+    console.log(`Broadcast room_answered: ${roomId}`);
   }
 
   private async broadcastRooms() {

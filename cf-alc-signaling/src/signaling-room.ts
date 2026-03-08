@@ -46,10 +46,11 @@ export class SignalingRoom extends DurableObject<Env> {
     // Accept with role tag for Hibernatable WebSockets
     this.ctx.acceptWebSocket(pair[1], [role]);
 
-    // device が接続したら RoomRegistry に登録
+    // device が接続したら RoomRegistry に登録 + 応答通知
     if (role === 'device') {
       const roomId = this.getRoomId(request.url);
       await this.registryRequest('PUT', roomId);
+      await this.registryAnswered(roomId);
     }
 
     // Notify the other peer that a new participant joined
@@ -178,6 +179,18 @@ export class SignalingRoom extends DurableObject<Env> {
     if (cached) return cached;
     const stored = await this.ctx.storage.get<string>('roomId');
     return stored ?? null;
+  }
+
+  /** Notify RoomRegistry that a room has been answered (device connected) */
+  private async registryAnswered(roomId: string): Promise<void> {
+    if (!roomId) return;
+    try {
+      const id = this.env.ROOM_REGISTRY.idFromName('registry');
+      const stub = this.env.ROOM_REGISTRY.get(id);
+      await stub.fetch(`https://registry/rooms/${roomId}/answered`, { method: 'POST' });
+    } catch {
+      // Registry への通知失敗は無視
+    }
   }
 
   /** Call the RoomRegistry HTTP API */
