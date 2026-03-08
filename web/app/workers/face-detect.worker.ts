@@ -99,9 +99,10 @@ self.onmessage = async (e: MessageEvent) => {
     bitmap.close()
 
     // needEmbedding=false → FaceRes スキップ (推論のみスキップ、モデルはメモリに常駐)
-    const result = needEmbedding
-      ? await human.detect(canvas)
-      : await human.detect(canvas, { face: { description: { enabled: false } } })
+    // 両方とも明示的に enabled を指定 (Human.js が内部状態をマージするため)
+    const result = await human.detect(canvas, {
+      face: { description: { enabled: needEmbedding } },
+    })
 
     // メインスレッドへ転送可能な形式にシリアライズ
     const face = result.face?.map(f => ({
