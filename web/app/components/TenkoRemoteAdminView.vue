@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { FaceAuthResult, TenkoSession } from '~/types'
-import { getEmployeeByCode, getEmployees, getTenkoSession } from '~/utils/api'
+import { getEmployeeByCode, getEmployees, getTenkoSession, getDeviceSettings } from '~/utils/api'
+
+const props = defineProps<{
+  initialRoomId?: string | null
+}>()
 
 const config = useRuntimeConfig()
 const { authenticatedManagerId, setManagerId } = useManagerAuth()
@@ -263,9 +267,30 @@ function connectWatchSocket() {
   }
 }
 
-onMounted(() => {
+const { deviceId } = useAuth()
+
+onMounted(async () => {
+  // 着信通知モード: ルーム読み込みより先に管理者IDを復元 (requestCall で id_input スキップするため)
+  if (props.initialRoomId && !authenticatedManagerId.value && deviceId.value) {
+    try {
+      const settings = await getDeviceSettings(deviceId.value)
+      if (settings.last_login_employee_id) {
+        setManagerId(settings.last_login_employee_id)
+      }
+    } catch { /* best effort */ }
+  }
+
   loadActiveRooms()
   connectWatchSocket()
+})
+
+// initialRoomId 指定時、ルームが現れたら自動で requestCall
+const autoConnectTriggered = ref(false)
+watch(activeRooms, (rooms) => {
+  if (props.initialRoomId && !autoConnectTriggered.value && rooms.includes(props.initialRoomId) && !isCallActive.value && !faceAuthActive.value) {
+    autoConnectTriggered.value = true
+    requestCall(props.initialRoomId)
+  }
 })
 
 onUnmounted(() => {
@@ -380,105 +405,88 @@ onUnmounted(() => {
   <!-- 通話中全画面オーバーレイ -->
   <div
     v-if="isCallActive && selectedRoomId"
-    class="fixed inset-0 z-40 bg-gray-900 flex flex-col lg:flex-row"
+    class="fixed inset-0 z-40 bg-gray-900 flex flex-col"
   >
-    <!-- 左(PC)/上(モバイル): ビデオ -->
+    <!-- 上: ビデオエリア (PiP・ボタン含む) -->
     <div class="flex-1 relative min-h-0">
       <TenkoVideoCall
         :local-stream="adminCombinedStream"
         :remote-stream="webRtc.remoteStream.value"
         :is-peer-connected="webRtc.isPeerConnected.value"
         :is-connected="webRtc.isConnected.value"
+        :fullscreen="true"
         class="w-full h-full"
       />
-      <!-- 通話終了ボタン (ビデオ上にオーバーレイ) -->
+      <!-- 通話終了ボタン (右上) -->
       <button
-        class="absolute top-3 right-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg transition-colors"
+        class="absolute top-3 right-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg transition-colors z-10"
         @click="endCall"
       >
         通話終了
       </button>
-      <!-- 乗務員名 + ステータス (ビデオ上) -->
-      <div v-if="liveSession" class="absolute bottom-3 left-3 flex items-center gap-2">
-        <span class="text-white text-sm font-bold bg-black/50 px-2 py-1 rounded">
-          {{ liveEmployeeName || liveSession.employee_id.slice(0, 8) }}
+    </div>
+
+    <!-- 下: 点呼データテーブル -->
+    <div v-if="liveSession" class="shrink-0 bg-white">
+      <!-- ヘッダー -->
+      <div class="px-3 py-1 border-b border-gray-200 flex items-center gap-2">
+        <span class="font-bold text-sm text-gray-800">{{ liveEmployeeName || liveSession.employee_id.slice(0, 8) }}</span>
+        <span class="text-xs px-1.5 py-0.5 rounded-full" :class="liveSession.tenko_type === 'pre_operation' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'">
+          {{ liveSession.tenko_type === 'pre_operation' ? '業務前' : '業務後' }}
         </span>
         <span class="text-xs px-1.5 py-0.5 rounded-full" :class="statusColor(liveSession.status)">
           {{ statusLabel(liveSession.status) }}
         </span>
       </div>
-    </div>
-
-    <!-- 右(PC)/下(モバイル): 点呼データ -->
-    <div class="w-full lg:w-80 xl:w-96 bg-white overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-full">
-      <div v-if="!liveSession" class="flex items-center justify-center h-full text-gray-400 text-sm p-4">
-        セッションデータを取得中...
-      </div>
-
-      <div v-else>
-        <!-- ヘッダー -->
-        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 sticky top-0">
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-gray-800">{{ liveEmployeeName || liveSession.employee_id.slice(0, 8) }}</span>
-            <span class="text-xs px-1.5 py-0.5 rounded-full" :class="liveSession.tenko_type === 'pre_operation' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'">
-              {{ liveSession.tenko_type === 'pre_operation' ? '業務前' : '業務後' }}
-            </span>
-            <span class="text-xs px-1.5 py-0.5 rounded-full" :class="statusColor(liveSession.status)">
-              {{ statusLabel(liveSession.status) }}
-            </span>
+      <!-- データ項目 -->
+      <div class="divide-y divide-gray-100">
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">アルコール</span>
+          <div class="text-right">
+            <span class="text-sm font-semibold" :class="alcoholColor(liveSession.alcohol_result)">{{ alcoholLabel(liveSession.alcohol_result) }}</span>
+            <span v-if="liveSession.alcohol_value != null" class="text-xs text-gray-500 ml-1">{{ liveSession.alcohol_value }} mg/L</span>
           </div>
         </div>
-
-        <!-- データ項目 -->
-        <div class="divide-y divide-gray-100">
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">アルコール</span>
-            <div class="text-right">
-              <span class="text-sm font-semibold" :class="alcoholColor(liveSession.alcohol_result)">{{ alcoholLabel(liveSession.alcohol_result) }}</span>
-              <span v-if="liveSession.alcohol_value != null" class="text-xs text-gray-500 ml-1">{{ liveSession.alcohol_value }} mg/L</span>
-            </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">体温</span>
+          <span class="text-sm font-semibold text-gray-800">{{ liveSession.temperature != null ? `${liveSession.temperature}°C` : '-' }}</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">血圧</span>
+          <span class="text-sm font-semibold text-gray-800">{{ liveSession.systolic != null && liveSession.diastolic != null ? `${liveSession.systolic}/${liveSession.diastolic} mmHg` : '-' }}</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">脈拍</span>
+          <span class="text-sm font-semibold text-gray-800">{{ liveSession.pulse != null ? `${liveSession.pulse} bpm` : '-' }}</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">自己申告</span>
+          <div v-if="liveSession.self_declaration" class="text-right">
+            <template v-for="(val, key) in { illness: liveSession.self_declaration.illness, fatigue: liveSession.self_declaration.fatigue, sleep_deprivation: liveSession.self_declaration.sleep_deprivation }" :key="key">
+              <span v-if="val" class="inline-block ml-1 text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{{ selfDeclLabel(key) }}</span>
+            </template>
+            <span v-if="!liveSession.self_declaration.illness && !liveSession.self_declaration.fatigue && !liveSession.self_declaration.sleep_deprivation" class="text-sm text-green-700 font-semibold">異常なし</span>
           </div>
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">体温</span>
-            <span class="text-sm font-semibold text-gray-800">{{ liveSession.temperature != null ? `${liveSession.temperature}°C` : '-' }}</span>
+          <span v-else class="text-sm text-gray-400">-</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">安全判定</span>
+          <div class="text-right">
+            <span class="text-sm font-semibold" :class="safetyColor(liveSession.safety_judgment)">{{ safetyLabel(liveSession.safety_judgment) }}</span>
+            <span v-if="liveSession.safety_judgment?.failed_items?.length" class="text-xs text-red-600 ml-1">{{ liveSession.safety_judgment.failed_items.join(', ') }}</span>
           </div>
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">血圧</span>
-            <span class="text-sm font-semibold text-gray-800">{{ liveSession.systolic != null && liveSession.diastolic != null ? `${liveSession.systolic}/${liveSession.diastolic} mmHg` : '-' }}</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">日常点検</span>
+          <div v-if="liveSession.daily_inspection">
+            <span v-if="Object.values(liveSession.daily_inspection).every(v => v === 'ok' || typeof v !== 'string')" class="text-sm text-green-700 font-semibold">全項目OK</span>
+            <span v-else class="text-sm text-red-700 font-semibold">NG あり</span>
           </div>
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">脈拍</span>
-            <span class="text-sm font-semibold text-gray-800">{{ liveSession.pulse != null ? `${liveSession.pulse} bpm` : '-' }}</span>
-          </div>
-          <div class="px-4 py-3 flex justify-between items-start">
-            <span class="text-xs text-gray-400">自己申告</span>
-            <div v-if="liveSession.self_declaration" class="text-right">
-              <template v-for="(val, key) in { illness: liveSession.self_declaration.illness, fatigue: liveSession.self_declaration.fatigue, sleep_deprivation: liveSession.self_declaration.sleep_deprivation }" :key="key">
-                <span v-if="val" class="inline-block ml-1 text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{{ selfDeclLabel(key) }}</span>
-              </template>
-              <span v-if="!liveSession.self_declaration.illness && !liveSession.self_declaration.fatigue && !liveSession.self_declaration.sleep_deprivation" class="text-sm text-green-700 font-semibold">異常なし</span>
-            </div>
-            <span v-else class="text-sm text-gray-400">-</span>
-          </div>
-          <div class="px-4 py-3 flex justify-between items-start">
-            <span class="text-xs text-gray-400">安全判定</span>
-            <div class="text-right">
-              <span class="text-sm font-semibold" :class="safetyColor(liveSession.safety_judgment)">{{ safetyLabel(liveSession.safety_judgment) }}</span>
-              <div v-if="liveSession.safety_judgment?.failed_items?.length" class="text-xs text-red-600">{{ liveSession.safety_judgment.failed_items.join(', ') }}</div>
-            </div>
-          </div>
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">日常点検</span>
-            <div v-if="liveSession.daily_inspection">
-              <span v-if="Object.values(liveSession.daily_inspection).every(v => v === 'ok' || typeof v !== 'string')" class="text-sm text-green-700 font-semibold">全項目OK</span>
-              <span v-else class="text-sm text-red-700 font-semibold">NG あり</span>
-            </div>
-            <span v-else class="text-sm text-gray-400">-</span>
-          </div>
-          <div class="px-4 py-3 flex justify-between items-center">
-            <span class="text-xs text-gray-400">担当管理者</span>
-            <span class="text-sm text-gray-800">{{ liveSession.responsible_manager_name || '-' }}</span>
-          </div>
+          <span v-else class="text-sm text-gray-400">-</span>
+        </div>
+        <div class="px-3 py-1 flex justify-between items-center">
+          <span class="text-xs text-gray-500">担当管理者</span>
+          <span class="text-sm text-gray-800">{{ liveSession.responsible_manager_name || '-' }}</span>
         </div>
       </div>
     </div>

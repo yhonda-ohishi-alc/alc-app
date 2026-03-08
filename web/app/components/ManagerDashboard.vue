@@ -1,6 +1,12 @@
 <script setup lang="ts">
 type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures' | 'timecard' | 'devices'
-const activeTab = ref<TabKey>('tenko')
+
+const props = defineProps<{
+  initialTab?: string
+  initialRoomId?: string | null
+}>()
+
+const activeTab = ref<TabKey>((props.initialTab as TabKey) ?? 'tenko')
 const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 </script>
 
@@ -49,7 +55,7 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
       </div>
 
       <div v-if="activeTab === 'remote_tenko'">
-        <TenkoRemoteAdminView />
+        <TenkoRemoteAdminView :initial-room-id="initialRoomId" />
       </div>
 
       <div v-if="activeTab === 'screen_share'">

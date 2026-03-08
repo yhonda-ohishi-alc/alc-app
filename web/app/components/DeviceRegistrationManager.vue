@@ -655,6 +655,13 @@ onMounted(() => refresh())
                     :class="dev.fcm_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
                   >{{ dev.fcm_token ? 'FCM' : 'FCM未' }}</span>
                 </p>
+                <p v-if="dev.last_login_employee_name" class="text-xs text-gray-400">
+                  最終ログイン: {{ dev.last_login_employee_name }}
+                  <span
+                    v-if="dev.last_login_employee_role?.some((r: string) => r === 'manager' || r === 'admin')"
+                    class="text-green-600"
+                  >(管理者)</span>
+                </p>
               </div>
             </div>
             <div class="flex gap-1">

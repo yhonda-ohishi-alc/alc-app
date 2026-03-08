@@ -19,11 +19,16 @@ useFaceSync()
 // Android 横画面検出
 const { isAndroidLandscape } = useAndroidLandscape()
 
+// --- 着信通知からの直行モード ---
+const incomingCallMode = ref(route.query.mode === 'incoming_call')
+const incomingCallRoom = ref<string | null>((route.query.room as string) || null)
+
 // --- ロールタブ ---
 type RoleTab = 'driver' | 'manager' | 'admin'
 const roleTabOptions: RoleTab[] = ['driver', 'manager', 'admin']
 const activeRole = ref<RoleTab>(
-  roleTabOptions.includes(route.query.role as RoleTab)
+  incomingCallMode.value ? 'manager'
+  : roleTabOptions.includes(route.query.role as RoleTab)
     ? (route.query.role as RoleTab)
     : 'driver',
 )
@@ -287,7 +292,14 @@ function onRoleTabClick(role: RoleTab) {
     </template>
 
     <!-- 運行管理者タブ -->
-    <RoleAuthGate v-if="activeRole === 'manager'" :key="managerAuthKey" required-role="manager" class="flex-1 min-h-0">
+    <!-- 着信通知モード: RoleAuthGate スキップ → 直接 ManagerDashboard 表示 -->
+    <ManagerDashboard
+      v-if="activeRole === 'manager' && incomingCallMode"
+      initial-tab="remote_tenko"
+      :initial-room-id="incomingCallRoom"
+      class="flex-1 min-h-0"
+    />
+    <RoleAuthGate v-else-if="activeRole === 'manager'" :key="managerAuthKey" required-role="manager" class="flex-1 min-h-0">
       <ManagerDashboard />
     </RoleAuthGate>
 

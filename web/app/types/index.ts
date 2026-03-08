@@ -735,6 +735,9 @@ export interface Device {
   call_enabled: boolean
   call_schedule?: CallSchedule | null
   fcm_token?: string | null
+  last_login_employee_id?: string | null
+  last_login_employee_name?: string | null
+  last_login_employee_role?: string[] | null
   created_at: string
   updated_at: string
 }
@@ -743,6 +746,9 @@ export interface DeviceSettingsResponse {
   call_enabled: boolean
   call_schedule?: CallSchedule | null
   status: string
+  last_login_employee_id?: string | null
+  last_login_employee_name?: string | null
+  last_login_employee_role?: string[] | null
 }
 
 export interface DeviceRegistrationRequest {

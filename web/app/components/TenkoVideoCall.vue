@@ -4,6 +4,7 @@ const props = defineProps<{
   remoteStream: MediaStream | null
   isPeerConnected: boolean
   isConnected: boolean
+  fullscreen?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -58,9 +59,9 @@ const statusColor = computed(() => {
 
 <template>
   <!-- 遠隔点呼ビデオ通話パネル -->
-  <div class="relative bg-gray-900 rounded-xl overflow-hidden" style="aspect-ratio: 16/9; max-height: 35vh;">
+  <div class="relative bg-gray-900 overflow-hidden" :class="fullscreen ? 'h-full' : 'rounded-xl'" :style="fullscreen ? '' : 'aspect-ratio: 16/9; max-height: 35vh;'">
     <!-- 相手映像 (大) -->
-    <RemoteCamera :stream="remoteStream" />
+    <RemoteCamera :stream="remoteStream" :fullscreen="fullscreen" />
 
     <!-- 自分映像 (小・右下 PiP) -->
     <div class="absolute bottom-3 right-3 w-32 rounded-lg overflow-hidden shadow-lg border border-gray-600 bg-gray-800" style="aspect-ratio: 4/3;">

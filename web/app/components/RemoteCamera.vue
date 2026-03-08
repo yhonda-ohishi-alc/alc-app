@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{
   stream: MediaStream | null
+  fullscreen?: boolean
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -19,7 +20,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative bg-gray-900 rounded-xl overflow-hidden aspect-video">
+  <div class="relative bg-gray-900 overflow-hidden" :class="fullscreen ? 'w-full h-full' : 'rounded-xl aspect-video'">
     <video
       v-show="stream"
       ref="videoRef"

@@ -690,6 +690,18 @@ export async function updateDeviceCallSettings(
   })
 }
 
+export async function updateDeviceLastLogin(
+  deviceId: string,
+  employeeId: string,
+  employeeName: string,
+  employeeRole: string[],
+): Promise<void> {
+  return request<void>('/api/devices/update-last-login', {
+    method: 'PUT',
+    body: JSON.stringify({ device_id: deviceId, employee_id: employeeId, employee_name: employeeName, employee_role: employeeRole }),
+  })
+}
+
 export async function testFcmNotification(id: string): Promise<{ success: boolean; error?: string }> {
   return request<{ success: boolean; error?: string }>(`/api/devices/${id}/test-fcm`, {
     method: 'POST',

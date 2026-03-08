@@ -9,14 +9,14 @@
  * (/login 後は /dashboard にリダイレクトされ顔認証が完全にスキップされるため)
  */
 import type { FaceAuthResult } from '~/types'
-import { getEmployeeByNfcId, getEmployeeByCode } from '~/utils/api'
+import { getEmployeeByNfcId, getEmployeeByCode, updateDeviceLastLogin } from '~/utils/api'
 import { checkFaceApproval } from '~/utils/face-approval'
 
 const props = defineProps<{
   requiredRole: 'manager' | 'admin'
 }>()
 
-const { isAuthenticated } = useAuth()
+const { isAuthenticated, deviceId } = useAuth()
 const { setManagerId } = useManagerAuth()
 const { sync: faceSync, isSyncing: isFaceSyncing } = useFaceSync()
 
@@ -114,6 +114,15 @@ function onFaceAuthResult(result: FaceAuthResult) {
     authState.value = 'authenticated'
     if (props.requiredRole === 'manager' && authenticatedEmployee.value) {
       setManagerId(authenticatedEmployee.value.id)
+      // デバイス登録済みなら最終ログインを記録
+      if (deviceId.value) {
+        updateDeviceLastLogin(
+          deviceId.value,
+          authenticatedEmployee.value.id,
+          authenticatedEmployee.value.name,
+          authenticatedEmployee.value.role,
+        ).catch(() => {})
+      }
     }
   } else {
     errorMessage.value = '顔認証に失敗しました。もう一度お試しください。'
