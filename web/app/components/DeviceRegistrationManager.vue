@@ -214,7 +214,9 @@ async function toggleCallEnabled(dev: Device) {
   try {
     await updateDeviceCallSettings(dev.id, newEnabled, dev.call_schedule)
     // DOにも通知
-    await syncScheduleToDO(dev.id, newEnabled ? (dev.call_schedule || defaultSchedule) : { ...defaultSchedule, enabled: false })
+    await syncScheduleToDO(dev.id, newEnabled
+      ? { ...(dev.call_schedule || { startHour: 0, startMin: 0, endHour: 23, endMin: 59, days: [0, 1, 2, 3, 4, 5, 6] }), enabled: true }
+      : { ...defaultSchedule, enabled: false })
     await refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '着信設定の更新に失敗しました'
@@ -231,6 +233,35 @@ async function saveCallSchedule(dev: Device) {
     await refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'スケジュール保存に失敗しました'
+  }
+}
+
+// 着信テスト
+const testingDevice = ref<string | null>(null)
+const testResult = ref<{ deviceId: string; success: boolean; message: string } | null>(null)
+
+async function testCall(deviceId: string) {
+  if (!signalingUrl) {
+    error.value = 'シグナリングURLが設定されていません'
+    return
+  }
+  testingDevice.value = deviceId
+  testResult.value = null
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    const res = await fetch(`${url}/test-call/${deviceId}`, { method: 'POST' })
+    if (res.status === 404) {
+      testResult.value = { deviceId, success: false, message: 'デバイスが接続されていません' }
+    } else if (res.ok) {
+      testResult.value = { deviceId, success: true, message: 'テスト着信を送信しました' }
+    } else {
+      testResult.value = { deviceId, success: false, message: 'テスト着信の送信に失敗しました' }
+    }
+  } catch {
+    testResult.value = { deviceId, success: false, message: 'テスト着信の送信に失敗しました' }
+  } finally {
+    testingDevice.value = null
+    setTimeout(() => { testResult.value = null }, 3000)
   }
 }
 
@@ -439,6 +470,18 @@ onMounted(() => refresh())
               >
                 着信{{ dev.call_enabled ? 'ON' : 'OFF' }}
               </button>
+              <!-- 着信テスト -->
+              <button
+                v-if="dev.call_enabled"
+                class="px-2 py-1 text-xs rounded"
+                :class="testingDevice === dev.id
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'"
+                :disabled="testingDevice === dev.id"
+                @click="testCall(dev.id)"
+              >
+                {{ testingDevice === dev.id ? '送信中...' : 'テスト' }}
+              </button>
               <!-- スケジュール展開 -->
               <button
                 class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
@@ -468,6 +511,14 @@ onMounted(() => refresh())
               </button>
             </div>
           </div>
+          <!-- 着信テスト結果 -->
+          <p
+            v-if="testResult && testResult.deviceId === dev.id"
+            class="mt-1 text-xs"
+            :class="testResult.success ? 'text-green-600' : 'text-red-600'"
+          >
+            {{ testResult.message }}
+          </p>
           <!-- 着信スケジュール設定 (展開時) -->
           <div v-if="expandedCallSettings.has(dev.id)" class="mt-3 ml-4 border-l-2 border-blue-200 pl-3">
             <CallScheduleSettings

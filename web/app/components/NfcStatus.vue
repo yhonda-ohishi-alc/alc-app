@@ -30,6 +30,13 @@ watch(isConnected, async (connected) => {
 
 onMounted(() => {
   connect()
+  console.log('[NfcStatus] onMounted: calling setNfcGuideVisible(true)', !!(window as any).Android)
+  ;(window as any).Android?.setNfcGuideVisible?.(true)
+})
+
+onBeforeUnmount(() => {
+  console.log('[NfcStatus] onBeforeUnmount: calling setNfcGuideVisible(false)')
+  ;(window as any).Android?.setNfcGuideVisible?.(false)
 })
 
 onLicenseRead((event: NfcLicenseReadEvent) => {

@@ -35,7 +35,7 @@ export default {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         },
       });
@@ -55,6 +55,36 @@ export default {
       return new Response(null, {
         status: 204,
         headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
+    // GET /watchers → list connected watcher device_ids (debug)
+    if (request.method === 'GET' && url.pathname === '/watchers') {
+      const id = env.ROOM_REGISTRY.idFromName('registry');
+      const stub = env.ROOM_REGISTRY.get(id);
+      const res = await stub.fetch('https://registry/watchers');
+      return new Response(res.body, {
+        status: res.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    // POST /test-call/:deviceId → send test call notification to device
+    const testCallMatch = url.pathname.match(/^\/test-call\/([^/]+)$/);
+    if (request.method === 'POST' && testCallMatch) {
+      const deviceId = testCallMatch[1];
+      const id = env.ROOM_REGISTRY.idFromName('registry');
+      const stub = env.ROOM_REGISTRY.get(id);
+      const res = await stub.fetch(`https://registry/test-call/${deviceId}`, { method: 'POST' });
+      return new Response(res.body, {
+        status: res.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       });
     }
 

@@ -84,6 +84,47 @@ export class RoomRegistry extends DurableObject {
       }
     }
 
+    // GET /watchers → list connected watcher device_ids (debug)
+    if (request.method === 'GET' && url.pathname === '/watchers') {
+      const allSockets = this.ctx.getWebSockets();
+      const watchers = allSockets.map(ws => {
+        const deviceId = this.getDeviceId(ws);
+        return { deviceId: deviceId || '(no tag)' };
+      });
+      return new Response(JSON.stringify({ count: watchers.length, watchers }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // POST /test-call/:deviceId → send test call to specific device (bypass schedule)
+    const testCallMatch = url.pathname.match(/^\/test-call\/([^/]+)$/);
+    if (request.method === 'POST' && testCallMatch) {
+      const deviceId = testCallMatch[1];
+      // Find watcher WebSocket tagged with this device_id
+      const allSockets = this.ctx.getWebSockets(`device:${deviceId}`);
+      if (allSockets.length === 0) {
+        return new Response(JSON.stringify({ error: 'device_not_connected' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      // Send rooms_updated with a temporary test room (bypass shouldNotify)
+      const rooms = await this.getActiveRooms();
+      const testRoomId = `test-call-${Date.now()}`;
+      const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
+      let sent = 0;
+      for (const ws of allSockets) {
+        try {
+          ws.send(msg);
+          sent++;
+        } catch { /* ignore closed */ }
+      }
+      console.log(`Test call sent to device ${deviceId}: ${sent} watcher(s)`);
+      return new Response(JSON.stringify({ ok: true, sent }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response('Not Found', { status: 404 });
   }
 
@@ -150,7 +191,8 @@ export class RoomRegistry extends DurableObject {
 
   private async shouldNotify(ws: WebSocket): Promise<boolean> {
     const schedule = await this.getSchedule(ws);
-    if (!schedule || !schedule.enabled) return true;
+    if (!schedule) return true; // スケジュール未設定 → 通知する
+    if (!schedule.enabled) return false; // 着信OFF → 通知しない
 
     // JST = UTC+9
     const now = new Date();
