@@ -74,7 +74,7 @@ export function useFaceDetection() {
     }
   }
 
-  async function detect(video: HTMLVideoElement): Promise<any> {
+  async function detect(video: HTMLVideoElement, needEmbedding = true): Promise<any> {
     if (!worker || !isReady.value) throw new Error('Worker not loaded')
 
     // video から ImageBitmap を作成 (メインスレッドでの唯一の重い処理)
@@ -84,7 +84,7 @@ export function useFaceDetection() {
       pendingResolve = resolve
       pendingReject = reject
       // ImageBitmap は Transferable — ゼロコピーで Worker に転送
-      worker!.postMessage({ type: 'detect', bitmap }, [bitmap])
+      worker!.postMessage({ type: 'detect', bitmap, needEmbedding }, [bitmap])
     })
   }
 

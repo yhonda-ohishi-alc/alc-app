@@ -86,6 +86,7 @@ self.onmessage = async (e: MessageEvent) => {
     }
 
     const bitmap: ImageBitmap = e.data.bitmap
+    const needEmbedding: boolean = e.data.needEmbedding ?? true
     const { canvas, ctx } = getNormCanvas()
 
     // センタークロップ: 短辺に合わせて長辺を中央で切り、正方形にリサイズ
@@ -97,7 +98,10 @@ self.onmessage = async (e: MessageEvent) => {
     ctx.drawImage(bitmap, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
     bitmap.close()
 
-    const result = await human.detect(canvas)
+    // needEmbedding=false → FaceRes スキップ (推論のみスキップ、モデルはメモリに常駐)
+    const result = needEmbedding
+      ? await human.detect(canvas)
+      : await human.detect(canvas, { face: { description: { enabled: false } } })
 
     // メインスレッドへ転送可能な形式にシリアライズ
     const face = result.face?.map(f => ({

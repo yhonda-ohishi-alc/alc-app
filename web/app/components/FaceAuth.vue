@@ -67,7 +67,8 @@ function startLoop() {
     if (videoRef.value && isReady.value) {
       try {
         const t0 = performance.now()
-        const result = await detect(videoRef.value)
+        // 瞬き未検出 → lite (FaceRes スキップ、高速)、検出済 → full (embedding 取得)
+        const result = await detect(videoRef.value, blinkDetected.value)
         const gestureNames = (result.gesture ?? []).map((g: any) => g.gesture).join(', ')
         const mesh = result.face?.[0]?.mesh
         let eyeInfo = ''
@@ -152,13 +153,9 @@ function updateChecks(result: any) {
     const openR = Math.abs(mesh[145][1] - mesh[159][1]) / Math.abs(mesh[223][1] - mesh[230][1])
     const avgOpen = (openL + openR) / 2
 
-    if (eyeBaselineSamples.value.length < 3) {
-      // 顔検出された最初の3フレーム蓄積 (先頭1捨て + 残り2の最大値でベースライン)
-      eyeBaselineSamples.value.push(avgOpen)
-      if (eyeBaselineSamples.value.length >= 3) {
-        const valid = eyeBaselineSamples.value.slice(1)
-        eyeBaseline.value = Math.max(...valid)
-      }
+    if (eyeBaseline.value === null) {
+      // 最初の顔検出フレームでベースライン即確定 (1フレームで準備完了)
+      eyeBaseline.value = avgOpen
     } else if (!blinkDetected.value && eyeBaseline.value !== null) {
       // ベースライン確定後: 相対低下で検出
       const ratio = avgOpen / eyeBaseline.value
@@ -168,7 +165,7 @@ function updateChecks(result: any) {
   checks.blink.status = blinkDetected.value
   if (blinkDetected.value) {
     checks.blink.val = '検出済'
-  } else if (eyeBaselineSamples.value.length < 3) {
+  } else if (eyeBaseline.value === null) {
     checks.blink.val = '準備中'
   } else {
     checks.blink.val = '瞬きしてください'
