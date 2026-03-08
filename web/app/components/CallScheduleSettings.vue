@@ -29,10 +29,6 @@ const endTime = computed({
   },
 })
 
-function toggleEnabled() {
-  emit('update:modelValue', { ...schedule.value, enabled: !schedule.value.enabled })
-}
-
 function toggleDay(day: number) {
   const days = [...schedule.value.days]
   const idx = days.indexOf(day)
@@ -47,47 +43,34 @@ function toggleDay(day: number) {
 
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between">
-      <span class="text-sm font-medium text-gray-700">着信スケジュール</span>
-      <button
-        class="text-xs px-2.5 py-1 rounded-md font-medium transition-colors"
-        :class="schedule.enabled
-          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
-        @click="toggleEnabled"
+    <span class="text-sm font-medium text-gray-700">着信スケジュール</span>
+
+    <div class="flex items-center gap-2 text-sm">
+      <input
+        v-model="startTime"
+        type="time"
+        class="border border-gray-300 rounded px-2 py-1 text-sm"
       >
-        {{ schedule.enabled ? 'ON' : 'OFF' }}
-      </button>
+      <span class="text-gray-500">〜</span>
+      <input
+        v-model="endTime"
+        type="time"
+        class="border border-gray-300 rounded px-2 py-1 text-sm"
+      >
     </div>
 
-    <template v-if="schedule.enabled">
-      <div class="flex items-center gap-2 text-sm">
-        <input
-          v-model="startTime"
-          type="time"
-          class="border border-gray-300 rounded px-2 py-1 text-sm"
-        >
-        <span class="text-gray-500">〜</span>
-        <input
-          v-model="endTime"
-          type="time"
-          class="border border-gray-300 rounded px-2 py-1 text-sm"
-        >
-      </div>
-
-      <div class="flex gap-1">
-        <button
-          v-for="(label, idx) in DAY_LABELS"
-          :key="idx"
-          class="w-8 h-8 text-xs rounded-full font-medium transition-colors"
-          :class="schedule.days.includes(idx)
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
-          @click="toggleDay(idx)"
-        >
-          {{ label }}
-        </button>
-      </div>
-    </template>
+    <div class="flex gap-1">
+      <button
+        v-for="(label, idx) in DAY_LABELS"
+        :key="idx"
+        class="w-8 h-8 text-xs rounded-full font-medium transition-colors"
+        :class="schedule.days.includes(idx)
+          ? 'bg-blue-500 text-white'
+          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+        @click="toggleDay(idx)"
+      >
+        {{ label }}
+      </button>
+    </div>
   </div>
 </template>

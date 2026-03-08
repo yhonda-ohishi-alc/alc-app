@@ -228,8 +228,8 @@ async function saveCallSchedule(dev: Device) {
   if (!schedule) return
   try {
     await updateDeviceCallSettings(dev.id, dev.call_enabled, schedule)
-    // DOにも通知
-    await syncScheduleToDO(dev.id, schedule)
+    // DOにも通知 (enabled は dev.call_enabled を使う)
+    await syncScheduleToDO(dev.id, { ...schedule, enabled: dev.call_enabled })
     await refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'スケジュール保存に失敗しました'

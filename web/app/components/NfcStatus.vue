@@ -139,14 +139,6 @@ const statusText = computed(() => {
       <span v-if="bridgeVersion" class="text-gray-400 text-xs ml-1">(現在: v{{ bridgeVersion }})</span>
     </p>
 
-    <!-- NFC 位置確認ボタン (KYOCERA端末のみ) -->
-    <button
-      class="text-sm text-blue-600 underline hover:text-blue-800"
-      @click="(window as any).Android?.setNfcGuideVisible?.(true)"
-    >
-      NFC 読み取り位置を確認
-    </button>
-
     <!-- エラー表示 -->
     <p v-if="error" class="text-red-500 text-sm text-center">
       {{ error }}
