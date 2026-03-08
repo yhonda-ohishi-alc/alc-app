@@ -15,6 +15,16 @@ const isMuted = ref(false)
 const isCameraOff = ref(false)
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
+const isLocalPortrait = ref(false)
+
+function onLocalResize() {
+  if (localVideoRef.value) {
+    const { videoWidth, videoHeight } = localVideoRef.value
+    if (videoWidth && videoHeight) {
+      isLocalPortrait.value = videoHeight > videoWidth
+    }
+  }
+}
 
 watch(() => props.localStream, (stream) => {
   if (localVideoRef.value) {
@@ -70,8 +80,9 @@ const statusColor = computed(() => {
         autoplay
         playsinline
         muted
-        class="w-full h-full object-cover"
-        :class="{ 'opacity-0': isCameraOff }"
+        :class="['w-full h-full', isLocalPortrait ? 'object-contain' : 'object-cover', { 'opacity-0': isCameraOff }]"
+        @resize="onLocalResize"
+        @loadedmetadata="onLocalResize"
       />
       <div v-if="isCameraOff" class="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
         カメラOFF

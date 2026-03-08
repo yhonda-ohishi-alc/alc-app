@@ -5,6 +5,16 @@ const props = defineProps<{
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const isPortrait = ref(false)
+
+function onResize() {
+  if (videoRef.value) {
+    const { videoWidth, videoHeight } = videoRef.value
+    if (videoWidth && videoHeight) {
+      isPortrait.value = videoHeight > videoWidth
+    }
+  }
+}
 
 watch(() => props.stream, (stream) => {
   if (videoRef.value) {
@@ -26,7 +36,9 @@ onMounted(() => {
       ref="videoRef"
       autoplay
       playsinline
-      class="w-full h-full object-cover"
+      :class="['w-full h-full', isPortrait ? 'object-contain' : 'object-cover']"
+      @resize="onResize"
+      @loadedmetadata="onResize"
     />
     <div
       v-if="!stream"
