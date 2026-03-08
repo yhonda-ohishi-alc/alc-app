@@ -24,7 +24,9 @@ useHead({
 </template>
 
 <style>
-.android-app {
-  font-size: 24px;
+@media (min-width: 600px) {
+  .android-app {
+    font-size: 24px;
+  }
 }
 </style>
