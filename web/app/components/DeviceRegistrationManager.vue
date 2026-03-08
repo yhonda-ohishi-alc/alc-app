@@ -46,6 +46,7 @@ async function refresh() {
     const [d, p] = await Promise.all([listDevices(), listPendingDeviceRegistrations()])
     devices.value = d
     pending.value = p
+    fetchWatchers()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'データの取得に失敗しました'
   } finally {
@@ -182,6 +183,19 @@ async function toggleQr(code: string) {
 const expandedCallSettings = ref<Set<string>>(new Set())
 const editingSchedules = ref<Record<string, CallSchedule>>({})
 const signalingUrl = useRuntimeConfig().public.signalingUrl as string || ''
+const connectedDeviceIds = ref<Set<string>>(new Set())
+
+async function fetchWatchers() {
+  if (!signalingUrl) return
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    const res = await fetch(`${url}/watchers`)
+    if (res.ok) {
+      const data = await res.json() as { count: number; watchers: { deviceId: string }[] }
+      connectedDeviceIds.value = new Set(data.watchers.map(w => w.deviceId).filter(id => id !== '(no tag)'))
+    }
+  } catch { /* ignore */ }
+}
 
 const defaultSchedule: CallSchedule = {
   enabled: false,
@@ -266,6 +280,34 @@ async function testCallAll() {
     error.value = '一斉テストの送信に失敗しました'
   } finally {
     testingAll.value = false
+  }
+}
+
+// 一斉テスト (WebSocket + FCM fallback)
+const testingAllWithFcm = ref(false)
+const testAllWithFcmResults = ref<{ device_id: string; sent: boolean; blocked: boolean; via: string; reason: string }[]>([])
+
+async function testCallAllWithFcm() {
+  if (!signalingUrl) {
+    error.value = 'シグナリングURLが設定されていません'
+    return
+  }
+  testingAllWithFcm.value = true
+  testAllWithFcmResults.value = []
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    const res = await fetch(`${url}/test-call-all-with-fcm`, { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json() as { ok: boolean; results: typeof testAllWithFcmResults.value }
+      testAllWithFcmResults.value = data.results
+      setTimeout(() => { testAllWithFcmResults.value = [] }, 8000)
+    } else {
+      error.value = '一斉テスト(FCM)の送信に失敗しました'
+    }
+  } catch {
+    error.value = '一斉テスト(FCM)の送信に失敗しました'
+  } finally {
+    testingAllWithFcm.value = false
   }
 }
 
@@ -528,6 +570,16 @@ onMounted(() => refresh())
           </button>
           <button
             class="px-3 py-1 text-xs rounded"
+            :class="testingAllWithFcm
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-teal-500 text-white hover:bg-teal-600'"
+            :disabled="testingAllWithFcm"
+            @click="testCallAllWithFcm"
+          >
+            {{ testingAllWithFcm ? '送信中...' : '一斉テスト(FCM fallback)' }}
+          </button>
+          <button
+            class="px-3 py-1 text-xs rounded"
             :class="fcmTestingAll
               ? 'bg-yellow-100 text-yellow-700'
               : 'bg-purple-500 text-white hover:bg-purple-600'"
@@ -550,6 +602,20 @@ onMounted(() => refresh())
           >
             {{ devices.find(d => d.id === r.device_id)?.device_name || r.device_id.slice(0, 8) }}:
             {{ r.sent ? '送信済' : r.reason || '失敗' }}
+          </span>
+        </div>
+      </div>
+      <!-- 一斉テスト(FCM fallback)結果 -->
+      <div v-if="testAllWithFcmResults.length > 0" class="px-4 py-2 bg-teal-50 border-b">
+        <p class="text-xs font-medium text-teal-600 mb-1">一斉テスト(FCM fallback)結果</p>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="r in testAllWithFcmResults" :key="r.device_id"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs"
+            :class="r.sent ? (r.via === 'FCM' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700') : r.blocked ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'"
+          >
+            {{ devices.find(d => d.id === r.device_id)?.device_name || r.device_id.slice(0, 8) }}:
+            {{ r.sent ? `${r.via}で送信済` : r.reason || '失敗' }}
           </span>
         </div>
       </div>
@@ -580,6 +646,10 @@ onMounted(() => refresh())
                   {{ dev.device_type }}
                   <span v-if="dev.phone_number"> / {{ dev.phone_number }}</span>
                   <span class="ml-1 text-gray-400">{{ dev.created_at?.slice(0, 10) }}</span>
+                  <span
+                    class="ml-1 px-1 rounded text-[10px] font-medium"
+                    :class="connectedDeviceIds.has(dev.id) ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'"
+                  >{{ connectedDeviceIds.has(dev.id) ? 'WS接続中' : 'WS未接続' }}</span>
                   <span
                     class="ml-1 px-1 rounded text-[10px] font-medium"
                     :class="dev.fcm_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"

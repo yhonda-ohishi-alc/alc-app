@@ -170,6 +170,81 @@ export class RoomRegistry extends DurableObject<Env> {
       });
     }
 
+    // POST /test-call-all-with-fcm → WebSocket + FCM fallback (実際の着信と同じ経路)
+    if (request.method === 'POST' && url.pathname === '/test-call-all-with-fcm') {
+      const rooms = await this.getActiveRooms();
+      const testRoomId = `test-call-${Date.now()}`;
+      const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
+
+      const results: { device_id: string; sent: boolean; blocked: boolean; via: string; reason: string }[] = [];
+      const wsDeliveredDeviceIds: string[] = [];
+
+      // 1) WebSocket で送信
+      const deviceSockets = new Map<string, WebSocket[]>();
+      for (const ws of this.ctx.getWebSockets()) {
+        const deviceId = this.getDeviceId(ws);
+        if (!deviceId) continue;
+        const arr = deviceSockets.get(deviceId) || [];
+        arr.push(ws);
+        deviceSockets.set(deviceId, arr);
+      }
+
+      for (const [deviceId, sockets] of deviceSockets) {
+        const shouldSend = await this.shouldNotify(sockets[0]);
+        if (shouldSend) {
+          let sent = false;
+          for (const s of sockets) {
+            try { s.send(msg); sent = true; } catch { /* ignore closed */ }
+          }
+          if (sent) {
+            wsDeliveredDeviceIds.push(deviceId);
+            results.push({ device_id: deviceId, sent: true, blocked: false, via: 'WebSocket', reason: '' });
+          }
+        } else {
+          const reason = await this.getBlockReason(sockets[0]);
+          results.push({ device_id: deviceId, sent: false, blocked: true, via: '', reason });
+        }
+      }
+
+      // 2) FCM fallback: WebSocket で届かなかったデバイスに FCM テスト送信
+      let fcmResult: { sent?: number; errors?: number; results?: { device_id: string; device_name: string; success: boolean; error?: string }[] } = {};
+      if (this.env.BACKEND_API_URL) {
+        try {
+          const res = await fetch(`${this.env.BACKEND_API_URL}/api/devices/test-fcm-all-exclude`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(this.env.FCM_INTERNAL_SECRET
+                ? { 'X-Internal-Secret': this.env.FCM_INTERNAL_SECRET }
+                : {}),
+            },
+            body: JSON.stringify({ exclude_device_ids: wsDeliveredDeviceIds }),
+          });
+          if (res.ok) {
+            fcmResult = await res.json() as typeof fcmResult;
+            for (const r of fcmResult.results || []) {
+              results.push({
+                device_id: r.device_id,
+                sent: r.success,
+                blocked: false,
+                via: 'FCM',
+                reason: r.error || '',
+              });
+            }
+          }
+        } catch (e) {
+          console.log('FCM fallback test failed:', e);
+        }
+      }
+
+      const wsSent = wsDeliveredDeviceIds.length;
+      const fcmSent = fcmResult.sent || 0;
+      console.log(`Test call all with FCM: WS=${wsSent}, FCM=${fcmSent}, blocked=${results.filter(r => r.blocked).length}`);
+      return new Response(JSON.stringify({ ok: true, results }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // POST /test-call/:deviceId → send test call respecting schedule (verifies settings work correctly)
     const testCallMatch = url.pathname.match(/^\/test-call\/([^/]+)$/);
     if (request.method === 'POST' && testCallMatch) {
@@ -374,6 +449,26 @@ export class RoomRegistry extends DurableObject<Env> {
       console.log(`Blocked: device=${this.getDeviceId(ws)} time=${jstHour}:${jstMin} not in ${schedule.startHour}:${schedule.startMin}-${schedule.endHour}:${schedule.endMin}`);
     }
     return inRange;
+  }
+
+  private async getBlockReason(ws: WebSocket): Promise<string> {
+    const schedule = await this.getSchedule(ws);
+    if (!schedule) return '';
+    if (!schedule.enabled) return '着信OFFです';
+    const now = new Date();
+    const jstOffset = 9 * 60;
+    const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const jstMinutes = (utcMinutes + jstOffset) % 1440;
+    const jstHour = Math.floor(jstMinutes / 60);
+    const jstMin = jstMinutes % 60;
+    const jstTotalMinutes = now.getTime() + jstOffset * 60 * 1000;
+    const jstDay = new Date(jstTotalMinutes).getUTCDay();
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+    if (!schedule.days.includes(jstDay)) {
+      return `${dayNames[jstDay]}曜日はスケジュール外です`;
+    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `現在${pad(jstHour)}:${pad(jstMin)} — スケジュール${pad(schedule.startHour)}:${pad(schedule.startMin)}〜${pad(schedule.endHour)}:${pad(schedule.endMin)}外です`;
   }
 
   private async getActiveRooms(): Promise<string[]> {

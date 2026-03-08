@@ -74,6 +74,20 @@ export default {
       });
     }
 
+    // POST /test-call-all-with-fcm → WebSocket + FCM fallback test
+    if (request.method === 'POST' && url.pathname === '/test-call-all-with-fcm') {
+      const id = env.ROOM_REGISTRY.idFromName('registry');
+      const stub = env.ROOM_REGISTRY.get(id);
+      const res = await stub.fetch('https://registry/test-call-all-with-fcm', { method: 'POST' });
+      return new Response(res.body, {
+        status: res.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
     // POST /test-call-all → send test call to all connected devices
     if (request.method === 'POST' && url.pathname === '/test-call-all') {
       const id = env.ROOM_REGISTRY.idFromName('registry');
