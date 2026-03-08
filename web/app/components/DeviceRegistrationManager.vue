@@ -5,8 +5,9 @@ import {
   listDevices, listPendingDeviceRegistrations,
   createDeviceUrlToken, createPermanentQr,
   approveDevice, rejectDevice, disableDevice, enableDevice, deleteDevice,
-  updateDeviceCallSettings, testFcmNotification,
+  updateDeviceCallSettings, testFcmNotification, testFcmAll,
 } from '~/utils/api'
+import type { TestFcmAllResult } from '~/utils/api'
 
 const devices = ref<Device[]>([])
 const pending = ref<DeviceRegistrationRequest[]>([])
@@ -320,6 +321,24 @@ async function testFcm(deviceId: string) {
   }
 }
 
+// FCM 一括テスト
+const fcmTestingAll = ref(false)
+const fcmTestAllResults = ref<TestFcmAllResult[]>([])
+
+async function testFcmCallAll() {
+  fcmTestingAll.value = true
+  fcmTestAllResults.value = []
+  try {
+    const res = await testFcmAll()
+    fcmTestAllResults.value = res.results
+    setTimeout(() => { fcmTestAllResults.value = [] }, 5000)
+  } catch {
+    error.value = 'FCM一括テストの送信に失敗しました'
+  } finally {
+    fcmTestingAll.value = false
+  }
+}
+
 async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
@@ -507,6 +526,16 @@ onMounted(() => refresh())
           >
             {{ testingAll ? '送信中...' : '一斉テスト' }}
           </button>
+          <button
+            class="px-3 py-1 text-xs rounded"
+            :class="fcmTestingAll
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-purple-500 text-white hover:bg-purple-600'"
+            :disabled="fcmTestingAll"
+            @click="testFcmCallAll"
+          >
+            {{ fcmTestingAll ? '送信中...' : 'FCM一括テスト' }}
+          </button>
           <button class="text-xs text-blue-600 hover:underline" @click="refresh">更新</button>
         </div>
       </div>
@@ -521,6 +550,20 @@ onMounted(() => refresh())
           >
             {{ devices.find(d => d.id === r.device_id)?.device_name || r.device_id.slice(0, 8) }}:
             {{ r.sent ? '送信済' : r.reason || '失敗' }}
+          </span>
+        </div>
+      </div>
+      <!-- FCM一括テスト結果 -->
+      <div v-if="fcmTestAllResults.length > 0" class="px-4 py-2 bg-purple-50 border-b">
+        <p class="text-xs font-medium text-purple-600 mb-1">FCM一括テスト結果</p>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="r in fcmTestAllResults" :key="r.device_id"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs"
+            :class="r.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+          >
+            {{ r.device_name || r.device_id.slice(0, 8) }}:
+            {{ r.success ? '送信済' : r.error || '失敗' }}
           </span>
         </div>
       </div>

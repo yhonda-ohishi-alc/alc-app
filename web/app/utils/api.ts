@@ -695,3 +695,14 @@ export async function testFcmNotification(id: string): Promise<{ success: boolea
     method: 'POST',
   })
 }
+
+export interface TestFcmAllResult {
+  device_id: string
+  device_name: string
+  success: boolean
+  error?: string
+}
+
+export async function testFcmAll(): Promise<{ sent: number; skipped: number; errors: number; results: TestFcmAllResult[] }> {
+  return request(`/api/devices/test-fcm-all`, { method: 'POST' })
+}
