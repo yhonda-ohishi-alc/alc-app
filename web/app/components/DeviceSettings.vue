@@ -8,6 +8,7 @@ const BLE_GW_DEVICES = [
 ]
 
 const { ports, isSupported, refreshPorts, forgetPort } = useSerialDeviceManager()
+const { isAndroidApp } = useFingerprint()
 
 // FC-1200 composable
 const fc1200 = useFc1200Serial()
@@ -24,7 +25,9 @@ const fc1200Measuring = ref(false)
 const bleGwTesting = ref(false)
 const bleGwTestResult = ref<string | null>(null)
 
-onMounted(() => refreshPorts())
+onMounted(() => {
+  if (isSupported) refreshPorts()
+})
 
 function formatVidPid(info: SerialPortInfo): string {
   if (info.usbVendorId !== undefined) {
@@ -155,6 +158,31 @@ async function testBleGw() {
   }
 }
 
+// Android BLE テスト — WebSocket ブリッジ経由で BLE スキャン状態を確認
+async function testAndroidBle() {
+  bleGwTesting.value = true
+  bleGwTestResult.value = null
+  try {
+    const success = await bleGw.autoConnect()
+    if (success) {
+      await new Promise(r => setTimeout(r, 3000))
+      const thermo = bleGw.thermometerConnected.value
+      const bp = bleGw.bloodPressureConnected.value
+      bleGwTestResult.value = [
+        `BLE ブリッジ接続成功`,
+        `体温計: ${thermo ? '検出済み' : '未検出'}`,
+        `血圧計: ${bp ? '検出済み' : '未検出'}`,
+      ].join(' / ')
+    } else {
+      bleGwTestResult.value = 'BLE ブリッジ接続失敗 — アプリを再起動してください'
+    }
+  } catch (e) {
+    bleGwTestResult.value = `エラー: ${e instanceof Error ? e.message : '不明'}`
+  } finally {
+    bleGwTesting.value = false
+  }
+}
+
 async function syncFc1200Date() {
   if (!fc1200.isConnected.value) {
     const success = await fc1200.autoConnect()
@@ -169,11 +197,124 @@ async function syncFc1200Date() {
 
 <template>
   <div class="w-full max-w-lg mx-auto px-4 py-4 space-y-6">
-    <!-- WebSerial 非対応 (デバイス管理はPC版のみ) -->
-    <div v-if="!isSupported" class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+    <!-- Android WebView: WebSocket ブリッジ経由のテスト -->
+    <template v-if="isAndroidApp">
+      <!-- FC-1200 セクション (Android) -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b">
+          <h3 class="text-sm font-medium text-gray-800">FC-1200 アルコールチェッカー</h3>
+          <p class="text-xs text-gray-500">USB 接続 → WebSocket ブリッジ</p>
+        </div>
+        <div class="p-4">
+          <!-- 接続状態 -->
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-2 h-2 rounded-full" :class="fc1200.isConnected.value ? 'bg-green-500' : 'bg-gray-300'" />
+            <span class="text-sm" :class="fc1200.isConnected.value ? 'text-green-700' : 'text-gray-500'">
+              {{ fc1200.isConnected.value ? '接続中' : '未接続' }}
+            </span>
+            <span v-if="fc1200.transport.value" class="text-xs text-gray-400">({{ fc1200.transport.value }})</span>
+          </div>
+
+          <!-- 測定中の状態表示 -->
+          <div v-if="fc1200Measuring" class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-3">
+            <div class="flex items-center gap-3">
+              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+              <span class="text-sm font-medium text-blue-700">{{ fc1200StateText || '接続中...' }}</span>
+            </div>
+            <div v-if="fc1200.state.value === 'blow_waiting'" class="mt-3 bg-blue-100 rounded-lg p-3 text-center">
+              <p class="text-blue-800 font-bold">息を吹きかけてください</p>
+              <p class="text-blue-600 text-xs mt-1">FC-1200 のセンサー部に向かって約5秒間</p>
+            </div>
+            <button
+              class="mt-3 px-3 py-1.5 text-xs text-red-600 border border-red-300 rounded-lg hover:bg-red-50"
+              @click="stopFc1200Test"
+            >
+              中止
+            </button>
+          </div>
+
+          <!-- テストボタン -->
+          <div class="flex gap-2">
+            <button
+              class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              :disabled="fc1200Testing"
+              @click="testFc1200"
+            >
+              {{ fc1200Testing ? 'テスト中...' : 'テスト測定' }}
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              :disabled="fc1200Testing"
+              @click="syncFc1200Date"
+            >
+              日時同期
+            </button>
+          </div>
+          <p v-if="fc1200TestResult" class="text-xs mt-2" :class="fc1200TestResult.includes('失敗') || fc1200TestResult.includes('エラー') ? 'text-red-600' : 'text-green-600'">
+            {{ fc1200TestResult }}
+          </p>
+        </div>
+      </div>
+
+      <!-- BLE セクション (Android) -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b">
+          <h3 class="text-sm font-medium text-gray-800">BLE 医療機器 (体温計・血圧計)</h3>
+          <p class="text-xs text-gray-500">Android BLE スキャン → WebSocket ブリッジ</p>
+        </div>
+        <div class="p-4">
+          <!-- 接続状態 -->
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-2 h-2 rounded-full" :class="bleGw.isConnected.value ? 'bg-green-500' : 'bg-gray-300'" />
+            <span class="text-sm" :class="bleGw.isConnected.value ? 'text-green-700' : 'text-gray-500'">
+              {{ bleGw.isConnected.value ? 'ブリッジ接続中' : '未接続' }}
+            </span>
+          </div>
+
+          <!-- 検出済み機器 -->
+          <div v-if="bleGw.isConnected.value" class="bg-green-50 rounded-lg p-3 mb-3">
+            <div class="flex gap-4 text-xs">
+              <span class="flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full" :class="bleGw.thermometerConnected.value ? 'bg-green-500' : 'bg-gray-300'" />
+                体温計: {{ bleGw.thermometerConnected.value ? '検出' : '未検出' }}
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full" :class="bleGw.bloodPressureConnected.value ? 'bg-green-500' : 'bg-gray-300'" />
+                血圧計: {{ bleGw.bloodPressureConnected.value ? '検出' : '未検出' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- テストボタン -->
+          <button
+            class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            :disabled="bleGwTesting"
+            @click="testAndroidBle"
+          >
+            {{ bleGwTesting ? '接続テスト中...' : '接続テスト' }}
+          </button>
+          <p v-if="bleGwTestResult" class="text-xs mt-2" :class="bleGwTestResult.includes('失敗') || bleGwTestResult.includes('エラー') ? 'text-red-600' : 'text-green-600'">
+            {{ bleGwTestResult }}
+          </p>
+        </div>
+      </div>
+
+      <!-- 説明 (Android) -->
+      <div class="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">
+        <p class="font-medium mb-1">Android デバイステスト</p>
+        <p class="text-xs text-blue-700">
+          FC-1200 と BLE 医療機器はアプリ内の WebSocket ブリッジ経由で接続されます。
+          テストを実行して接続状態を確認できます。
+        </p>
+      </div>
+    </template>
+
+    <!-- WebSerial 非対応 & Android でもない -->
+    <div v-else-if="!isSupported" class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
       <p class="text-yellow-700 text-sm">デバイス管理は Chrome/Edge ブラウザ版でのみ利用可能です</p>
     </div>
 
+    <!-- WebSerial 対応 (PC Chrome/Edge) -->
     <template v-else>
       <!-- FC-1200 セクション -->
       <div class="bg-white rounded-xl shadow-sm overflow-hidden">
