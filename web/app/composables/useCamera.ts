@@ -5,7 +5,7 @@ export function useCamera() {
   const error = ref<string | null>(null)
   const permissionDenied = ref(false)
 
-  async function start(facingMode: 'user' | 'environment' = 'user') {
+  async function start(facingMode: 'user' | 'environment' = 'user', deviceModel?: string | null) {
     error.value = null
     permissionDenied.value = false
     try {
@@ -26,11 +26,20 @@ export function useCamera() {
       }
 
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      const isKyocera = deviceModel?.includes('TB305') ?? false
+
+      let width = isMobile ? 1280 : 1920
+      let height = isMobile ? 720 : 1080
+      if (isKyocera) {
+        width = 640
+        height = 480
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
-          width: { ideal: isMobile ? 1280 : 1920 },
-          height: { ideal: isMobile ? 720 : 1080 },
+          width: { ideal: width },
+          height: { ideal: height },
         },
         audio: false,
       })

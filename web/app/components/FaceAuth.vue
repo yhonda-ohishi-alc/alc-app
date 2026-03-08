@@ -15,6 +15,7 @@ const emit = defineEmits<{
 const { verify, register } = useFaceAuth()
 const { isReady, isLoading, error: modelError, load, detect, NORM_SIZE } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync, permissionDenied } = useCamera()
+const { deviceModel } = useFingerprint()
 
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
@@ -46,7 +47,7 @@ let loopTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(async () => {
   try {
-    await start()
+    await start('user', deviceModel.value)
     load()
     startLoop()
   } catch (e) {
@@ -296,7 +297,7 @@ function retry() {
 async function retryCamera() {
   cameraError.value = null
   try {
-    await start()
+    await start('user', deviceModel.value)
     load()
     startLoop()
   } catch (e) {
@@ -307,9 +308,9 @@ async function retryCamera() {
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-4 h-full">
-    <!-- Camera + canvas overlay -->
-    <div class="relative overflow-hidden rounded-2xl bg-black w-full flex-1 min-h-0">
+  <div class="fixed inset-0 z-50 bg-black flex flex-col">
+    <!-- Camera fullscreen -->
+    <div class="relative flex-1 min-h-0">
       <video
         ref="videoRef"
         autoplay
@@ -344,7 +345,7 @@ async function retryCamera() {
       </div>
       <div
         v-if="isLoading"
-        class="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded"
+        class="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded"
       >
         モデル読み込み中...
       </div>
@@ -360,46 +361,51 @@ async function retryCamera() {
           <span class="truncate">{{ check.label }}: {{ check.val || (check.status ? 'ok' : 'fail') }}</span>
         </div>
       </div>
+
+      <!-- Status overlay (centered on camera) -->
+      <div v-if="status === 'success'" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <p class="text-2xl font-bold text-green-400 bg-black/60 px-6 py-3 rounded-xl">
+          {{ mode === 'register' ? '登録完了' : demoMode ? '認証完了 (デモ)' : `認証成功 (${(similarity * 100).toFixed(0)}%)` }}
+        </p>
+      </div>
+      <div v-else-if="status === 'fail'" class="absolute inset-0 flex flex-col items-center justify-center gap-4">
+        <p class="text-2xl font-bold text-red-400 bg-black/60 px-6 py-3 rounded-xl">
+          {{ mode === 'register' ? '顔が検出できません' : '認証失敗' }}
+        </p>
+        <button
+          class="px-8 py-3 bg-white/90 text-gray-800 rounded-xl font-medium text-lg hover:bg-white transition-colors"
+          @click="retry"
+        >
+          やり直す
+        </button>
+      </div>
+      <div v-else-if="status === 'detecting'" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <p class="text-xl font-medium text-white bg-black/60 px-6 py-3 rounded-xl">
+          検出中...
+        </p>
+      </div>
+
+      <!-- Register confirmation overlay -->
+      <div v-if="waitingConfirm" class="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/40">
+        <p class="text-xl font-medium text-white bg-black/60 px-6 py-3 rounded-xl">この顔で登録しますか？</p>
+        <div class="flex gap-3">
+          <button
+            class="px-8 py-3 bg-blue-600 text-white rounded-xl font-medium text-lg hover:bg-blue-700 transition-colors"
+            @click="confirmRegister"
+          >
+            登録する
+          </button>
+          <button
+            class="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium text-lg hover:bg-gray-300 transition-colors"
+            @click="retryConfirm"
+          >
+            やり直す
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Register confirmation -->
-    <div v-if="waitingConfirm" class="w-full flex flex-col gap-2">
-      <p class="text-center text-lg font-medium text-blue-700">この顔で登録しますか？</p>
-      <button
-        class="w-full px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-        @click="confirmRegister"
-      >
-        登録する
-      </button>
-      <button
-        class="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
-        @click="retryConfirm"
-      >
-        やり直す
-      </button>
-    </div>
-
-    <!-- Status messages -->
-    <p v-if="status === 'success'" class="text-lg font-medium text-green-600">
-      {{ mode === 'register' ? '登録完了' : demoMode ? '認証完了 (デモ)' : `認証成功 (${(similarity * 100).toFixed(0)}%)` }}
-    </p>
-    <p v-else-if="status === 'fail'" class="text-lg font-medium text-red-600">
-      {{ mode === 'register' ? '顔が検出できません' : '認証失敗' }}
-    </p>
-    <p v-else-if="status === 'detecting'" class="text-lg font-medium text-gray-600">
-      検出中...
-    </p>
-
-    <!-- Retry button -->
-    <button
-      v-if="status === 'fail'"
-      class="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
-      @click="retry"
-    >
-      やり直す
-    </button>
-
-    <p v-if="modelError" class="text-red-500 text-sm">
+    <p v-if="modelError" class="text-red-400 text-sm text-center p-2">
       {{ modelError }}
     </p>
   </div>
