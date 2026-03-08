@@ -1,9 +1,11 @@
 export { SignalingRoom } from './signaling-room';
 export { RoomRegistry } from './room-registry';
 
-interface Env {
+export interface Env {
   SIGNALING_ROOM: DurableObjectNamespace;
   ROOM_REGISTRY: DurableObjectNamespace;
+  BACKEND_API_URL?: string;
+  FCM_INTERNAL_SECRET?: string;
 }
 
 export default {

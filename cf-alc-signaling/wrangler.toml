@@ -2,6 +2,9 @@ name = "alc-signaling"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
+[vars]
+BACKEND_API_URL = "https://rust-alc-api-566bls5vfq-an.a.run.app"
+
 [durable_objects]
 bindings = [
   { name = "SIGNALING_ROOM", class_name = "SignalingRoom" },

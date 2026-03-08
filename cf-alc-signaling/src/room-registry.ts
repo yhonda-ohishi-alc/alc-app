@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import type { Env } from './index';
 
 interface CallSchedule {
   enabled: boolean;
@@ -15,7 +16,7 @@ interface CallSchedule {
  * Admin clients can connect via WebSocket (/watch) to receive real-time updates.
  * Supports per-watcher schedule filtering (JST) using device_id tags + DO storage.
  */
-export class RoomRegistry extends DurableObject {
+export class RoomRegistry extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -301,13 +302,36 @@ export class RoomRegistry extends DurableObject {
   private async broadcastRooms() {
     const rooms = await this.getActiveRooms();
     const msg = JSON.stringify({ type: 'rooms_updated', rooms });
+    const wsDeliveredDeviceIds: string[] = [];
+
     for (const ws of this.ctx.getWebSockets()) {
       try {
         const shouldSend = await this.shouldNotify(ws);
         if (shouldSend) {
           ws.send(msg);
+          const deviceId = this.getDeviceId(ws);
+          if (deviceId) wsDeliveredDeviceIds.push(deviceId);
         }
       } catch { /* ignore closed */ }
+    }
+
+    // FCM fallback: notify devices not connected via WebSocket
+    if (rooms.length > 0 && this.env.BACKEND_API_URL) {
+      this.ctx.waitUntil(
+        fetch(`${this.env.BACKEND_API_URL}/api/devices/fcm-notify-call`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.env.FCM_INTERNAL_SECRET
+              ? { 'X-Internal-Secret': this.env.FCM_INTERNAL_SECRET }
+              : {}),
+          },
+          body: JSON.stringify({
+            room_ids: rooms,
+            exclude_device_ids: wsDeliveredDeviceIds,
+          }),
+        }).catch(e => console.log('FCM notify failed:', e))
+      );
     }
   }
 
