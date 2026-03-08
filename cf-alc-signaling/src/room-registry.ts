@@ -96,6 +96,71 @@ export class RoomRegistry extends DurableObject {
       });
     }
 
+    // POST /test-call-all → send test call to ALL connected devices respecting schedule
+    if (request.method === 'POST' && url.pathname === '/test-call-all') {
+      const allSockets = this.ctx.getWebSockets();
+      if (allSockets.length === 0) {
+        return new Response(JSON.stringify({ ok: true, results: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const rooms = await this.getActiveRooms();
+      const testRoomId = `test-call-${Date.now()}`;
+      const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
+
+      const results: { device_id: string; sent: boolean; blocked: boolean; reason: string }[] = [];
+      // Group sockets by device_id
+      const deviceSockets = new Map<string, WebSocket[]>();
+      for (const ws of allSockets) {
+        const deviceId = this.getDeviceId(ws);
+        if (!deviceId) continue;
+        const arr = deviceSockets.get(deviceId) || [];
+        arr.push(ws);
+        deviceSockets.set(deviceId, arr);
+      }
+
+      for (const [deviceId, sockets] of deviceSockets) {
+        const shouldSend = await this.shouldNotify(sockets[0]);
+        if (shouldSend) {
+          let sent = false;
+          for (const s of sockets) {
+            try { s.send(msg); sent = true; } catch { /* ignore closed */ }
+          }
+          results.push({ device_id: deviceId, sent, blocked: false, reason: '' });
+        } else {
+          let reason = '';
+          const schedule = await this.getSchedule(sockets[0]);
+          if (schedule) {
+            if (!schedule.enabled) {
+              reason = '着信OFFです';
+            } else {
+              const now = new Date();
+              const jstOffset = 9 * 60;
+              const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+              const jstMinutes = (utcMinutes + jstOffset) % 1440;
+              const jstHour = Math.floor(jstMinutes / 60);
+              const jstMin = jstMinutes % 60;
+              const jstTotalMinutes = now.getTime() + jstOffset * 60 * 1000;
+              const jstDay = new Date(jstTotalMinutes).getUTCDay();
+              const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+              if (!schedule.days.includes(jstDay)) {
+                reason = `${dayNames[jstDay]}曜日はスケジュール外です`;
+              } else {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                reason = `現在${pad(jstHour)}:${pad(jstMin)} — スケジュール${pad(schedule.startHour)}:${pad(schedule.startMin)}〜${pad(schedule.endHour)}:${pad(schedule.endMin)}外です`;
+              }
+            }
+          }
+          results.push({ device_id: deviceId, sent: false, blocked: true, reason });
+        }
+      }
+
+      console.log(`Test call all: ${results.length} device(s), sent=${results.filter(r => r.sent).length}, blocked=${results.filter(r => r.blocked).length}`);
+      return new Response(JSON.stringify({ ok: true, results }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // POST /test-call/:deviceId → send test call respecting schedule (verifies settings work correctly)
     const testCallMatch = url.pathname.match(/^\/test-call\/([^/]+)$/);
     if (request.method === 'POST' && testCallMatch) {

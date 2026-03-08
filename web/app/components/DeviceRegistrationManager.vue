@@ -240,6 +240,34 @@ async function saveCallSchedule(dev: Device) {
 const testingDevice = ref<string | null>(null)
 const testResult = ref<{ deviceId: string; success: boolean; message: string } | null>(null)
 
+// 一斉テスト
+const testingAll = ref(false)
+const testAllResults = ref<{ device_id: string; sent: boolean; blocked: boolean; reason: string }[]>([])
+
+async function testCallAll() {
+  if (!signalingUrl) {
+    error.value = 'シグナリングURLが設定されていません'
+    return
+  }
+  testingAll.value = true
+  testAllResults.value = []
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    const res = await fetch(`${url}/test-call-all`, { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json() as { ok: boolean; results: typeof testAllResults.value }
+      testAllResults.value = data.results
+      setTimeout(() => { testAllResults.value = [] }, 5000)
+    } else {
+      error.value = '一斉テストの送信に失敗しました'
+    }
+  } catch {
+    error.value = '一斉テストの送信に失敗しました'
+  } finally {
+    testingAll.value = false
+  }
+}
+
 async function testCall(deviceId: string) {
   if (!signalingUrl) {
     error.value = 'シグナリングURLが設定されていません'
@@ -446,7 +474,33 @@ onMounted(() => refresh())
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
         <h3 class="text-sm font-medium text-gray-800">登録済みデバイス ({{ devices.length }})</h3>
-        <button class="text-xs text-blue-600 hover:underline" @click="refresh">更新</button>
+        <div class="flex gap-2 items-center">
+          <button
+            class="px-3 py-1 text-xs rounded"
+            :class="testingAll
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-orange-500 text-white hover:bg-orange-600'"
+            :disabled="testingAll"
+            @click="testCallAll"
+          >
+            {{ testingAll ? '送信中...' : '一斉テスト' }}
+          </button>
+          <button class="text-xs text-blue-600 hover:underline" @click="refresh">更新</button>
+        </div>
+      </div>
+      <!-- 一斉テスト結果 -->
+      <div v-if="testAllResults.length > 0" class="px-4 py-2 bg-gray-50 border-b">
+        <p class="text-xs font-medium text-gray-600 mb-1">一斉テスト結果</p>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="r in testAllResults" :key="r.device_id"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs"
+            :class="r.sent ? 'bg-green-100 text-green-700' : r.blocked ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'"
+          >
+            {{ devices.find(d => d.id === r.device_id)?.device_name || r.device_id.slice(0, 8) }}:
+            {{ r.sent ? '送信済' : r.reason || '失敗' }}
+          </span>
+        </div>
       </div>
       <div v-if="loading" class="p-4 text-center text-sm text-gray-500">読み込み中...</div>
       <div v-else-if="devices.length === 0" class="p-4 text-center text-sm text-gray-400">デバイスなし</div>
