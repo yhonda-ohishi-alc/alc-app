@@ -4,6 +4,7 @@ const signalingUrl = config.public.signalingUrl as string
 
 const { isSharing, roomId, error, isPeerConnected, isConnected, isMuted, remoteStream, startSharing, stopSharing, toggleMute } = useScreenShare()
 
+const { isAndroidLandscape } = useAndroidLandscape()
 const shortRoomId = computed(() => roomId.value ? roomId.value.slice(-8).toUpperCase() : null)
 
 const audioRef = ref<HTMLAudioElement | null>(null)
@@ -22,7 +23,7 @@ const statusLabel = computed(() => {
 
 <template>
   <!-- 固定フローティング UI: タブ切り替えに関係なく常時表示 -->
-  <div class="fixed top-1 right-14 z-50">
+  <div :class="['fixed z-50', isAndroidLandscape ? 'top-1 right-14' : 'bottom-20 right-4']">
     <!-- 共有中: コンパクトパネル -->
     <div
       v-if="isSharing"
