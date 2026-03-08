@@ -62,7 +62,29 @@ export function useFaceDetection() {
 
     ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
 
-    const result = await humanInstance.detect(canvas)
+    const result = await humanInstance.detect(canvas, {
+      face: { description: { enabled: true } },
+    })
+    return result
+  }
+
+  // 軽量検出: embedding (FaceRes) を無効化
+  // まばたき検出など mesh landmarks のみ必要な場面用
+  async function detectLite(video: HTMLVideoElement) {
+    if (!humanInstance) throw new Error('Human not loaded')
+    const { canvas, ctx } = getNormCanvas()
+
+    const vw = video.videoWidth
+    const vh = video.videoHeight
+    const cropSize = Math.min(vw, vh)
+    const sx = (vw - cropSize) / 2
+    const sy = (vh - cropSize) / 2
+
+    ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
+
+    const result = await humanInstance.detect(canvas, {
+      face: { description: { enabled: false } },
+    })
     return result
   }
 
@@ -76,6 +98,7 @@ export function useFaceDetection() {
     error: readonly(error),
     load,
     detect,
+    detectLite,
     getHuman,
     NORM_SIZE,
     FACE_MODEL_VERSION,

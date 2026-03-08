@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load, detect, NORM_SIZE } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect, detectLite, NORM_SIZE } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync, permissionDenied } = useCamera()
 const { deviceModel } = useFingerprint()
 
@@ -67,7 +67,10 @@ function startLoop() {
     if (videoRef.value && isReady.value) {
       try {
         const t0 = performance.now()
-        const result = await detect(videoRef.value)
+        const needEmbedding = blinkDetected.value
+        const result = needEmbedding
+          ? await detect(videoRef.value)
+          : await detectLite(videoRef.value)
         const gestureNames = (result.gesture ?? []).map((g: any) => g.gesture).join(', ')
         const mesh = result.face?.[0]?.mesh
         let eyeInfo = ''
