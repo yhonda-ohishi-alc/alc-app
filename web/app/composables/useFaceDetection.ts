@@ -1,44 +1,69 @@
-import Human from '@vladmandic/human'
-import { humanConfig } from '~/utils/human-config'
+// 顔検出を Web Worker で実行
+// 重い推論 (BlazeFace + FaceMesh + FaceRes) は別スレッド
+// メインスレッドは結果の mesh から瞬き判定するだけ (軽量)
 
-// 入力正規化: 映像フレームをセンタークロップして正方形キャンバスに描画
-// ポートレート/ランドスケープ問わず顔が同じスケールになる
 // モデルや正規化パラメータを変更した場合は FACE_MODEL_VERSION を更新すること（旧 embedding が自動フィルタされ再登録が促される）
 export const NORM_SIZE = 720
 export const FACE_MODEL_VERSION = 'faceres-wasm-square720-v4'
 
-let humanInstance: Human | null = null
-let normCanvas: HTMLCanvasElement | null = null
-let normCtx: CanvasRenderingContext2D | null = null
+let worker: Worker | null = null
 const isReady = ref(false)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
-function getNormCanvas() {
-  if (!normCanvas) {
-    normCanvas = document.createElement('canvas')
-    normCanvas.width = NORM_SIZE
-    normCanvas.height = NORM_SIZE
-    normCtx = normCanvas.getContext('2d')!
+// detect() の Promise 解決用
+let pendingResolve: ((result: any) => void) | null = null
+let pendingReject: ((err: Error) => void) | null = null
+
+function handleWorkerMessage(e: MessageEvent) {
+  const { type } = e.data
+  if (type === 'result') {
+    if (pendingResolve) {
+      pendingResolve({ face: e.data.face, gesture: e.data.gesture })
+      pendingResolve = null
+      pendingReject = null
+    }
   }
-  return { canvas: normCanvas, ctx: normCtx! }
+  else if (type === 'error') {
+    if (pendingReject) {
+      pendingReject(new Error(e.data.message))
+      pendingResolve = null
+      pendingReject = null
+    }
+  }
 }
 
 export function useFaceDetection() {
 
   async function load() {
-    if (humanInstance && isReady.value) return humanInstance
-    if (isLoading.value) return null
+    if (worker && isReady.value) return
+    if (isLoading.value) return
 
     isLoading.value = true
     error.value = null
 
     try {
-      humanInstance = new Human(humanConfig)
-      await humanInstance.load()
-      await humanInstance.warmup()
-      isReady.value = true
-      return humanInstance
+      worker = new Worker(
+        new URL('../workers/face-detect.worker.ts', import.meta.url),
+        { type: 'module' },
+      )
+      worker.onmessage = handleWorkerMessage
+
+      await new Promise<void>((resolve, reject) => {
+        const onInit = (e: MessageEvent) => {
+          if (e.data.type === 'ready') {
+            isReady.value = true
+            // init 完了後は通常のハンドラに戻す
+            worker!.onmessage = handleWorkerMessage
+            resolve()
+          }
+          else if (e.data.type === 'error') {
+            reject(new Error(e.data.message))
+          }
+        }
+        worker!.onmessage = onInit
+        worker!.postMessage({ type: 'init' })
+      })
     }
     catch (e) {
       error.value = e instanceof Error ? e.message : '顔検出モデルの読み込みに失敗しました'
@@ -49,47 +74,22 @@ export function useFaceDetection() {
     }
   }
 
-  async function detect(video: HTMLVideoElement) {
-    if (!humanInstance) throw new Error('Human not loaded')
-    const { canvas, ctx } = getNormCanvas()
+  async function detect(video: HTMLVideoElement): Promise<any> {
+    if (!worker || !isReady.value) throw new Error('Worker not loaded')
 
-    // センタークロップ: 短辺に合わせて長辺を中央で切り、正方形にリサイズ
-    const vw = video.videoWidth
-    const vh = video.videoHeight
-    const cropSize = Math.min(vw, vh)
-    const sx = (vw - cropSize) / 2
-    const sy = (vh - cropSize) / 2
+    // video から ImageBitmap を作成 (メインスレッドでの唯一の重い処理)
+    const bitmap = await createImageBitmap(video)
 
-    ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
-
-    const result = await humanInstance.detect(canvas, {
-      face: { description: { enabled: true } },
+    return new Promise((resolve, reject) => {
+      pendingResolve = resolve
+      pendingReject = reject
+      // ImageBitmap は Transferable — ゼロコピーで Worker に転送
+      worker!.postMessage({ type: 'detect', bitmap }, [bitmap])
     })
-    return result
-  }
-
-  // 軽量検出: embedding (FaceRes) を無効化
-  // まばたき検出など mesh landmarks のみ必要な場面用
-  async function detectLite(video: HTMLVideoElement) {
-    if (!humanInstance) throw new Error('Human not loaded')
-    const { canvas, ctx } = getNormCanvas()
-
-    const vw = video.videoWidth
-    const vh = video.videoHeight
-    const cropSize = Math.min(vw, vh)
-    const sx = (vw - cropSize) / 2
-    const sy = (vh - cropSize) / 2
-
-    ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
-
-    const result = await humanInstance.detect(canvas, {
-      face: { description: { enabled: false } },
-    })
-    return result
   }
 
   function getHuman() {
-    return humanInstance
+    return null // Human インスタンスは Worker 内
   }
 
   return {
@@ -98,7 +98,6 @@ export function useFaceDetection() {
     error: readonly(error),
     load,
     detect,
-    detectLite,
     getHuman,
     NORM_SIZE,
     FACE_MODEL_VERSION,
