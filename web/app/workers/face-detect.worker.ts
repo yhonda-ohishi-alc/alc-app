@@ -1,5 +1,5 @@
-// Web Worker: Human.js の重い推論 (BlazeFace + FaceMesh + FaceRes) を別スレッドで実行
-// メインスレッドは結果の mesh から瞬き判定するだけ (軽量)
+// Web Worker: Human.js の推論を別スレッドで実行
+// 同じファイルを2インスタンス起動: lite (瞬き用) と full (embedding用)
 
 import Human from '@vladmandic/human'
 import type { Config } from '@vladmandic/human'
@@ -7,7 +7,7 @@ import type { Config } from '@vladmandic/human'
 const NORM_SIZE = 720
 
 // human-config.ts と同じ設定 (Worker からは ~/utils import 不可のためインライン)
-const config: Partial<Config> = {
+const baseConfig: Partial<Config> = {
   backend: 'wasm',
   modelBasePath: 'https://vladmandic.github.io/human-models/models/',
   wasmPath: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/',
@@ -33,7 +33,7 @@ const config: Partial<Config> = {
       keepInvalid: false,
     },
     description: {
-      enabled: true,
+      enabled: true, // full モード用 (lite は init 時に false に上書き)
       modelPath: 'faceres.json',
       minConfidence: 0.1,
       skipFrames: 0,
@@ -54,6 +54,7 @@ const config: Partial<Config> = {
 let human: Human | null = null
 let normCanvas: OffscreenCanvas | null = null
 let normCtx: OffscreenCanvasRenderingContext2D | null = null
+let workerMode: 'lite' | 'full' = 'full'
 
 function getNormCanvas() {
   if (!normCanvas) {
@@ -68,10 +69,16 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === 'init') {
     try {
+      workerMode = e.data.mode ?? 'full'
+      const config = structuredClone(baseConfig)
+      if (workerMode === 'lite') {
+        // lite: FaceRes を完全に無効化 (ロードもしない)
+        config.face!.description = { enabled: false } as any
+      }
       human = new Human(config)
       await human.load()
       await human.warmup()
-      self.postMessage({ type: 'ready' })
+      self.postMessage({ type: 'ready', mode: workerMode })
     }
     catch (err) {
       self.postMessage({ type: 'error', message: String(err) })
@@ -86,7 +93,6 @@ self.onmessage = async (e: MessageEvent) => {
     }
 
     const bitmap: ImageBitmap = e.data.bitmap
-    const needEmbedding: boolean = e.data.needEmbedding ?? true
     const { canvas, ctx } = getNormCanvas()
 
     // センタークロップ: 短辺に合わせて長辺を中央で切り、正方形にリサイズ
@@ -98,11 +104,7 @@ self.onmessage = async (e: MessageEvent) => {
     ctx.drawImage(bitmap, sx, sy, cropSize, cropSize, 0, 0, NORM_SIZE, NORM_SIZE)
     bitmap.close()
 
-    // needEmbedding=false → FaceRes スキップ (推論のみスキップ、モデルはメモリに常駐)
-    // 両方とも明示的に enabled を指定 (Human.js が内部状態をマージするため)
-    const result = await human.detect(canvas, {
-      face: { description: { enabled: needEmbedding } },
-    })
+    const result = await human.detect(canvas)
 
     // メインスレッドへ転送可能な形式にシリアライズ
     const face = result.face?.map(f => ({

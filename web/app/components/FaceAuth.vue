@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load, detect, NORM_SIZE } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect, latestEmbedding, NORM_SIZE } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync, permissionDenied } = useCamera()
 const { deviceModel } = useFingerprint()
 
@@ -67,8 +67,8 @@ function startLoop() {
     if (videoRef.value && isReady.value) {
       try {
         const t0 = performance.now()
-        // 瞬き未検出 → lite (FaceRes スキップ、高速)、検出済 → full (embedding 取得)
-        const result = await detect(videoRef.value, blinkDetected.value)
+        // lite Worker で高速検出 + full Worker がバックグラウンドで embedding 取得
+        const result = await detect(videoRef.value)
         const gestureNames = (result.gesture ?? []).map((g: any) => g.gesture).join(', ')
         const mesh = result.face?.[0]?.mesh
         let eyeInfo = ''
@@ -81,10 +81,9 @@ function startLoop() {
         frameCount.value++
         updateChecks(result)
         drawOverlay(result)
-        // Save the embedding from the check-passing frame
-        const emb = result.face?.[0]?.embedding
-        if (emb && emb.length > 0) {
-          lastGoodEmbedding.value = Array.isArray(emb) ? emb : Array.from(emb as any)
+        // full Worker がバックグラウンドで取得した embedding を使う
+        if (latestEmbedding.value && latestEmbedding.value.length > 0) {
+          lastGoodEmbedding.value = latestEmbedding.value
         }
         if (allChecksPassed.value) {
           if (props.mode === 'register') {
@@ -171,9 +170,10 @@ function updateChecks(result: any) {
     checks.blink.val = '瞬きしてください'
   }
 
-  const hasDesc = (face.embedding?.length ?? 0) > 0
+  // embedding は full Worker からバックグラウンドで取得 (latestEmbedding)
+  const hasDesc = (latestEmbedding.value?.length ?? 0) > 0
   checks.descriptor.status = hasDesc
-  checks.descriptor.val = hasDesc ? `${face.embedding?.length ?? 0}d` : '-'
+  checks.descriptor.val = hasDesc ? `${latestEmbedding.value?.length ?? 0}d` : '-'
 }
 
 // --- Canvas overlay ---
