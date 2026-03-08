@@ -331,6 +331,22 @@ export function useFc1200Serial() {
       case 'error':
         error.value = getErrorMessage(event.error_code, event.message)
         break
+
+      // Android USB serial status events
+      case 'connected':
+        error.value = null
+        break
+
+      case 'status':
+        // "No USB serial devices found" etc.
+        if (event.message && event.message.includes('No USB serial')) {
+          error.value = 'FC-1200 が USB 接続されていません'
+        }
+        break
+
+      case 'permission_requested':
+        error.value = 'USB パーミッションを許可してください'
+        break
     }
   }
 
@@ -471,6 +487,13 @@ export function useFc1200Serial() {
     dateUpdateSuccess.value = null
   }
 
+  /** Android 側の USB デバイス再スキャンを要求 */
+  function scanDevices(): void {
+    if (transport.value === 'websocket') {
+      sendWsCommand('connect')
+    }
+  }
+
   async function disconnect(): Promise<void> {
     disconnectWebSocket()
     await cleanup()
@@ -528,6 +551,7 @@ export function useFc1200Serial() {
     autoConnect,
     connect,
     disconnect,
+    scanDevices,
     startMeasurement,
     resetSession,
     checkSensorLifetime,

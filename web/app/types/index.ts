@@ -75,7 +75,7 @@ export type Fc1200State =
 
 /** FC-1200 WASM イベント (feed() が返す JSON 配列の要素) */
 export interface Fc1200Event {
-  type: 'state_changed' | 'measurement_result' | 'usage_time' | 'memory_data' | 'date_update_response' | 'error'
+  type: 'state_changed' | 'measurement_result' | 'usage_time' | 'memory_data' | 'date_update_response' | 'error' | 'connected' | 'status' | 'permission_requested'
   from?: string
   to?: Fc1200State
   alcohol_value?: number

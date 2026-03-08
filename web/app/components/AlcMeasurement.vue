@@ -18,6 +18,7 @@ const {
   result,
   isSupported,
   autoConnect,
+  scanDevices,
   startMeasurement,
   resetSession,
 } = useFc1200Serial()
@@ -84,6 +85,20 @@ const stateConfig = computed<{ text: string; color: string; animate: boolean }>(
 function handleRetry() {
   resetSession()
   startMeasurement()
+}
+
+async function handleRescan() {
+  autoConnectFailed.value = false
+  autoConnecting.value = true
+  const success = await autoConnect()
+  autoConnecting.value = false
+  if (success) {
+    scanDevices()
+  } else {
+    // WebSocket は接続したが USB デバイス未検出 → 再スキャン指示
+    scanDevices()
+    autoConnectFailed.value = true
+  }
 }
 
 // デモモード
@@ -164,6 +179,12 @@ function emitDemoResult() {
           <NuxtLink to="/?tab=device" class="text-blue-600 hover:underline">デバイス設定</NuxtLink>
           からデバイスを登録してください。
         </p>
+        <button
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+          @click="handleRescan"
+        >
+          USB 再スキャン
+        </button>
       </div>
 
       <!-- 測定状態表示 -->
