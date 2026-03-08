@@ -13,14 +13,19 @@ function cosineSimilarity(a: number[], b: number[]): number {
 export function useFaceAuth() {
   const { load, detect } = useFaceDetection()
 
-  async function register(employeeId: string, video: HTMLVideoElement): Promise<boolean> {
-    await load()
-    const result = await detect(video)
+  async function register(employeeId: string, video: HTMLVideoElement, precomputedEmbedding?: number[]): Promise<boolean> {
+    let embedding: number[]
 
-    if (result.face.length === 0) return false
-
-    const embedding = result.face[0].embedding
-    if (!embedding || embedding.length === 0) return false
+    if (precomputedEmbedding) {
+      embedding = precomputedEmbedding
+    } else {
+      await load()
+      const result = await detect(video)
+      if (result.face.length === 0) return false
+      const emb = result.face[0].embedding
+      if (!emb || emb.length === 0) return false
+      embedding = emb
+    }
 
     await saveFaceDescriptor(employeeId, embedding, 'approved', FACE_MODEL_VERSION)
     const saved = await getFaceDescriptor(employeeId, FACE_MODEL_VERSION)

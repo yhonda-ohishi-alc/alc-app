@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const { verify, register } = useFaceAuth()
-const { isReady, isLoading, error: modelError, load, detect, latestEmbedding, NORM_SIZE } = useFaceDetection()
+const { isReady, isLoading, error: modelError, load, detect, latestEmbedding, terminateAll, NORM_SIZE } = useFaceDetection()
 const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync, permissionDenied } = useCamera()
 const { deviceModel } = useFingerprint()
 
@@ -22,7 +22,6 @@ const similarity = ref(0)
 const waitingConfirm = ref(false)
 const cameraError = ref<string | null>(null)
 const blinkDetected = ref(false)
-const eyeBaselineSamples = ref<number[]>([])
 const eyeBaseline = ref<number | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const lastGoodEmbedding = ref<number[] | null>(null)
@@ -59,6 +58,7 @@ onMounted(async () => {
 onUnmounted(() => {
   stopLoop()
   stop()
+  terminateAll()
 })
 
 function startLoop() {
@@ -145,7 +145,6 @@ function updateChecks(result: any) {
   checks.facingCenter.val = facing?.gesture?.replace('facing ', '') ?? '-'
 
   // まばたき検出: 相対変化方式 (照明条件に自動適応)
-  // frameCountではなくサンプル数ベースで制御 (顔未検出フレームに影響されない)
   const mesh = face.mesh
   if (mesh && mesh.length > 450) {
     const openL = Math.abs(mesh[374][1] - mesh[386][1]) / Math.abs(mesh[443][1] - mesh[450][1])
@@ -153,10 +152,8 @@ function updateChecks(result: any) {
     const avgOpen = (openL + openR) / 2
 
     if (eyeBaseline.value === null) {
-      // 最初の顔検出フレームでベースライン即確定 (1フレームで準備完了)
       eyeBaseline.value = avgOpen
     } else if (!blinkDetected.value && eyeBaseline.value !== null) {
-      // ベースライン確定後: 相対低下で検出
       const ratio = avgOpen / eyeBaseline.value
       if (ratio < 0.88) blinkDetected.value = true
     }
@@ -228,6 +225,7 @@ async function doAuth() {
   stopLoop()
 
   if (props.demoMode) {
+    terminateAll()
     const snapshot = await takeSnapshotAsync()
     status.value = 'success'
     emit('result', { verified: true, similarity: 1.0, snapshot: snapshot ?? undefined })
@@ -236,7 +234,8 @@ async function doAuth() {
 
   try {
     if (props.mode === 'register') {
-      const ok = await register(props.employeeId, videoRef.value)
+      const ok = await register(props.employeeId, videoRef.value, lastGoodEmbedding.value ?? undefined)
+      terminateAll()
       status.value = ok ? 'success' : 'fail'
       if (ok) {
         const snapshot = await takeSnapshotAsync()
@@ -245,6 +244,7 @@ async function doAuth() {
     }
     else {
       const result = await verify(props.employeeId, videoRef.value, lastGoodEmbedding.value ?? undefined)
+      terminateAll()
       similarity.value = result.similarity
       console.log('[FaceAuth] verify result: similarity=' + result.similarity.toFixed(3) + ' verified=' + result.verified)
       if (result.verified) {
@@ -259,6 +259,7 @@ async function doAuth() {
     }
   }
   catch {
+    terminateAll()
     status.value = 'fail'
   }
 }
@@ -288,6 +289,8 @@ function retry() {
   status.value = 'checking'
   waitingConfirm.value = false
   resetChecks()
+  terminateAll()
+  load()
   startLoop()
 }
 
@@ -296,6 +299,8 @@ function fullReset() {
   waitingConfirm.value = false
   eyeBaseline.value = null
   resetChecks()
+  terminateAll()
+  load()
   startLoop()
 }
 
