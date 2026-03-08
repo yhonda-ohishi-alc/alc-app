@@ -62,6 +62,15 @@ const statusText = computed(() => {
   if ((readers.value?.length ?? 0) === 0) return 'NFC リーダー未検出'
   return 'NFC 待機中'
 })
+
+// KYOCERA NFC位置ガイド
+const { deviceModel } = useFingerprint()
+const KYOCERA_MODELS = ['KC-T305CN', 'KC-305CN', 'KYT35', 'A404KC', 'KC-T306']
+const isKyoceraTablet = computed(() => {
+  if (!deviceModel.value) return false
+  return KYOCERA_MODELS.some(m => deviceModel.value!.includes(m))
+})
+const showNfcGuide = ref(false)
 </script>
 
 <template>
@@ -93,6 +102,14 @@ const statusText = computed(() => {
       <p class="text-gray-500 font-medium">
         NFC カードをタッチしてください
       </p>
+      <button
+        v-if="isKyoceraTablet"
+        class="mt-2 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-200 transition-colors"
+        @click="showNfcGuide = true"
+      >
+        NFC 位置ガイド
+      </button>
+      <NfcPositionGuide v-model:visible="showNfcGuide" />
       <p v-if="lastReadId" class="mt-2 text-green-600 font-mono text-sm">
         読み取り: {{ lastReadId }}
       </p>

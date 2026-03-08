@@ -4,9 +4,11 @@ interface AndroidBridge {
   getAndroidId(): string
   isFingerprintAvailable(): boolean
   requestFingerprint(): void
+  getDeviceModel?(): string
 }
 
 function getAndroid(): AndroidBridge | null {
+  if (typeof window === 'undefined') return null
   const w = window as any
   if (typeof w.Android?.getAndroidId === 'function') return w.Android
   return null
@@ -45,6 +47,7 @@ export function useFingerprint() {
   const isFingerprintAvailable = computed(() => getAndroid()?.isFingerprintAvailable() ?? false)
 
   const deviceId = computed(() => getAndroid()?.getAndroidId() ?? null)
+  const deviceModel = computed(() => getAndroid()?.getDeviceModel?.() ?? null)
 
   /** この社員がこの端末で顔認証済みか（指紋認証を許可してよいか） */
   function isEmployeeAuthorized(employeeId: string): boolean {
@@ -65,6 +68,7 @@ export function useFingerprint() {
     isAndroidApp,
     isFingerprintAvailable,
     deviceId,
+    deviceModel,
     isEmployeeAuthorized,
     authorizeEmployee,
     requestFingerprint,

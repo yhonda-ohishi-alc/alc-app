@@ -14,7 +14,7 @@ const emit = defineEmits<{
 
 const { verify, register } = useFaceAuth()
 const { isReady, isLoading, error: modelError, load, detect, NORM_SIZE } = useFaceDetection()
-const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync } = useCamera()
+const { videoRef, start, stop, isActive: isCameraActive, takeSnapshotAsync, permissionDenied } = useCamera()
 
 const status = ref<'checking' | 'detecting' | 'success' | 'fail'>('checking')
 const similarity = ref(0)
@@ -326,6 +326,9 @@ async function retryCamera() {
         class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white gap-3 p-4"
       >
         <span class="text-red-400 text-sm text-center">{{ cameraError }}</span>
+        <p v-if="permissionDenied" class="text-gray-300 text-xs text-center">
+          設定 &gt; アプリ &gt; カメラ の権限を許可してから再試行してください
+        </p>
         <button
           class="px-4 py-2 bg-blue-600 rounded-lg text-sm hover:bg-blue-700 transition-colors"
           @click="retryCamera"

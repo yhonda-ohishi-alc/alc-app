@@ -4,6 +4,13 @@ import { punchTimecard, listTimePunches, getEmployees } from '~/utils/api'
 
 const nfc = useNfcWebSocket()
 const { deviceId } = useAuth()
+const { deviceModel } = useFingerprint()
+const KYOCERA_MODELS = ['KC-T305CN', 'KC-305CN', 'KYT35', 'A404KC', 'KC-T306']
+const isKyoceraTablet = computed(() => {
+  if (!deviceModel.value) return false
+  return KYOCERA_MODELS.some(m => deviceModel.value!.includes(m))
+})
+const showNfcGuide = ref(false)
 const employees = ref<ApiEmployee[]>([])
 const employeeMap = computed(() => {
   const map: Record<string, string> = {}
@@ -110,6 +117,14 @@ function formatTime(iso: string): string {
           <div class="text-6xl mb-4">🪪</div>
           <h2 class="text-2xl font-bold text-gray-800 mb-2">タイムカード</h2>
           <p class="text-gray-500">ICカードまたは免許証をかざしてください</p>
+          <button
+            v-if="isKyoceraTablet"
+            class="mt-2 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-200 transition-colors"
+            @click="showNfcGuide = true"
+          >
+            NFC 位置ガイド
+          </button>
+          <NfcPositionGuide v-model:visible="showNfcGuide" />
           <div class="mt-4 flex items-center justify-center gap-2 text-sm">
             <span
               class="w-2 h-2 rounded-full"

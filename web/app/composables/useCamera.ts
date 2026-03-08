@@ -3,10 +3,28 @@ export function useCamera() {
   const videoRef = ref<HTMLVideoElement | null>(null)
   const isActive = ref(false)
   const error = ref<string | null>(null)
+  const permissionDenied = ref(false)
 
   async function start(facingMode: 'user' | 'environment' = 'user') {
     error.value = null
+    permissionDenied.value = false
     try {
+      // 権限状態を事前チェック
+      if (navigator.permissions) {
+        try {
+          const status = await navigator.permissions.query({ name: 'camera' as PermissionName })
+          if (status.state === 'denied') {
+            permissionDenied.value = true
+            error.value = 'カメラの権限が拒否されています。端末の設定からカメラの権限を許可してください'
+            throw new DOMException('Permission denied', 'NotAllowedError')
+          }
+        }
+        catch (e) {
+          // permissions.query が camera をサポートしない場合は無視して getUserMedia へ
+          if (e instanceof DOMException && e.name === 'NotAllowedError') throw e
+        }
+      }
+
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -25,7 +43,13 @@ export function useCamera() {
       }
     }
     catch (e) {
-      error.value = e instanceof Error ? e.message : 'カメラの起動に失敗しました'
+      if (e instanceof DOMException && e.name === 'NotAllowedError') {
+        permissionDenied.value = true
+        error.value = 'カメラの権限が拒否されています。端末の設定からカメラの権限を許可してください'
+      }
+      else {
+        error.value = e instanceof Error ? e.message : 'カメラの起動に失敗しました'
+      }
       throw e
     }
   }
@@ -80,6 +104,7 @@ export function useCamera() {
     videoRef,
     isActive: readonly(isActive),
     error: readonly(error),
+    permissionDenied: readonly(permissionDenied),
     start,
     stop,
     takeSnapshot,

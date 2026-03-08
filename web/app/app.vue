@@ -1,8 +1,15 @@
 <script setup lang="ts">
 const { init, isLoading } = useAuth()
+const { isAndroidApp } = useFingerprint()
 
 onMounted(async () => {
   await init()
+})
+
+useHead({
+  htmlAttrs: {
+    class: computed(() => isAndroidApp.value ? 'android-app' : ''),
+  },
 })
 </script>
 
@@ -15,3 +22,9 @@ onMounted(async () => {
     <NuxtPage v-else />
   </div>
 </template>
+
+<style>
+.android-app {
+  font-size: 24px;
+}
+</style>
