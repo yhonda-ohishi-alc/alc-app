@@ -15,6 +15,7 @@ const licenseExpiryDate = ref<Date | null>(null)
 const licenseExpiryStatus = ref<LicenseExpiryStatus | null>(null)
 
 const showUpdateBanner = computed(() => {
+  if (isAndroidApp.value) return false
   if (!isConnected.value || !latestVersion.value) return false
   // version 未送信（旧ブリッジ）→ 常にアップデート促す
   if (!bridgeVersion.value) return true
@@ -64,7 +65,7 @@ const statusText = computed(() => {
 })
 
 // KYOCERA NFC位置ガイド
-const { deviceModel } = useFingerprint()
+const { isAndroidApp, deviceModel } = useFingerprint()
 const KYOCERA_MODELS = ['KC-T305CN', 'KC-305CN', 'KYT35', 'A404KC', 'KC-T306']
 const isKyoceraTablet = computed(() => {
   if (!deviceModel.value) return false
@@ -134,7 +135,7 @@ const showNfcGuide = ref(false)
     </div>
 
     <!-- NFC ブリッジ未接続時のダウンロードリンク -->
-    <p v-if="!isConnected" class="text-sm text-center text-gray-500">
+    <p v-if="!isConnected && !isAndroidApp" class="text-sm text-center text-gray-500">
       NFC ブリッジがインストールされていない場合は
       <a
         href="https://github.com/yhonda-ohishi-alc/rust-nfc-bridge/releases/latest"
