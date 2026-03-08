@@ -479,7 +479,7 @@ onUnmounted(() => {
         <div class="px-3 py-1 flex justify-between items-center">
           <span class="text-xs text-gray-500">日常点検</span>
           <div v-if="liveSession.daily_inspection">
-            <span v-if="Object.values(liveSession.daily_inspection).every(v => v === 'ok' || typeof v !== 'string')" class="text-sm text-green-700 font-semibold">全項目OK</span>
+            <span v-if="['brakes','tires','lights','steering','wipers','mirrors','horn','seatbelts'].every(k => (liveSession.daily_inspection as any)[k] === 'ok')" class="text-sm text-green-700 font-semibold">全項目OK</span>
             <span v-else class="text-sm text-red-700 font-semibold">NG あり</span>
           </div>
           <span v-else class="text-sm text-gray-400">-</span>
