@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { FaceAuthResult } from '~/types'
-import { getEmployeeByCode } from '~/utils/api'
+import type { FaceAuthResult, TenkoSession } from '~/types'
+import { getEmployeeByCode, getEmployees, getTenkoSession } from '~/utils/api'
 
 const config = useRuntimeConfig()
 const { authenticatedManagerId, setManagerId } = useManagerAuth()
@@ -27,6 +27,85 @@ const modalEmployeeId = ref('')
 const modalEmployeeName = ref('')
 const modalIdInput = ref('')
 const modalIdError = ref<string | null>(null)
+
+// 通話中セッションのリアルタイムデータ
+const liveSession = ref<TenkoSession | null>(null)
+const liveEmployeeName = ref('')
+let sessionPollTimer: ReturnType<typeof setInterval> | null = null
+
+async function startSessionPolling(sessionId: string) {
+  stopSessionPolling()
+  // 初回即時取得
+  await fetchSession(sessionId)
+  // 3秒間隔でポーリング
+  sessionPollTimer = setInterval(() => fetchSession(sessionId), 3000)
+}
+
+function stopSessionPolling() {
+  if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null }
+  liveSession.value = null
+  liveEmployeeName.value = ''
+}
+
+async function fetchSession(sessionId: string) {
+  try {
+    const session = await getTenkoSession(sessionId)
+    liveSession.value = session
+    // 社員名を取得 (初回のみ)
+    if (!liveEmployeeName.value && session.employee_id) {
+      try {
+        const employees = await getEmployees()
+        const emp = employees.find(e => e.id === session.employee_id)
+        if (emp) liveEmployeeName.value = emp.name
+      } catch { /* ignore */ }
+    }
+  } catch { /* セッション未作成の場合は無視 */ }
+}
+
+function statusLabel(s: string) {
+  const map: Record<string, string> = {
+    identity_verified: '本人確認済', alcohol_testing: 'アルコール検査中',
+    medical_pending: '医療測定待ち', self_declaration_pending: '自己申告待ち',
+    safety_judgment_pending: '安全判定中', daily_inspection_pending: '日常点検待ち',
+    instruction_pending: '指示確認待ち', report_pending: '報告待ち',
+    interrupted: '中断', completed: '完了', cancelled: 'キャンセル',
+  }
+  return map[s] || s
+}
+
+function statusColor(s: string) {
+  if (s === 'completed') return 'bg-green-100 text-green-800'
+  if (s === 'cancelled') return 'bg-red-100 text-red-800'
+  if (s === 'interrupted') return 'bg-orange-100 text-orange-800'
+  return 'bg-yellow-100 text-yellow-800'
+}
+
+function alcoholLabel(r: string | null) {
+  if (!r) return '-'
+  const map: Record<string, string> = { pass: '正常', fail: '検出', normal: '正常', over: '基準超', error: 'エラー' }
+  return map[r] || r
+}
+
+function alcoholColor(r: string | null) {
+  if (!r) return ''
+  if (r === 'pass' || r === 'normal') return 'text-green-700'
+  return 'text-red-700 font-semibold'
+}
+
+function safetyLabel(sj: TenkoSession['safety_judgment']) {
+  if (!sj) return '-'
+  return sj.status === 'pass' ? '合格' : '不合格'
+}
+
+function safetyColor(sj: TenkoSession['safety_judgment']) {
+  if (!sj) return ''
+  return sj.status === 'pass' ? 'text-green-700' : 'text-red-700 font-semibold'
+}
+
+function selfDeclLabel(key: string) {
+  const map: Record<string, string> = { illness: '疾病', fatigue: '疲労', sleep_deprivation: '睡眠不足' }
+  return map[key] || key
+}
 
 // HTTP用: wss://→https:// または ws://→http://
 const signalingHttpUrl = (config.public.signalingUrl as string).replace(/^wss/, 'https').replace(/^ws:/, 'http:')
@@ -134,6 +213,7 @@ async function startCall(roomId: string) {
       await webRtc.startStreaming(streamToSend)
     }
     isCallActive.value = true
+    startSessionPolling(roomId)
   }
   catch {
     loadError.value = 'ビデオ通話の開始に失敗しました'
@@ -141,6 +221,7 @@ async function startCall(roomId: string) {
 }
 
 function endCall() {
+  stopSessionPolling()
   webRtc.disconnect()
   adminCamera.stop()
   adminAudioStream?.getTracks().forEach(t => t.stop())
@@ -183,11 +264,12 @@ function connectWatchSocket() {
 }
 
 onMounted(() => {
-  loadActiveRooms() // 初回即時取得
+  loadActiveRooms()
   connectWatchSocket()
 })
 
 onUnmounted(() => {
+  stopSessionPolling()
   watchWs?.close()
   watchWs = null
   if (watchPingTimer) clearInterval(watchPingTimer)
@@ -288,6 +370,114 @@ onUnmounted(() => {
           <div class="mt-1 text-xs text-gray-400 font-mono truncate">{{ roomId }}</div>
           <div class="mt-2 text-xs text-blue-600 font-medium">
             クリックして通話開始 →
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 通話中全画面オーバーレイ -->
+  <div
+    v-if="isCallActive && selectedRoomId"
+    class="fixed inset-0 z-40 bg-gray-900 flex flex-col lg:flex-row"
+  >
+    <!-- 左(PC)/上(モバイル): ビデオ -->
+    <div class="flex-1 relative min-h-0">
+      <TenkoVideoCall
+        :local-stream="adminCombinedStream"
+        :remote-stream="webRtc.remoteStream.value"
+        :is-peer-connected="webRtc.isPeerConnected.value"
+        :is-connected="webRtc.isConnected.value"
+        class="w-full h-full"
+      />
+      <!-- 通話終了ボタン (ビデオ上にオーバーレイ) -->
+      <button
+        class="absolute top-3 right-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg transition-colors"
+        @click="endCall"
+      >
+        通話終了
+      </button>
+      <!-- 乗務員名 + ステータス (ビデオ上) -->
+      <div v-if="liveSession" class="absolute bottom-3 left-3 flex items-center gap-2">
+        <span class="text-white text-sm font-bold bg-black/50 px-2 py-1 rounded">
+          {{ liveEmployeeName || liveSession.employee_id.slice(0, 8) }}
+        </span>
+        <span class="text-xs px-1.5 py-0.5 rounded-full" :class="statusColor(liveSession.status)">
+          {{ statusLabel(liveSession.status) }}
+        </span>
+      </div>
+    </div>
+
+    <!-- 右(PC)/下(モバイル): 点呼データ -->
+    <div class="w-full lg:w-80 xl:w-96 bg-white overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-full">
+      <div v-if="!liveSession" class="flex items-center justify-center h-full text-gray-400 text-sm p-4">
+        セッションデータを取得中...
+      </div>
+
+      <div v-else>
+        <!-- ヘッダー -->
+        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 sticky top-0">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-gray-800">{{ liveEmployeeName || liveSession.employee_id.slice(0, 8) }}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded-full" :class="liveSession.tenko_type === 'pre_operation' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'">
+              {{ liveSession.tenko_type === 'pre_operation' ? '業務前' : '業務後' }}
+            </span>
+            <span class="text-xs px-1.5 py-0.5 rounded-full" :class="statusColor(liveSession.status)">
+              {{ statusLabel(liveSession.status) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- データ項目 -->
+        <div class="divide-y divide-gray-100">
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">アルコール</span>
+            <div class="text-right">
+              <span class="text-sm font-semibold" :class="alcoholColor(liveSession.alcohol_result)">{{ alcoholLabel(liveSession.alcohol_result) }}</span>
+              <span v-if="liveSession.alcohol_value != null" class="text-xs text-gray-500 ml-1">{{ liveSession.alcohol_value }} mg/L</span>
+            </div>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">体温</span>
+            <span class="text-sm font-semibold text-gray-800">{{ liveSession.temperature != null ? `${liveSession.temperature}°C` : '-' }}</span>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">血圧</span>
+            <span class="text-sm font-semibold text-gray-800">{{ liveSession.systolic != null && liveSession.diastolic != null ? `${liveSession.systolic}/${liveSession.diastolic} mmHg` : '-' }}</span>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">脈拍</span>
+            <span class="text-sm font-semibold text-gray-800">{{ liveSession.pulse != null ? `${liveSession.pulse} bpm` : '-' }}</span>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-start">
+            <span class="text-xs text-gray-400">自己申告</span>
+            <div v-if="liveSession.self_declaration" class="text-right">
+              <template v-for="(val, key) in { illness: liveSession.self_declaration.illness, fatigue: liveSession.self_declaration.fatigue, sleep_deprivation: liveSession.self_declaration.sleep_deprivation }" :key="key">
+                <span v-if="val" class="inline-block ml-1 text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{{ selfDeclLabel(key) }}</span>
+              </template>
+              <span v-if="!liveSession.self_declaration.illness && !liveSession.self_declaration.fatigue && !liveSession.self_declaration.sleep_deprivation" class="text-sm text-green-700 font-semibold">異常なし</span>
+            </div>
+            <span v-else class="text-sm text-gray-400">-</span>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-start">
+            <span class="text-xs text-gray-400">安全判定</span>
+            <div class="text-right">
+              <span class="text-sm font-semibold" :class="safetyColor(liveSession.safety_judgment)">{{ safetyLabel(liveSession.safety_judgment) }}</span>
+              <div v-if="liveSession.safety_judgment?.failed_items?.length" class="text-xs text-red-600">{{ liveSession.safety_judgment.failed_items.join(', ') }}</div>
+            </div>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">日常点検</span>
+            <div v-if="liveSession.daily_inspection">
+              <span v-if="Object.values(liveSession.daily_inspection).every(v => v === 'ok' || typeof v !== 'string')" class="text-sm text-green-700 font-semibold">全項目OK</span>
+              <span v-else class="text-sm text-red-700 font-semibold">NG あり</span>
+            </div>
+            <span v-else class="text-sm text-gray-400">-</span>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center">
+            <span class="text-xs text-gray-400">担当管理者</span>
+            <span class="text-sm text-gray-800">{{ liveSession.responsible_manager_name || '-' }}</span>
           </div>
         </div>
       </div>
