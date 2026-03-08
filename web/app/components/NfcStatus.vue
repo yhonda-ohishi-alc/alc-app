@@ -30,13 +30,9 @@ watch(isConnected, async (connected) => {
 
 onMounted(() => {
   connect()
-  console.log('[NfcStatus] onMounted: calling setNfcGuideVisible(true)', !!(window as any).Android)
-  ;(window as any).Android?.setNfcGuideVisible?.(true)
 })
 
 onBeforeUnmount(() => {
-  console.log('[NfcStatus] onBeforeUnmount: calling setNfcGuideVisible(false)')
-  ;(window as any).Android?.setNfcGuideVisible?.(false)
 })
 
 onLicenseRead((event: NfcLicenseReadEvent) => {
@@ -142,6 +138,14 @@ const statusText = computed(() => {
       >こちらからアップデート</a>
       <span v-if="bridgeVersion" class="text-gray-400 text-xs ml-1">(現在: v{{ bridgeVersion }})</span>
     </p>
+
+    <!-- NFC 位置確認ボタン (KYOCERA端末のみ) -->
+    <button
+      class="text-sm text-blue-600 underline hover:text-blue-800"
+      @click="(window as any).Android?.setNfcGuideVisible?.(true)"
+    >
+      NFC 読み取り位置を確認
+    </button>
 
     <!-- エラー表示 -->
     <p v-if="error" class="text-red-500 text-sm text-center">

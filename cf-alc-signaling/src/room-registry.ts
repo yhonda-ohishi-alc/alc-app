@@ -96,7 +96,7 @@ export class RoomRegistry extends DurableObject {
       });
     }
 
-    // POST /test-call/:deviceId → send test call to specific device (bypass schedule)
+    // POST /test-call/:deviceId → send test call respecting schedule (verifies settings work correctly)
     const testCallMatch = url.pathname.match(/^\/test-call\/([^/]+)$/);
     if (request.method === 'POST' && testCallMatch) {
       const deviceId = testCallMatch[1];
@@ -108,21 +108,56 @@ export class RoomRegistry extends DurableObject {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      // Send rooms_updated with a temporary test room (bypass shouldNotify)
-      const rooms = await this.getActiveRooms();
-      const testRoomId = `test-call-${Date.now()}`;
-      const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
-      let sent = 0;
-      for (const ws of allSockets) {
-        try {
-          ws.send(msg);
-          sent++;
-        } catch { /* ignore closed */ }
+      // Check schedule — test call respects schedule to verify settings
+      const ws = allSockets[0];
+      const shouldSend = await this.shouldNotify(ws);
+
+      if (shouldSend) {
+        // Schedule allows → send test call
+        const rooms = await this.getActiveRooms();
+        const testRoomId = `test-call-${Date.now()}`;
+        const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
+        let sent = 0;
+        for (const s of allSockets) {
+          try {
+            s.send(msg);
+            sent++;
+          } catch { /* ignore closed */ }
+        }
+        console.log(`Test call sent to device ${deviceId}: ${sent} watcher(s)`);
+        return new Response(JSON.stringify({ ok: true, sent, blocked: false }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else {
+        // Schedule blocks → report reason without sending
+        let reason = '';
+        const schedule = await this.getSchedule(ws);
+        if (schedule) {
+          if (!schedule.enabled) {
+            reason = '着信OFFです';
+          } else {
+            const now = new Date();
+            const jstOffset = 9 * 60;
+            const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+            const jstMinutes = (utcMinutes + jstOffset) % 1440;
+            const jstHour = Math.floor(jstMinutes / 60);
+            const jstMin = jstMinutes % 60;
+            const jstTotalMinutes = now.getTime() + jstOffset * 60 * 1000;
+            const jstDay = new Date(jstTotalMinutes).getUTCDay();
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+            if (!schedule.days.includes(jstDay)) {
+              reason = `${dayNames[jstDay]}曜日はスケジュール外です`;
+            } else {
+              const pad = (n: number) => String(n).padStart(2, '0');
+              reason = `現在${pad(jstHour)}:${pad(jstMin)} — スケジュール${pad(schedule.startHour)}:${pad(schedule.startMin)}〜${pad(schedule.endHour)}:${pad(schedule.endMin)}外です`;
+            }
+          }
+        }
+        console.log(`Test call blocked for device ${deviceId}: ${reason}`);
+        return new Response(JSON.stringify({ ok: true, sent: 0, blocked: true, reason }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
-      console.log(`Test call sent to device ${deviceId}: ${sent} watcher(s)`);
-      return new Response(JSON.stringify({ ok: true, sent }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
     }
 
     return new Response('Not Found', { status: 404 });

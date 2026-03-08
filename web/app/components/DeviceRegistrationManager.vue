@@ -253,7 +253,12 @@ async function testCall(deviceId: string) {
     if (res.status === 404) {
       testResult.value = { deviceId, success: false, message: 'デバイスが接続されていません' }
     } else if (res.ok) {
-      testResult.value = { deviceId, success: true, message: 'テスト着信を送信しました' }
+      const data = await res.json() as { ok: boolean; sent: number; blocked: boolean; reason: string }
+      if (!data.blocked) {
+        testResult.value = { deviceId, success: true, message: 'テスト着信を送信しました' }
+      } else {
+        testResult.value = { deviceId, success: false, message: `ブロックされました: ${data.reason}` }
+      }
     } else {
       testResult.value = { deviceId, success: false, message: 'テスト着信の送信に失敗しました' }
     }
@@ -472,7 +477,6 @@ onMounted(() => refresh())
               </button>
               <!-- 着信テスト -->
               <button
-                v-if="dev.call_enabled"
                 class="px-2 py-1 text-xs rounded"
                 :class="testingDevice === dev.id
                   ? 'bg-yellow-100 text-yellow-700'
