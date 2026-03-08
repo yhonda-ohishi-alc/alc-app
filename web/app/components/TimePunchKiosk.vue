@@ -98,24 +98,23 @@ function formatTime(iso: string): string {
 </script>
 
 <template>
-  <div :class="['flex flex-col items-center justify-center gap-6', landscape ? 'p-3' : 'p-6']">
-    <div
-      class="flex w-full gap-8"
-      :class="[
-        landscape ? 'max-w-4xl' : 'max-w-2xl',
-        recentPunches.length
-          ? (landscape ? 'flex-row items-start' : 'flex-col lg:flex-row items-center lg:items-start')
-          : 'flex-col items-center'
-      ]"
-    >
-      <!-- 左: カードアイコン + 説明 -->
-      <div class="text-center flex-shrink-0">
-        <div class="text-6xl mb-4">
+  <div :class="[
+    'w-full flex-1 overflow-y-auto p-4',
+    landscape ? 'flex gap-4 max-w-4xl mx-auto' : 'flex flex-col items-center'
+  ]">
+    <!-- 左列 (横画面) / 上部 (縦画面): ヘッダー + NFC待機 -->
+    <div :class="landscape ? 'w-2/5 flex flex-col shrink-0' : 'w-full flex flex-col items-center'">
+      <header :class="['w-full text-center', landscape ? 'py-2' : 'max-w-md py-6']">
+        <h1 :class="['font-bold text-gray-800', landscape ? 'text-lg' : 'text-2xl']">タイムカード</h1>
+      </header>
+
+      <!-- NFC 待機カード -->
+      <div :class="['w-full bg-white rounded-2xl shadow-sm border p-6 text-center', landscape ? '' : 'max-w-md']">
+        <div :class="['mb-3', landscape ? 'text-4xl' : 'text-6xl']">
           <span v-if="processing" class="animate-spin inline-block">⏳</span>
           <span v-else>🪪</span>
         </div>
-        <h2 class="text-2xl font-bold text-gray-800 mb-2">タイムカード</h2>
-        <p class="text-gray-500">ICカードまたは免許証をかざしてください</p>
+        <p :class="['text-gray-500', landscape ? 'text-sm' : 'text-base']">ICカードまたは免許証をかざしてください</p>
         <button
           v-if="isKyoceraTablet"
           class="mt-2 px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-200 transition-colors"
@@ -141,35 +140,45 @@ function formatTime(iso: string): string {
           {{ errorMsg }}
         </div>
       </div>
+    </div>
 
-      <!-- 右: 最近の打刻 -->
-      <div v-if="recentPunches.length" class="w-full lg:max-w-sm">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-200 text-gray-400">
-              <th class="text-left py-2 px-3 font-medium">名前</th>
-              <th class="text-right py-2 px-3 font-medium">時刻</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(p, i) in displayedPunches"
-              :key="i"
-              class="border-b border-gray-100 transition-colors duration-1000"
-              :class="p.highlighted
-                ? 'bg-green-100 text-green-800 font-medium'
-                : (i === 0 ? 'bg-blue-50 text-gray-800 font-medium' : 'text-gray-600')"
-            >
-              <td class="py-2 px-3">{{ p.name }}</td>
-              <td
-                class="py-2 px-3 text-right tabular-nums transition-colors duration-1000"
-                :class="p.highlighted ? 'text-green-700' : (i === 0 ? 'text-blue-600' : 'text-gray-400')"
+    <!-- 右列 (横画面) / 下部 (縦画面): 最近の打刻 -->
+    <div :class="landscape ? 'flex-1 min-w-0' : 'w-full max-w-md mt-4'">
+      <div v-if="recentPunches.length" class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50">
+          <h2 class="text-sm font-medium text-gray-600">本日の打刻履歴</h2>
+        </div>
+        <div :class="landscape ? 'max-h-[calc(100vh-10rem)] overflow-y-auto' : ''">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 text-gray-400">
+                <th class="text-left py-2 px-4 font-medium">名前</th>
+                <th class="text-right py-2 px-4 font-medium">時刻</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(p, i) in displayedPunches"
+                :key="i"
+                class="border-b border-gray-100 transition-colors duration-1000"
+                :class="p.highlighted
+                  ? 'bg-green-100 text-green-800 font-medium'
+                  : (i === 0 ? 'bg-blue-50 text-gray-800 font-medium' : 'text-gray-600')"
               >
-                {{ p.time }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <td class="py-2 px-4">{{ p.name }}</td>
+                <td
+                  class="py-2 px-4 text-right tabular-nums transition-colors duration-1000"
+                  :class="p.highlighted ? 'text-green-700' : (i === 0 ? 'text-blue-600' : 'text-gray-400')"
+                >
+                  {{ p.time }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div v-else class="bg-white rounded-2xl shadow-sm border p-8 text-center text-gray-400 text-sm">
+        本日の打刻はまだありません
       </div>
     </div>
   </div>

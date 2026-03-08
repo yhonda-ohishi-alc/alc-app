@@ -179,23 +179,10 @@ function onRoleTabClick(role: RoleTab) {
         </div>
       </div>
 
-      <!-- メインコンテンツラッパー: 横画面=flex-row(サイドバー+コンテンツ), 縦画面=contents(透過) -->
-      <div :class="isAndroidLandscape ? 'flex flex-1 min-h-0' : 'contents'">
-        <!-- 左サイドバー (横画面時のみ) -->
-        <nav v-if="isAndroidLandscape" class="w-28 shrink-0 bg-gray-50 border-r flex flex-col py-2 px-1 gap-0.5 overflow-y-auto">
-          <!-- ロールタブ -->
-          <button
-            v-for="role in roleTabOptions"
-            :key="role"
-            class="w-full px-2 py-1.5 rounded-md text-xs font-medium transition-colors text-left"
-            :class="activeRole === role
-              ? 'bg-gray-200 text-gray-800'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'"
-            @click="onRoleTabClick(role)"
-          >
-            {{ roleLabels[role] }}
-          </button>
-          <div class="border-t my-1" />
+      <!-- メインコンテンツラッパー: 横画面=flex-col(タブバー+コンテンツ), 縦画面=contents(透過) -->
+      <div :class="isAndroidLandscape ? 'flex flex-col flex-1 min-h-0' : 'contents'">
+        <!-- トップタブバー (横画面時のみ) -->
+        <div v-if="isAndroidLandscape" class="shrink-0 bg-gray-50 border-b flex items-center px-2 py-1 gap-1">
           <!-- サブタブ -->
           <button
             v-for="tab in ([
@@ -205,7 +192,7 @@ function onRoleTabClick(role: RoleTab) {
               { key: 'timecard' as const, label: 'タイムカード' },
             ])"
             :key="tab.key"
-            class="w-full px-2 py-1.5 rounded-md text-xs font-medium transition-colors text-left"
+            class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
             :class="driverSubTab === tab.key
               ? 'bg-blue-100 text-blue-800'
               : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'"
@@ -213,39 +200,73 @@ function onRoleTabClick(role: RoleTab) {
           >
             {{ tab.label }}
           </button>
-          <div class="border-t my-1" />
-          <!-- その他メニュー -->
-          <button
-            v-for="item in ([
-              { key: 'demo' as const, label: '自動点呼デモ' },
-              { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
-              { key: 'device' as const, label: 'デバイス設定' },
-            ])"
-            :key="item.key"
-            class="w-full px-2 py-1.5 rounded-md text-xs font-medium transition-colors text-left"
-            :class="driverSubTab === item.key
-              ? 'bg-blue-100 text-blue-800'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'"
-            @click="driverSubTab = item.key"
-          >
-            {{ item.label }}
-          </button>
-          <!-- 測定ログ (サイドバー内) -->
-          <div class="border-t my-1" />
-          <MeasurementLog :sidebar="true" />
-          <!-- リフレッシュボタン -->
-          <div class="mt-auto pt-2">
+          <div class="flex-1" />
+          <!-- ハンバーガーメニュー -->
+          <div ref="menuRef" class="relative">
             <button
-              class="w-full p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors flex justify-center"
-              title="ページ更新"
-              @click="location.reload()"
+              class="p-1.5 rounded-md transition-colors"
+              :class="['demo', 'remote_demo', 'device'].includes(driverSubTab)
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'"
+              @click.stop="menuOpen = !menuOpen"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.49 15a8 8 0 0013.02 2.13M19.51 9A8 8 0 006.49 6.87" />
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
+            <div
+              v-if="menuOpen"
+              class="absolute right-0 top-full mt-1 w-52 bg-white rounded-lg shadow-lg border py-1 z-50 max-h-[70vh] overflow-y-auto"
+            >
+              <!-- ロール切替 -->
+              <div class="px-3 py-1 text-xs text-gray-400 font-medium">ロール切替</div>
+              <button
+                v-for="role in (['manager', 'admin'] as const)"
+                :key="role"
+                class="w-full text-left px-4 py-2 text-sm transition-colors"
+                :class="activeRole === role
+                  ? 'bg-gray-100 text-gray-800 font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'"
+                @click="onRoleTabClick(role); menuOpen = false"
+              >
+                {{ roleLabels[role] }}
+              </button>
+              <div class="border-t my-1" />
+              <!-- その他タブ -->
+              <button
+                v-for="item in ([
+                  { key: 'demo' as const, label: '自動点呼デモ' },
+                  { key: 'remote_demo' as const, label: '遠隔点呼デモ' },
+                  { key: 'device' as const, label: 'デバイス設定' },
+                ])"
+                :key="item.key"
+                class="w-full text-left px-4 py-2 text-sm transition-colors"
+                :class="driverSubTab === item.key
+                  ? 'bg-blue-50 text-blue-800 font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'"
+                @click="onMenuSelect(item.key)"
+              >
+                {{ item.label }}
+              </button>
+              <div class="border-t my-1" />
+              <!-- 測定ログ -->
+              <div class="px-2">
+                <MeasurementLog :sidebar="true" />
+              </div>
+              <div class="border-t my-1" />
+              <!-- ページ更新 -->
+              <button
+                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                @click="location.reload()"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.49 15a8 8 0 0013.02 2.13M19.51 9A8 8 0 006.49 6.87" />
+                </svg>
+                ページ更新
+              </button>
+            </div>
           </div>
-        </nav>
+        </div>
 
         <!-- コンテンツ (1箇所のみ: 横画面=flex子要素, 縦画面=contents透過でルート直下) -->
         <div :class="isAndroidLandscape ? 'flex-1 min-w-0 flex flex-col' : 'contents'">
