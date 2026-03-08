@@ -2,6 +2,10 @@
 import type { ApiEmployee, TimePunchWithEmployee } from '~/types'
 import { punchTimecard, listTimePunches, getEmployees } from '~/utils/api'
 
+const props = defineProps<{
+  landscape?: boolean
+}>()
+
 const nfc = useNfcWebSocket()
 const { deviceId } = useAuth()
 const { deviceModel } = useFingerprint()
@@ -105,12 +109,17 @@ function formatTime(iso: string): string {
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center p-6 gap-6">
+  <div :class="['flex flex-col items-center justify-center gap-6', landscape ? 'p-3' : 'p-6']">
     <!-- 待機画面 -->
     <template v-if="step === 'waiting'">
       <div
-        class="flex w-full max-w-2xl gap-8"
-        :class="recentPunches.length ? 'flex-col lg:flex-row items-center lg:items-start' : 'flex-col items-center'"
+        class="flex w-full gap-8"
+        :class="[
+          landscape ? 'max-w-4xl' : 'max-w-2xl',
+          recentPunches.length
+            ? (landscape ? 'flex-row items-start' : 'flex-col lg:flex-row items-center lg:items-start')
+            : 'flex-col items-center'
+        ]"
       >
         <!-- 左: カードアイコン + 説明 -->
         <div class="text-center flex-shrink-0">

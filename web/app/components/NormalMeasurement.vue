@@ -8,6 +8,7 @@ const { isDemoMode: isDemoModeFromUrl } = useDemoMode()
 
 const props = defineProps<{
   demoMode?: boolean
+  landscape?: boolean
 }>()
 
 const isDemoMode = computed(() => props.demoMode || isDemoModeFromUrl.value)
@@ -350,89 +351,115 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
 </script>
 
 <template>
-  <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
-    <!-- 端末未アクティベート警告 -->
-    <ClientOnly>
+  <div :class="[
+    'w-full flex-1 overflow-y-auto p-4',
+    landscape ? 'flex gap-4 max-w-4xl mx-auto' : 'flex flex-col items-center'
+  ]">
+    <!-- 左列 (横画面) / 上部 (縦画面): バナー + ステップ + フッターリンク -->
+    <div :class="landscape ? 'w-2/5 flex flex-col shrink-0' : 'w-full flex flex-col items-center'">
+      <!-- 端末未アクティベート警告 -->
+      <ClientOnly>
+        <div
+          v-if="!isDeviceActivated"
+          :class="['w-full bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700', landscape ? '' : 'max-w-md']"
+        >
+          端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
+        </div>
+      </ClientOnly>
+      <!-- オフラインバナー -->
       <div
-        v-if="!isDeviceActivated"
-        class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
+        v-if="!isOnline"
+        :class="['w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700', landscape ? '' : 'max-w-md']"
       >
-        端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
+        オフライン — 測定結果はローカルに保存されます
       </div>
-    </ClientOnly>
-    <!-- オフラインバナー -->
-    <div
-      v-if="!isOnline"
-      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
-    >
-      オフライン — 測定結果はローカルに保存されます
-    </div>
-    <!-- 未送信キュー通知 -->
-    <div
-      v-if="pending > 0 && isOnline && !isSyncing"
-      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 flex items-center justify-between text-sm"
-    >
-      <span class="text-blue-700">未送信の測定結果: {{ pending }}件</span>
-      <button class="text-blue-600 font-medium hover:underline" @click="syncQueue">同期する</button>
-    </div>
-    <div
-      v-if="isSyncing"
-      class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700"
-    >
-      同期中...
-    </div>
-    <div
-      v-if="isFaceSyncing"
-      class="w-full max-w-md bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700"
-    >
-      顔データ同期中...
-    </div>
+      <!-- 未送信キュー通知 -->
+      <div
+        v-if="pending > 0 && isOnline && !isSyncing"
+        :class="['w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 flex items-center justify-between text-sm', landscape ? '' : 'max-w-md']"
+      >
+        <span class="text-blue-700">未送信の測定結果: {{ pending }}件</span>
+        <button class="text-blue-600 font-medium hover:underline" @click="syncQueue">同期する</button>
+      </div>
+      <div
+        v-if="isSyncing"
+        :class="['w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700', landscape ? '' : 'max-w-md']"
+      >
+        同期中...
+      </div>
+      <div
+        v-if="isFaceSyncing"
+        :class="['w-full bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700', landscape ? '' : 'max-w-md']"
+      >
+        顔データ同期中...
+      </div>
 
-    <!-- 免許証有効期限切れ警告 -->
-    <div
-      v-if="licenseExpiryStatus === 'expired' && licenseExpiryDate"
-      class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
-    >
-      免許証の有効期限が切れています ({{ formatExpiryDate(licenseExpiryDate) }})
-    </div>
-    <div
-      v-if="licenseExpiryStatus === 'expiring_soon' && licenseExpiryDate"
-      class="w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700"
-    >
-      免許証の有効期限が近づいています ({{ formatExpiryDate(licenseExpiryDate) }})
-    </div>
+      <!-- 免許証有効期限切れ警告 -->
+      <div
+        v-if="licenseExpiryStatus === 'expired' && licenseExpiryDate"
+        :class="['w-full bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700', landscape ? '' : 'max-w-md']"
+      >
+        免許証の有効期限が切れています ({{ formatExpiryDate(licenseExpiryDate) }})
+      </div>
+      <div
+        v-if="licenseExpiryStatus === 'expiring_soon' && licenseExpiryDate"
+        :class="['w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-amber-700', landscape ? '' : 'max-w-md']"
+      >
+        免許証の有効期限が近づいています ({{ formatExpiryDate(licenseExpiryDate) }})
+      </div>
 
-    <header class="w-full max-w-md text-center py-6">
-      <h1 class="text-2xl font-bold text-gray-800">アルコールチェッカー</h1>
-      <!-- ステップインジケーター -->
-      <div class="flex items-center justify-center mt-3">
-        <template v-for="(s, i) in steps" :key="i">
-          <div
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
-            :class="{
-              'bg-blue-600 text-white': i === currentStepIndex,
-              'bg-green-500 text-white': i < currentStepIndex,
-              'bg-gray-200 text-gray-400': i > currentStepIndex,
-            }"
-          >
-            <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+      <header :class="['w-full text-center', landscape ? 'py-2' : 'max-w-md py-6']">
+        <h1 :class="['font-bold text-gray-800', landscape ? 'text-lg' : 'text-2xl']">アルコールチェッカー</h1>
+        <!-- ステップインジケーター -->
+        <div :class="['flex items-center mt-3', landscape ? 'flex-wrap gap-1 justify-center' : 'justify-center']">
+          <template v-for="(s, i) in steps" :key="i">
+            <div
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
+              :class="{
+                'bg-blue-600 text-white': i === currentStepIndex,
+                'bg-green-500 text-white': i < currentStepIndex,
+                'bg-gray-200 text-gray-400': i > currentStepIndex,
+              }"
+            >
+              <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {{ s }}
+            </div>
+            <svg
+              v-if="i < steps.length - 1"
+              class="w-4 h-4 mx-1 shrink-0"
+              :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-            {{ s }}
-          </div>
-          <svg
-            v-if="i < steps.length - 1"
-            class="w-4 h-4 mx-1 shrink-0"
-            :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </template>
-      </div>
-    </header>
+          </template>
+        </div>
+      </header>
 
-    <main class="w-full max-w-md flex-1">
+      <!-- フッターリンク (横画面時は左列に配置) -->
+      <div v-if="landscape" class="mt-auto pt-2">
+        <div class="flex flex-wrap justify-center gap-4">
+          <button
+            v-if="step !== 'nfc'"
+            class="text-gray-500 hover:text-gray-700 text-sm"
+            @click="reset"
+          >
+            最初からやり直す
+          </button>
+          <NuxtLink to="/register" class="text-blue-600 hover:underline text-sm">
+            顔登録
+          </NuxtLink>
+          <NuxtLink to="/maintenance" class="text-blue-600 hover:underline text-sm">
+            メンテナンス
+          </NuxtLink>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右列 (横画面) / メインコンテンツ (縦画面) -->
+    <main :class="['w-full flex-1', landscape ? 'min-h-0 overflow-y-auto' : 'max-w-md']">
       <!-- Step 1: NFC / 手動入力 -->
       <div v-if="step === 'nfc'" class="flex flex-col gap-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
@@ -607,8 +634,8 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
       </div>
     </main>
 
-    <!-- ナビゲーション -->
-    <footer class="w-full max-w-md py-4">
+    <!-- ナビゲーション (縦画面時のみ。横画面時は左列に配置) -->
+    <footer v-if="!landscape" class="w-full max-w-md py-4">
       <div class="flex justify-center gap-4">
         <button
           v-if="step !== 'nfc'"

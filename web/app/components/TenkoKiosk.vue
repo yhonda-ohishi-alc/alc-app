@@ -6,6 +6,7 @@ import { checkFaceApproval } from '~/utils/face-approval'
 const props = defineProps<{
   demoMode?: boolean
   remoteMode?: boolean
+  landscape?: boolean
 }>()
 
 // シングルトン再呼出で共有状態取得
@@ -237,117 +238,133 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col items-center w-full flex-1 overflow-y-auto p-4">
-    <!-- 遠隔点呼 ビデオ通話 -->
-    <ClientOnly>
-      <div v-if="remoteMode && (step === 'instruction' || step === 'report' || step === 'completed')" class="w-full max-w-md mb-4">
-        <TenkoVideoCall
-          :local-stream="combinedStream"
-          :remote-stream="webRtc.remoteStream.value"
-          :is-peer-connected="webRtc.isPeerConnected.value"
-          :is-connected="webRtc.isConnected.value"
-        />
-        <!-- 切断時ボタン -->
-        <div v-if="isDisconnected" class="flex gap-2 mt-2">
-          <button
-            class="flex-1 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-medium"
-            @click="reconnect"
+  <div :class="[
+    'w-full flex-1 overflow-y-auto p-4',
+    landscape ? 'flex gap-4 max-w-4xl mx-auto' : 'flex flex-col items-center'
+  ]">
+    <!-- 左列 (横画面) / 上部 (縦画面): バナー + ステップ -->
+    <div :class="landscape ? 'w-2/5 flex flex-col shrink-0' : 'w-full flex flex-col items-center'">
+      <!-- 遠隔点呼 ビデオ通話 -->
+      <ClientOnly>
+        <div v-if="remoteMode && (step === 'instruction' || step === 'report' || step === 'completed')" :class="['w-full mb-4', landscape ? '' : 'max-w-md']">
+          <TenkoVideoCall
+            :local-stream="combinedStream"
+            :remote-stream="webRtc.remoteStream.value"
+            :is-peer-connected="webRtc.isPeerConnected.value"
+            :is-connected="webRtc.isConnected.value"
+          />
+          <!-- 切断時ボタン -->
+          <div v-if="isDisconnected" class="flex gap-2 mt-2">
+            <button
+              class="flex-1 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-medium"
+              @click="reconnect"
+            >
+              再接続
+            </button>
+            <button
+              class="flex-1 py-1.5 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium"
+              @click="handleReset"
+            >
+              終了
+            </button>
+          </div>
+        </div>
+      </ClientOnly>
+
+      <!-- 遠隔点呼バナー -->
+      <ClientOnly>
+        <div
+          v-if="remoteMode"
+          :class="['w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700 font-medium', landscape ? '' : 'max-w-md']"
+        >
+          遠隔点呼モード — 運行管理者がビデオ通話で確認しています
+        </div>
+      </ClientOnly>
+
+      <!-- デモモードバナー -->
+      <ClientOnly>
+        <div
+          v-if="isDemoMode"
+          :class="['w-full bg-purple-50 border border-purple-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-purple-700 font-medium', landscape ? '' : 'max-w-md']"
+        >
+          デモモード — 実機不要で点呼フローを体験できます
+        </div>
+      </ClientOnly>
+
+      <!-- デモ用点呼予定作成 (NFCステップのみ表示) -->
+      <ClientOnly>
+        <DemoScheduleCreator v-if="isDemoMode && !remoteMode && step === 'nfc'" :class="['w-full mb-4', landscape ? '' : 'max-w-md']" />
+      </ClientOnly>
+
+      <!-- 端末未アクティベート警告 -->
+      <ClientOnly>
+        <div
+          v-if="!isDeviceActivated"
+          :class="['w-full bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700', landscape ? '' : 'max-w-md']"
+        >
+          端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
+        </div>
+      </ClientOnly>
+
+      <!-- 顔データ同期中 -->
+      <div
+        v-if="isFaceSyncing"
+        :class="['w-full bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700', landscape ? '' : 'max-w-md']"
+      >
+        顔データ同期中...
+      </div>
+
+      <header :class="['w-full text-center', landscape ? 'py-2' : 'max-w-md py-6']">
+        <h1 :class="['font-bold text-gray-800', landscape ? 'text-lg' : 'text-2xl']">{{ remoteMode ? '遠隔点呼' : '自動点呼' }}</h1>
+        <p v-if="tenkoType" class="mt-1 text-sm">
+          <span
+            class="px-2 py-0.5 rounded text-xs font-bold"
+            :class="isPreOperation ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'"
           >
-            再接続
-          </button>
-          <button
-            class="flex-1 py-1.5 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium"
-            @click="handleReset"
-          >
-            終了
+            {{ isPreOperation ? '業務前' : '業務後' }}
+          </span>
+        </p>
+
+        <!-- ステップインジケーター -->
+        <div v-if="step !== 'nfc'" :class="['flex items-center mt-3 flex-wrap gap-y-1', landscape ? 'justify-center gap-x-0.5' : 'justify-center']">
+          <template v-for="(s, i) in stepLabels" :key="i">
+            <div
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
+              :class="{
+                'bg-blue-600 text-white': i === currentStepIndex,
+                'bg-green-500 text-white': i < currentStepIndex,
+                'bg-gray-200 text-gray-400': i > currentStepIndex,
+              }"
+            >
+              <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {{ s }}
+            </div>
+            <svg
+              v-if="i < stepLabels.length - 1"
+              class="w-4 h-4 mx-1 shrink-0"
+              :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </template>
+        </div>
+      </header>
+
+      <!-- リセットリンク (横画面時は左列に配置) -->
+      <div v-if="landscape && step !== 'nfc'" class="mt-auto pt-2">
+        <div class="flex justify-center">
+          <button class="text-gray-500 hover:text-gray-700 text-sm" @click="handleReset">
+            最初からやり直す
           </button>
         </div>
       </div>
-    </ClientOnly>
-
-    <!-- 遠隔点呼バナー -->
-    <ClientOnly>
-      <div
-        v-if="remoteMode"
-        class="w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-blue-700 font-medium"
-      >
-        遠隔点呼モード — 運行管理者がビデオ通話で確認しています
-      </div>
-    </ClientOnly>
-
-    <!-- デモモードバナー -->
-    <ClientOnly>
-      <div
-        v-if="isDemoMode"
-        class="w-full max-w-md bg-purple-50 border border-purple-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-purple-700 font-medium"
-      >
-        デモモード — 実機不要で点呼フローを体験できます
-      </div>
-    </ClientOnly>
-
-    <!-- デモ用点呼予定作成 (NFCステップのみ表示) -->
-    <ClientOnly>
-      <DemoScheduleCreator v-if="isDemoMode && !remoteMode && step === 'nfc'" class="w-full max-w-md mb-4" />
-    </ClientOnly>
-
-    <!-- 端末未アクティベート警告 -->
-    <ClientOnly>
-      <div
-        v-if="!isDeviceActivated"
-        class="w-full max-w-md bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-red-700"
-      >
-        端末未登録 — <NuxtLink to="/login" class="underline font-medium">管理者ログイン</NuxtLink>で端末を登録してください
-      </div>
-    </ClientOnly>
-
-    <!-- 顔データ同期中 -->
-    <div
-      v-if="isFaceSyncing"
-      class="w-full max-w-md bg-green-50 border border-green-200 rounded-xl px-4 py-2 mb-2 text-center text-sm text-green-700"
-    >
-      顔データ同期中...
     </div>
 
-    <header class="w-full max-w-md text-center py-6">
-      <h1 class="text-2xl font-bold text-gray-800">{{ remoteMode ? '遠隔点呼' : '自動点呼' }}</h1>
-      <p v-if="tenkoType" class="mt-1 text-sm">
-        <span
-          class="px-2 py-0.5 rounded text-xs font-bold"
-          :class="isPreOperation ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'"
-        >
-          {{ isPreOperation ? '業務前' : '業務後' }}
-        </span>
-      </p>
-
-      <!-- ステップインジケーター -->
-      <div v-if="step !== 'nfc'" class="flex items-center justify-center mt-3 flex-wrap gap-y-1">
-        <template v-for="(s, i) in stepLabels" :key="i">
-          <div
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
-            :class="{
-              'bg-blue-600 text-white': i === currentStepIndex,
-              'bg-green-500 text-white': i < currentStepIndex,
-              'bg-gray-200 text-gray-400': i > currentStepIndex,
-            }"
-          >
-            <svg v-if="i < currentStepIndex" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {{ s }}
-          </div>
-          <svg
-            v-if="i < stepLabels.length - 1"
-            class="w-4 h-4 mx-1 shrink-0"
-            :class="i < currentStepIndex ? 'text-green-400' : 'text-gray-300'"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </template>
-      </div>
-    </header>
-
-    <main class="w-full max-w-md flex-1">
+    <!-- 右列 (横画面) / メインコンテンツ (縦画面) -->
+    <main :class="['w-full flex-1', landscape ? 'min-h-0 overflow-y-auto' : 'max-w-md']">
       <!-- グローバルエラー -->
       <div v-if="error" class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
         {{ error }}
@@ -573,8 +590,8 @@ onUnmounted(() => {
       </div>
     </main>
 
-    <!-- ナビゲーション -->
-    <footer class="w-full max-w-md py-4">
+    <!-- ナビゲーション (縦画面時のみ。横画面時は左列に配置) -->
+    <footer v-if="!landscape" class="w-full max-w-md py-4">
       <div class="flex justify-center gap-4">
         <button
           v-if="step !== 'nfc'"

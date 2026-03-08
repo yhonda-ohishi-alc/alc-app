@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { getEmployees } from '~/utils/api'
 
+const props = defineProps<{
+  sidebar?: boolean
+}>()
+
 const {
   allItems,
   pending,
@@ -126,7 +130,105 @@ onMounted(() => {
 
 <template>
   <ClientOnly>
-    <div class="fixed bottom-0 left-0 right-0 z-40">
+    <!-- サイドバーモード: インライン表示 -->
+    <template v-if="sidebar">
+      <div class="w-full">
+        <button
+          class="w-full px-2 py-1.5 rounded-md text-xs font-medium transition-colors text-left flex items-center gap-1"
+          :class="pending > 0
+            ? 'bg-yellow-100 text-yellow-800'
+            : 'text-gray-500 hover:bg-gray-100'"
+          @click="expanded = !expanded"
+        >
+          <span v-if="pending > 0">未送信 {{ pending }}件</span>
+          <span v-else>未送信なし</span>
+          <svg
+            class="w-3 h-3 ml-auto transition-transform"
+            :class="{ 'rotate-180': expanded }"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+      </div>
+      <!-- サイドバー時の展開パネル: 固定オーバーレイ -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition-opacity duration-200"
+          leave-active-class="transition-opacity duration-150"
+          enter-from-class="opacity-0"
+          leave-to-class="opacity-0"
+        >
+          <div
+            v-if="expanded"
+            class="fixed inset-0 z-50 flex items-end justify-center"
+            @click.self="expanded = false"
+          >
+            <div
+              class="bg-white border border-gray-200 rounded-t-xl shadow-2xl w-full max-w-4xl"
+              style="max-height: 60vh; overflow-y: auto;"
+            >
+              <div class="p-3 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="flex gap-2">
+                    <button
+                      v-if="pending > 0 && isOnline && !isSyncing"
+                      class="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors"
+                      @click="syncQueue"
+                    >
+                      同期
+                    </button>
+                    <span v-if="isSyncing" class="text-xs text-blue-600">同期中...</span>
+                  </div>
+                  <button
+                    class="px-2 py-1 text-gray-400 hover:text-gray-600 text-xs"
+                    @click="expanded = false"
+                  >
+                    閉じる
+                  </button>
+                </div>
+                <div v-if="filteredItems.length > 0" class="overflow-x-auto">
+                  <table class="w-full text-xs">
+                    <thead class="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th class="px-2 py-2 text-left font-medium">日時</th>
+                        <th class="px-2 py-2 text-left font-medium">乗務員</th>
+                        <th class="px-2 py-2 text-right font-medium">ALC</th>
+                        <th class="px-2 py-2 text-center font-medium">結果</th>
+                        <th class="px-2 py-2 text-center font-medium">状態</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                      <tr v-for="item in filteredItems" :key="item.id" class="hover:bg-gray-50">
+                        <td class="px-2 py-1.5 text-gray-700 whitespace-nowrap">{{ formatDate(item.result.measuredAt) }}</td>
+                        <td class="px-2 py-1.5 text-gray-700">{{ employeeName(item.result.employeeId) }}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-700 tabular-nums">{{ item.result.alcoholValue.toFixed(3) }}</td>
+                        <td class="px-2 py-1.5 text-center">
+                          <span class="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="resultColor(item.result.resultType)">
+                            {{ resultLabel(item.result.resultType) }}
+                          </span>
+                        </td>
+                        <td class="px-2 py-1.5 text-center">
+                          <span class="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="statusColor(syncStatus(item))">
+                            {{ statusLabel(syncStatus(item)) }}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="text-center py-4 text-gray-400 text-xs">
+                  測定ログはありません
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+    </template>
+
+    <!-- 通常モード: 固定フッター -->
+    <div v-if="!sidebar" class="fixed bottom-0 left-0 right-0 z-40">
       <!-- 展開パネル -->
       <Transition
         enter-active-class="transition-transform duration-300 ease-out"
