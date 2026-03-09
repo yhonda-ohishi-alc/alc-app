@@ -3,11 +3,15 @@ import QRCode from 'qrcode'
 import type { Device, DeviceRegistrationRequest, CallSchedule } from '~/types'
 import {
   listDevices, listPendingDeviceRegistrations,
-  createDeviceUrlToken, createPermanentQr,
+  createDeviceUrlToken, createPermanentQr, createDeviceOwnerToken,
   approveDevice, rejectDevice, disableDevice, enableDevice, deleteDevice,
   updateDeviceCallSettings, testFcmNotification, testFcmAll,
 } from '~/utils/api'
 import type { TestFcmAllResult } from '~/utils/api'
+
+const { user } = useAuth()
+const isDeveloper = computed(() => user.value?.email === 'm.tama.ramu@gmail.com')
+const registrationMode = ref<'dev' | 'owner'>('dev')
 
 const devices = ref<Device[]>([])
 const pending = ref<DeviceRegistrationRequest[]>([])
@@ -39,6 +43,22 @@ const permanentQrName = ref('')
 const permanentQrCode = ref('')
 const permanentQrDataUrl = ref('')
 
+// Device Owner プロビジョニング
+const doDeviceName = ref('')
+const doWifiSsid = ref(localStorage.getItem('do_wifi_ssid') || '')
+const doWifiPassword = ref(localStorage.getItem('do_wifi_password') || '')
+const doWifiSecurity = ref(localStorage.getItem('do_wifi_security') || 'WPA')
+
+watch(doWifiSsid, v => localStorage.setItem('do_wifi_ssid', v))
+watch(doWifiPassword, v => localStorage.setItem('do_wifi_password', v))
+watch(doWifiSecurity, v => localStorage.setItem('do_wifi_security', v))
+const doIncludeApk = ref(true)
+const doProvisioningQrDataUrl = ref('')
+const doRegistrationCode = ref('')
+// APK 署名証明書の SHA-256 (URL-safe base64) — 署名鍵が変わらない限り固定
+const APK_SIGNATURE_CHECKSUM = 'K8l47tzAs9fdijA5qdm8o4Duq62WWkGa97sffd3KUZk'
+const APK_DOWNLOAD_URL = 'https://yhonda-ohishi-alc.github.io/AlcoholChecker/app-release.apk'
+
 async function refresh() {
   loading.value = true
   error.value = ''
@@ -54,9 +74,14 @@ async function refresh() {
   }
 }
 
+function deviceFlags() {
+  if (!isDeveloper.value) return { is_device_owner: true }
+  return registrationMode.value === 'dev' ? { is_dev_device: true } : { is_device_owner: true }
+}
+
 async function handleCreateUrlToken() {
   try {
-    const res = await createDeviceUrlToken(urlTokenName.value || undefined)
+    const res = await createDeviceUrlToken(urlTokenName.value || undefined, deviceFlags())
     generatedUrl.value = `${window.location.origin}${res.registration_url}`
     urlTokenName.value = ''
     urlCopied.value = false
@@ -74,7 +99,7 @@ async function copyUrl() {
 
 async function handleCreateQrTemp() {
   try {
-    const res = await createDeviceUrlToken(qrTempName.value || undefined)
+    const res = await createDeviceUrlToken(qrTempName.value || undefined, deviceFlags())
     qrTempCode.value = res.registration_code
     qrTempDeviceName.value = qrTempName.value || ''
     const claimUrl = `${window.location.origin}${res.registration_url}`
@@ -88,7 +113,7 @@ async function handleCreateQrTemp() {
 
 async function handleCreatePermanentQr() {
   try {
-    const res = await createPermanentQr(permanentQrName.value || undefined)
+    const res = await createPermanentQr(permanentQrName.value || undefined, deviceFlags())
     permanentQrCode.value = res.registration_code
     const claimUrl = `${window.location.origin}/device-claim?token=${res.registration_code}`
     permanentQrDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
@@ -96,6 +121,47 @@ async function handleCreatePermanentQr() {
     await refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'QR生成に失敗しました'
+  }
+}
+
+async function handleCreateDeviceOwnerQr() {
+  try {
+    const res = await createDeviceOwnerToken(doDeviceName.value || undefined, {
+      is_dev_device: isDeveloper.value && registrationMode.value === 'dev',
+    })
+    doRegistrationCode.value = res.registration_code
+
+    const provisioningJson: Record<string, unknown> = {
+      'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME':
+        'com.example.alcoholchecker/com.example.alcoholchecker.admin.AppDeviceAdminReceiver',
+      'android.app.extra.PROVISIONING_SKIP_ENCRYPTION': true,
+      'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': {
+        registration_code: res.registration_code,
+        device_name: doDeviceName.value || '',
+        is_dev_device: isDeveloper.value && registrationMode.value === 'dev' ? 'true' : 'false',
+      },
+    }
+    // APK ダウンロード + 署名チェックサム (署名鍵が同じなら不変)
+    if (doIncludeApk.value) {
+      provisioningJson['android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION'] = APK_DOWNLOAD_URL
+      provisioningJson['android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM'] = APK_SIGNATURE_CHECKSUM
+    }
+    // Wi-Fi (オプション)
+    if (doWifiSsid.value) {
+      provisioningJson['android.app.extra.PROVISIONING_WIFI_SSID'] = doWifiSsid.value
+      provisioningJson['android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE'] = doWifiSecurity.value
+      if (doWifiPassword.value) {
+        provisioningJson['android.app.extra.PROVISIONING_WIFI_PASSWORD'] = doWifiPassword.value
+      }
+    }
+
+    console.log('[Provisioning QR]', JSON.stringify(provisioningJson, null, 2))
+    doProvisioningQrDataUrl.value = await QRCode.toDataURL(JSON.stringify(provisioningJson), { width: 300, margin: 2 })
+    doDeviceName.value = ''
+    await refresh()
+  }
+  catch (e) {
+    error.value = e instanceof Error ? e.message : 'プロビジョニングQR生成に失敗しました'
   }
 }
 
@@ -402,6 +468,29 @@ onMounted(() => refresh())
   <div class="space-y-6">
     <p v-if="error" class="text-red-600 text-sm">{{ error }}</p>
 
+    <!-- 登録モード選択 (開発者のみ) -->
+    <div v-if="isDeveloper" class="rounded-xl shadow-sm p-3" :class="registrationMode === 'dev' ? 'bg-indigo-50' : 'bg-amber-50'">
+      <div class="flex gap-2 mb-2">
+        <button
+          class="px-3 py-1 rounded-lg text-xs font-medium"
+          :class="registrationMode === 'dev' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+          @click="registrationMode = 'dev'"
+        >開発者用</button>
+        <button
+          class="px-3 py-1 rounded-lg text-xs font-medium"
+          :class="registrationMode === 'owner' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+          @click="registrationMode = 'owner'"
+        >Device Owner用</button>
+      </div>
+      <p class="text-xs" :class="registrationMode === 'dev' ? 'text-indigo-500' : 'text-amber-500'">
+        {{ registrationMode === 'dev' ? 'GitHub Actions で即反映されるデバイスを登録します' : 'FCM で更新通知を受けるデバイスを登録します' }}
+      </p>
+    </div>
+    <div v-else class="bg-amber-50 rounded-xl shadow-sm p-3">
+      <p class="text-sm font-medium text-amber-700">Device Owner 用デバイス登録</p>
+      <p class="text-xs text-amber-500">FCM で更新通知を受けるデバイスを登録します</p>
+    </div>
+
     <!-- URL トークン生成 -->
     <div class="bg-white rounded-xl shadow-sm p-4">
       <h3 class="text-sm font-medium text-gray-800 mb-2">URL で端末登録 (即承認)</h3>
@@ -518,6 +607,63 @@ onMounted(() => refresh())
         >
           PDF保存
         </button>
+      </div>
+    </div>
+
+    <!-- Device Owner プロビジョニング -->
+    <div class="bg-white rounded-xl shadow-sm p-4">
+      <h3 class="text-sm font-medium text-gray-800 mb-2">Device Owner プロビジョニング</h3>
+      <p class="text-xs text-gray-500 mb-3">工場出荷リセット時にスキャンするQRを生成。アプリインストール+自動登録が行われます。</p>
+      <div class="space-y-2">
+        <input
+          v-model="doDeviceName"
+          type="text"
+          placeholder="デバイス名 (任意)"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        />
+        <div class="flex gap-2">
+          <input
+            v-model="doWifiSsid"
+            type="text"
+            placeholder="Wi-Fi SSID"
+            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <select
+            v-model="doWifiSecurity"
+            class="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="WPA">WPA/WPA2/WPA3</option>
+            <option value="WEP">WEP</option>
+            <option value="NONE">なし</option>
+          </select>
+        </div>
+        <input
+          v-if="doWifiSecurity !== 'NONE'"
+          v-model="doWifiPassword"
+          type="password"
+          placeholder="Wi-Fi パスワード"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        />
+        <label class="flex items-center gap-2 text-xs text-gray-600">
+          <input v-model="doIncludeApk" type="checkbox" />
+          APK自動ダウンロード (外すと手動インストール)
+        </label>
+        <button
+          class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+          @click="handleCreateDeviceOwnerQr"
+        >
+          プロビジョニングQR生成
+        </button>
+      </div>
+      <div v-if="doProvisioningQrDataUrl" class="mt-3 text-center space-y-2">
+        <img :src="doProvisioningQrDataUrl" alt="Provisioning QR" class="mx-auto" />
+        <p class="text-xs text-gray-500">Registration Code: {{ doRegistrationCode.slice(0, 8) }}...</p>
+        <p class="text-xs text-gray-400">端末を工場出荷リセットし、初期設定画面でこのQRをスキャンしてください</p>
+        <details class="text-left">
+          <summary class="text-xs text-gray-400 cursor-pointer">QR JSON</summary>
+          <pre class="text-[10px] text-gray-500 bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">APK: {{ APK_DOWNLOAD_URL }}
+Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}</pre>
+        </details>
       </div>
     </div>
 
@@ -641,7 +787,11 @@ onMounted(() => refresh())
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full" :class="dev.status === 'active' ? 'bg-green-500' : 'bg-gray-300'" />
               <div>
-                <p class="text-sm text-gray-800">{{ dev.device_name || dev.id.slice(0, 8) }}</p>
+                <p class="text-sm text-gray-800">
+                  {{ dev.device_name || dev.id.slice(0, 8) }}
+                  <span v-if="dev.is_dev_device" class="ml-1 px-1 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">開発者</span>
+                  <span v-if="dev.is_device_owner" class="ml-1 px-1 rounded text-[10px] font-medium bg-amber-100 text-amber-700">owner</span>
+                </p>
                 <p class="text-xs text-gray-500">
                   {{ dev.device_type }}
                   <span v-if="dev.phone_number"> / {{ dev.phone_number }}</span>

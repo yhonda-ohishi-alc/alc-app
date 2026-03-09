@@ -632,17 +632,24 @@ export async function listPendingDeviceRegistrations(): Promise<DeviceRegistrati
   return request<DeviceRegistrationRequest[]>('/api/devices/pending')
 }
 
-export async function createDeviceUrlToken(deviceName?: string): Promise<CreateTokenResponse> {
+export async function createDeviceUrlToken(deviceName?: string, opts?: { is_device_owner?: boolean; is_dev_device?: boolean }): Promise<CreateTokenResponse> {
   return request<CreateTokenResponse>('/api/devices/register/create-token', {
     method: 'POST',
-    body: JSON.stringify({ device_name: deviceName }),
+    body: JSON.stringify({ device_name: deviceName, ...opts }),
   })
 }
 
-export async function createPermanentQr(deviceName?: string): Promise<CreatePermanentQrResponse> {
+export async function createPermanentQr(deviceName?: string, opts?: { is_device_owner?: boolean; is_dev_device?: boolean }): Promise<CreatePermanentQrResponse> {
   return request<CreatePermanentQrResponse>('/api/devices/register/create-permanent-qr', {
     method: 'POST',
-    body: JSON.stringify({ device_name: deviceName }),
+    body: JSON.stringify({ device_name: deviceName, ...opts }),
+  })
+}
+
+export async function createDeviceOwnerToken(deviceName?: string, opts?: { is_dev_device?: boolean }): Promise<CreatePermanentQrResponse> {
+  return request<CreatePermanentQrResponse>('/api/devices/register/create-device-owner-token', {
+    method: 'POST',
+    body: JSON.stringify({ device_name: deviceName, ...opts }),
   })
 }
 

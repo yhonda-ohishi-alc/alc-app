@@ -738,6 +738,8 @@ export interface Device {
   last_login_employee_id?: string | null
   last_login_employee_name?: string | null
   last_login_employee_role?: string[] | null
+  is_device_owner: boolean
+  is_dev_device: boolean
   created_at: string
   updated_at: string
 }
@@ -761,6 +763,8 @@ export interface DeviceRegistrationRequest {
   status: RegistrationStatus
   device_id?: string
   expires_at?: string
+  is_device_owner?: boolean
+  is_dev_device?: boolean
   created_at: string
 }
 

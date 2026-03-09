@@ -51,6 +51,26 @@ export function useAuth() {
       }
     }
 
+    // Device Owner 自動アクティベーション
+    if (!isDeviceActivated.value && typeof window !== 'undefined') {
+      const android = (window as any).Android
+      if (android?.getProvisioningInfo) {
+        try {
+          const info = JSON.parse(android.getProvisioningInfo())
+          if (info.is_device_owner && info.device_id) {
+            activateDevice(info.tenant_id || '', info.device_id)
+          }
+        }
+        catch (e) {
+          console.warn('Failed to read provisioning info:', e)
+        }
+      }
+      // 非同期登録完了時のコールバック
+      ;(window as any).__deviceOwnerActivated = (tenantId: string, devId: string) => {
+        activateDevice(tenantId, devId)
+      }
+    }
+
     isLoading.value = false
   }
 

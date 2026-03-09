@@ -150,7 +150,24 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
     }
   }
 
-  onUnmounted(() => disconnect())
+  // Android ブリッジ再起動時の自動再接続
+  const bridgeRestartHandler = (e: Event) => {
+    const detail = (e as CustomEvent).detail
+    if (detail?.bridge === 'nfc') {
+      reconnectAttempts = 0
+      connect()
+    }
+  }
+  if (import.meta.client) {
+    window.addEventListener('bridge-restarted', bridgeRestartHandler)
+  }
+
+  onUnmounted(() => {
+    disconnect()
+    if (import.meta.client) {
+      window.removeEventListener('bridge-restarted', bridgeRestartHandler)
+    }
+  })
 
   return {
     isConnected: readonly(isConnected),
