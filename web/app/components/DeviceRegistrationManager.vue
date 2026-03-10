@@ -159,7 +159,7 @@ async function handleCreateDeviceOwnerQr() {
     }
 
     console.log('[Provisioning QR]', JSON.stringify(provisioningJson, null, 2))
-    doProvisioningQrDataUrl.value = await QRCode.toDataURL(JSON.stringify(provisioningJson), { width: 300, margin: 2 })
+    doProvisioningQrDataUrl.value = await QRCode.toDataURL(JSON.stringify(provisioningJson), { width: 600, margin: 2 })
     doDeviceName.value = ''
     await refresh()
   }
