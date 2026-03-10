@@ -177,7 +177,7 @@ export class RoomRegistry extends DurableObject<Env> {
       const msg = JSON.stringify({ type: 'rooms_updated', rooms: [...rooms, testRoomId] });
 
       const results: { device_id: string; sent: boolean; blocked: boolean; via: string; reason: string }[] = [];
-      const wsDeliveredDeviceIds: string[] = [];
+      let wsSent = 0;
 
       // 1) WebSocket で送信
       const deviceSockets = new Map<string, WebSocket[]>();
@@ -197,7 +197,7 @@ export class RoomRegistry extends DurableObject<Env> {
             try { s.send(msg); sent = true; } catch { /* ignore closed */ }
           }
           if (sent) {
-            wsDeliveredDeviceIds.push(deviceId);
+            wsSent++;
             results.push({ device_id: deviceId, sent: true, blocked: false, via: 'WebSocket', reason: '' });
           }
         } else {
@@ -206,7 +206,7 @@ export class RoomRegistry extends DurableObject<Env> {
         }
       }
 
-      // 2) FCM fallback: WebSocket で届かなかったデバイスに FCM テスト送信
+      // 2) FCM: 全デバイスに送信 (Android側dedupで重複排除)
       let fcmResult: { sent?: number; errors?: number; results?: { device_id: string; device_name: string; success: boolean; error?: string }[] } = {};
       if (this.env.BACKEND_API_URL) {
         try {
@@ -218,7 +218,7 @@ export class RoomRegistry extends DurableObject<Env> {
                 ? { 'X-Internal-Secret': this.env.FCM_INTERNAL_SECRET }
                 : {}),
             },
-            body: JSON.stringify({ exclude_device_ids: wsDeliveredDeviceIds }),
+            body: JSON.stringify({ exclude_device_ids: [] }),
           });
           if (res.ok) {
             fcmResult = await res.json() as typeof fcmResult;
@@ -237,7 +237,6 @@ export class RoomRegistry extends DurableObject<Env> {
         }
       }
 
-      const wsSent = wsDeliveredDeviceIds.length;
       const fcmSent = fcmResult.sent || 0;
       console.log(`Test call all with FCM: WS=${wsSent}, FCM=${fcmSent}, blocked=${results.filter(r => r.blocked).length}`);
       return new Response(JSON.stringify({ ok: true, results }), {
@@ -377,20 +376,20 @@ export class RoomRegistry extends DurableObject<Env> {
   private async broadcastRooms() {
     const rooms = await this.getActiveRooms();
     const msg = JSON.stringify({ type: 'rooms_updated', rooms });
-    const wsDeliveredDeviceIds: string[] = [];
 
+    // WS broadcast (works when connection is healthy)
     for (const ws of this.ctx.getWebSockets()) {
       try {
         const shouldSend = await this.shouldNotify(ws);
         if (shouldSend) {
           ws.send(msg);
-          const deviceId = this.getDeviceId(ws);
-          if (deviceId) wsDeliveredDeviceIds.push(deviceId);
         }
       } catch { /* ignore closed */ }
     }
 
-    // FCM fallback: notify devices not connected via WebSocket
+    // Always send FCM to all eligible devices (Android-side dedup handles overlap)
+    // ws.send() can silently succeed on stale connections, so we cannot rely on
+    // WS delivery to exclude devices from FCM.
     if (rooms.length > 0 && this.env.BACKEND_API_URL) {
       this.ctx.waitUntil(
         fetch(`${this.env.BACKEND_API_URL}/api/devices/fcm-notify-call`, {
@@ -403,7 +402,7 @@ export class RoomRegistry extends DurableObject<Env> {
           },
           body: JSON.stringify({
             room_ids: rooms,
-            exclude_device_ids: wsDeliveredDeviceIds,
+            exclude_device_ids: [],
           }),
         }).catch(e => console.log('FCM notify failed:', e))
       );
