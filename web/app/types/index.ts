@@ -738,6 +738,8 @@ export interface Device {
   last_login_employee_id?: string | null
   last_login_employee_name?: string | null
   last_login_employee_role?: string[] | null
+  app_version_code?: number | null
+  app_version_name?: string | null
   is_device_owner: boolean
   is_dev_device: boolean
   created_at: string

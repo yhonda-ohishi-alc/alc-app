@@ -480,6 +480,31 @@ async function triggerOtaUpdate() {
   }
 }
 
+// 個別デバイス OTA アップデート
+const otaUpdatingDevice = ref<string | null>(null)
+const otaDeviceResult = ref<{ deviceId: string; success: boolean; message: string } | null>(null)
+
+async function triggerDeviceUpdate(deviceId: string) {
+  otaUpdatingDevice.value = deviceId
+  otaDeviceResult.value = null
+  try {
+    const res = await triggerUpdate({ device_ids: [deviceId] })
+    const r = res.results[0]
+    if (r) {
+      otaDeviceResult.value = {
+        deviceId,
+        success: r.success,
+        message: r.success ? (r.error === 'already up-to-date' ? '最新版です' : '送信済') : (r.error || '失敗'),
+      }
+    }
+    setTimeout(() => { otaDeviceResult.value = null }, 5000)
+  } catch {
+    otaDeviceResult.value = { deviceId, success: false, message: '送信に失敗しました' }
+  } finally {
+    otaUpdatingDevice.value = null
+  }
+}
+
 async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
@@ -863,6 +888,10 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
                     class="ml-1 px-1 rounded text-[10px] font-medium"
                     :class="dev.fcm_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
                   >{{ dev.fcm_token ? 'FCM' : 'FCM未' }}</span>
+                  <span
+                    v-if="dev.app_version_name"
+                    class="ml-1 px-1 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
+                  >v{{ dev.app_version_name }}</span>
                 </p>
                 <p v-if="dev.last_login_employee_name" class="text-xs text-gray-400">
                   最終ログイン: {{ dev.last_login_employee_name }}
@@ -906,6 +935,18 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
                 @click="testFcm(dev.id)"
               >
                 {{ fcmTestingDevice === dev.id ? '送信中...' : 'FCM' }}
+              </button>
+              <!-- OTA更新 -->
+              <button
+                v-if="dev.fcm_token"
+                class="px-2 py-1 text-xs rounded"
+                :class="otaUpdatingDevice === dev.id
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'"
+                :disabled="otaUpdatingDevice === dev.id"
+                @click="triggerDeviceUpdate(dev.id)"
+              >
+                {{ otaUpdatingDevice === dev.id ? '送信中...' : '更新' }}
               </button>
               <!-- スケジュール展開 -->
               <button
@@ -951,6 +992,14 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
             :class="fcmTestResult.success ? 'text-green-600' : 'text-red-600'"
           >
             {{ fcmTestResult.message }}
+          </p>
+          <!-- OTA更新結果 -->
+          <p
+            v-if="otaDeviceResult && otaDeviceResult.deviceId === dev.id"
+            class="mt-1 text-xs"
+            :class="otaDeviceResult.success ? 'text-green-600' : 'text-red-600'"
+          >
+            {{ otaDeviceResult.message }}
           </p>
           <!-- 着信スケジュール設定 (展開時) -->
           <div v-if="expandedCallSettings.has(dev.id)" class="mt-3 ml-4 border-l-2 border-blue-200 pl-3">
