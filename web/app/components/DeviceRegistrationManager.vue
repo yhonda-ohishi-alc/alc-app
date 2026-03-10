@@ -5,7 +5,7 @@ import {
   listDevices, listPendingDeviceRegistrations,
   createDeviceUrlToken, createPermanentQr, createDeviceOwnerToken,
   approveDevice, rejectDevice, disableDevice, enableDevice, deleteDevice,
-  updateDeviceCallSettings, testFcmNotification, testFcmAll,
+  updateDeviceCallSettings, testFcmNotification, testFcmAll, triggerUpdate,
 } from '~/utils/api'
 import type { TestFcmAllResult } from '~/utils/api'
 
@@ -61,6 +61,18 @@ const APK_DOWNLOAD_URL = 'https://yhonda-ohishi-alc.github.io/AlcoholChecker/app
 
 // QR 拡大モーダル
 const zoomedQrSrc = ref('')
+
+// APK 最新バージョン取得
+const latestApkVersion = ref('')
+onMounted(async () => {
+  try {
+    const res = await fetch('https://api.github.com/repos/yhonda-ohishi-alc/AlcoholChecker/releases/latest')
+    if (res.ok) {
+      const data = await res.json()
+      latestApkVersion.value = data.tag_name || data.name || ''
+    }
+  } catch { /* ignore */ }
+})
 
 async function refresh() {
   loading.value = true
@@ -450,6 +462,24 @@ async function testFcmCallAll() {
   }
 }
 
+// OTA 一括アップデート
+const otaUpdating = ref(false)
+const otaUpdateResults = ref<TestFcmAllResult[]>([])
+
+async function triggerOtaUpdate() {
+  otaUpdating.value = true
+  otaUpdateResults.value = []
+  try {
+    const res = await triggerUpdate()
+    otaUpdateResults.value = res.results
+    setTimeout(() => { otaUpdateResults.value = [] }, 8000)
+  } catch {
+    error.value = 'OTAアップデートの送信に失敗しました'
+  } finally {
+    otaUpdating.value = false
+  }
+}
+
 async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
@@ -661,11 +691,13 @@ onMounted(() => refresh())
       <div v-if="doProvisioningQrDataUrl" class="mt-3 text-center space-y-2">
         <img :src="doProvisioningQrDataUrl" alt="Provisioning QR" class="mx-auto cursor-pointer w-[280px]" @click="zoomedQrSrc = doProvisioningQrDataUrl" />
         <p class="text-xs text-gray-500">Registration Code: {{ doRegistrationCode.slice(0, 8) }}...</p>
+        <p v-if="latestApkVersion" class="text-xs text-gray-500">APK: {{ latestApkVersion }}</p>
         <p class="text-xs text-gray-400">端末を工場出荷リセットし、初期設定画面でこのQRをスキャンしてください</p>
         <details class="text-left">
           <summary class="text-xs text-gray-400 cursor-pointer">QR JSON</summary>
           <pre class="text-[10px] text-gray-500 bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">APK: {{ APK_DOWNLOAD_URL }}
-Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}</pre>
+Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}
+Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
         </details>
       </div>
     </div>
@@ -737,6 +769,16 @@ Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}</pre>
           >
             {{ fcmTestingAll ? '送信中...' : 'FCM一括テスト' }}
           </button>
+          <button
+            class="px-3 py-1 text-xs rounded"
+            :class="otaUpdating
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-orange-500 text-white hover:bg-orange-600'"
+            :disabled="otaUpdating"
+            @click="triggerOtaUpdate"
+          >
+            {{ otaUpdating ? '送信中...' : '一括アップデート' }}
+          </button>
           <button class="text-xs text-blue-600 hover:underline" @click="refresh">更新</button>
         </div>
       </div>
@@ -779,6 +821,20 @@ Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}</pre>
           >
             {{ r.device_name || r.device_id.slice(0, 8) }}:
             {{ r.success ? '送信済' : r.error || '失敗' }}
+          </span>
+        </div>
+      </div>
+      <!-- OTAアップデート結果 -->
+      <div v-if="otaUpdateResults.length > 0" class="px-4 py-2 bg-orange-50 border-b">
+        <p class="text-xs font-medium text-orange-600 mb-1">アップデート送信結果</p>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="r in otaUpdateResults" :key="r.device_id"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs"
+            :class="r.success ? (r.error === 'already up-to-date' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700') : 'bg-red-100 text-red-700'"
+          >
+            {{ r.device_name || r.device_id.slice(0, 8) }}:
+            {{ r.error === 'already up-to-date' ? '最新' : r.success ? '送信済' : r.error || '失敗' }}
           </span>
         </div>
       </div>

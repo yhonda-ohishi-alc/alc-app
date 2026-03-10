@@ -725,3 +725,15 @@ export interface TestFcmAllResult {
 export async function testFcmAll(): Promise<{ sent: number; skipped: number; errors: number; results: TestFcmAllResult[] }> {
   return request(`/api/devices/test-fcm-all`, { method: 'POST' })
 }
+
+export interface TriggerUpdateResult {
+  sent: number
+  skipped: number
+  already_updated: number
+  errors: number
+  results: TestFcmAllResult[]
+}
+
+export async function triggerUpdate(opts?: { device_ids?: string[]; dev_only?: boolean }): Promise<TriggerUpdateResult> {
+  return request(`/api/devices/trigger-update`, { method: 'POST', body: JSON.stringify(opts ?? {}) })
+}
