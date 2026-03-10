@@ -57,7 +57,7 @@ const doProvisioningQrDataUrl = ref('')
 const doRegistrationCode = ref('')
 // APK 署名証明書の SHA-256 (URL-safe base64) — 署名鍵が変わらない限り固定
 const APK_SIGNATURE_CHECKSUM = 'K8l47tzAs9fdijA5qdm8o4Duq62WWkGa97sffd3KUZk'
-const APK_DOWNLOAD_URL = 'https://yhonda-ohishi-alc.github.io/AlcoholChecker/app-release.apk'
+const apkDownloadUrl = 'https://yhonda-ohishi-alc.github.io/AlcoholChecker/app-release.apk'
 
 // QR 拡大モーダル
 const zoomedQrSrc = ref('')
@@ -158,7 +158,7 @@ async function handleCreateDeviceOwnerQr() {
     }
     // APK ダウンロード + 署名チェックサム (署名鍵が同じなら不変)
     if (doIncludeApk.value) {
-      provisioningJson['android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION'] = APK_DOWNLOAD_URL
+      provisioningJson['android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION'] = apkDownloadUrl
       provisioningJson['android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM'] = APK_SIGNATURE_CHECKSUM
     }
     // Wi-Fi (オプション)
@@ -505,6 +505,18 @@ async function triggerDeviceUpdate(deviceId: string) {
   }
 }
 
+// 更新用 QR コード
+const updateQrDataUrl = ref('')
+const apkLatestUrl = 'https://github.com/yhonda-ohishi-alc/AlcoholChecker/releases/latest/download/app-release.apk'
+
+async function showUpdateQr() {
+  if (updateQrDataUrl.value) {
+    updateQrDataUrl.value = ''
+    return
+  }
+  updateQrDataUrl.value = await QRCode.toDataURL(apkLatestUrl, { width: 400, margin: 2 })
+}
+
 async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
@@ -720,7 +732,7 @@ onMounted(() => refresh())
         <p class="text-xs text-gray-400">端末を工場出荷リセットし、初期設定画面でこのQRをスキャンしてください</p>
         <details class="text-left">
           <summary class="text-xs text-gray-400 cursor-pointer">QR JSON</summary>
-          <pre class="text-[10px] text-gray-500 bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">APK: {{ APK_DOWNLOAD_URL }}
+          <pre class="text-[10px] text-gray-500 bg-gray-50 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">APK: {{ apkDownloadUrl }}
 Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}
 Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
         </details>
@@ -804,8 +816,23 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
           >
             {{ otaUpdating ? '送信中...' : '一括アップデート' }}
           </button>
+          <button
+            class="px-3 py-1 text-xs rounded"
+            :class="updateQrDataUrl
+              ? 'bg-gray-500 text-white'
+              : 'bg-gray-700 text-white hover:bg-gray-800'"
+            @click="showUpdateQr"
+          >
+            {{ updateQrDataUrl ? 'QR閉じる' : '更新QR' }}
+          </button>
           <button class="text-xs text-blue-600 hover:underline" @click="refresh">更新</button>
         </div>
+      </div>
+      <!-- 更新用QRコード -->
+      <div v-if="updateQrDataUrl" class="px-4 py-3 bg-gray-50 border-b text-center">
+        <p class="text-xs text-gray-600 mb-2">端末でスキャンして最新APKをダウンロード</p>
+        <img :src="updateQrDataUrl" alt="更新用QR" class="mx-auto w-48 h-48" />
+        <p class="text-[10px] text-gray-400 mt-1 break-all">{{ apkLatestUrl }}</p>
       </div>
       <!-- 一斉テスト結果 -->
       <div v-if="testAllResults.length > 0" class="px-4 py-2 bg-gray-50 border-b">
