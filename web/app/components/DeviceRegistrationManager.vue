@@ -59,6 +59,9 @@ const doRegistrationCode = ref('')
 const APK_SIGNATURE_CHECKSUM = 'K8l47tzAs9fdijA5qdm8o4Duq62WWkGa97sffd3KUZk'
 const APK_DOWNLOAD_URL = 'https://yhonda-ohishi-alc.github.io/AlcoholChecker/app-release.apk'
 
+// QR 拡大モーダル
+const zoomedQrSrc = ref('')
+
 async function refresh() {
   loading.value = true
   error.value = ''
@@ -103,7 +106,7 @@ async function handleCreateQrTemp() {
     qrTempCode.value = res.registration_code
     qrTempDeviceName.value = qrTempName.value || ''
     const claimUrl = `${window.location.origin}${res.registration_url}`
-    qrTempDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
+    qrTempDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 400, margin: 2 })
     qrTempName.value = ''
     await refresh()
   } catch (e) {
@@ -116,7 +119,7 @@ async function handleCreatePermanentQr() {
     const res = await createPermanentQr(permanentQrName.value || undefined, deviceFlags())
     permanentQrCode.value = res.registration_code
     const claimUrl = `${window.location.origin}/device-claim?token=${res.registration_code}`
-    permanentQrDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
+    permanentQrDataUrl.value = await QRCode.toDataURL(claimUrl, { width: 400, margin: 2 })
     permanentQrName.value = ''
     await refresh()
   } catch (e) {
@@ -242,7 +245,7 @@ async function toggleQr(code: string) {
     return
   }
   const claimUrl = `${window.location.origin}/device-claim?token=${code}`
-  tokenQrUrls.value[code] = await QRCode.toDataURL(claimUrl, { width: 200, margin: 2 })
+  tokenQrUrls.value[code] = await QRCode.toDataURL(claimUrl, { width: 400, margin: 2 })
 }
 
 // 着信設定
@@ -543,7 +546,7 @@ onMounted(() => refresh())
       </div>
       <div v-if="qrTempDataUrl" class="mt-3 text-center space-y-2">
         <p v-if="qrTempDeviceName" class="text-sm font-medium text-gray-800">{{ qrTempDeviceName }}</p>
-        <img :src="qrTempDataUrl" alt="QR Temp" class="mx-auto" />
+        <img :src="qrTempDataUrl" alt="QR Temp" class="mx-auto cursor-pointer w-[200px]" @click="zoomedQrSrc = qrTempDataUrl" />
         <p class="text-xs text-gray-500">Code: {{ qrTempCode.slice(0, 8) }}...</p>
       </div>
 
@@ -573,7 +576,7 @@ onMounted(() => refresh())
               </div>
             </div>
             <div v-if="tokenQrUrls[req.registration_code]" class="mt-2 text-center">
-              <img :src="tokenQrUrls[req.registration_code]" alt="QR" class="mx-auto" />
+              <img :src="tokenQrUrls[req.registration_code]" alt="QR" class="mx-auto cursor-pointer w-[200px]" @click="zoomedQrSrc = tokenQrUrls[req.registration_code]" />
             </div>
           </div>
         </div>
@@ -599,7 +602,7 @@ onMounted(() => refresh())
         </button>
       </div>
       <div v-if="permanentQrDataUrl" class="mt-3 text-center space-y-2">
-        <img :src="permanentQrDataUrl" alt="Permanent QR" class="mx-auto" />
+        <img :src="permanentQrDataUrl" alt="Permanent QR" class="mx-auto cursor-pointer w-[200px]" @click="zoomedQrSrc = permanentQrDataUrl" />
         <p class="text-xs text-gray-500">Code: {{ permanentQrCode.slice(0, 8) }}...</p>
         <button
           class="px-4 py-2 bg-gray-700 text-white rounded-lg text-xs hover:bg-gray-800"
@@ -656,7 +659,7 @@ onMounted(() => refresh())
         </button>
       </div>
       <div v-if="doProvisioningQrDataUrl" class="mt-3 text-center space-y-2">
-        <img :src="doProvisioningQrDataUrl" alt="Provisioning QR" class="mx-auto" />
+        <img :src="doProvisioningQrDataUrl" alt="Provisioning QR" class="mx-auto cursor-pointer w-[280px]" @click="zoomedQrSrc = doProvisioningQrDataUrl" />
         <p class="text-xs text-gray-500">Registration Code: {{ doRegistrationCode.slice(0, 8) }}...</p>
         <p class="text-xs text-gray-400">端末を工場出荷リセットし、初期設定画面でこのQRをスキャンしてください</p>
         <details class="text-left">
@@ -908,6 +911,15 @@ Signature Checksum: {{ APK_SIGNATURE_CHECKSUM }}</pre>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- QR 拡大モーダル -->
+    <div
+      v-if="zoomedQrSrc"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      @click="zoomedQrSrc = ''"
+    >
+      <img :src="zoomedQrSrc" alt="QR" class="max-w-[90vw] max-h-[90vh] rounded-lg bg-white p-4" />
     </div>
   </div>
 </template>
