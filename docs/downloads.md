@@ -8,14 +8,14 @@
 
 [app-release.apk をダウンロード](https://yhonda-ohishi-alc.github.io/AlcoholChecker/app-release.apk){ .md-button .md-button--primary }
 
-<figure class="qr-figure" markdown>
+<figure class="qr-figure">
   <a href="#qr-app-release">
-    ![AlcoholChecker QR](images/qr-app-release.png){ width="160" }
+    <img src="images/qr-app-release.png" alt="AlcoholChecker QR" width="160">
   </a>
   <figcaption>QRコードをタップで拡大</figcaption>
 </figure>
 
-<div id="qr-app-release" class="qr-modal" markdown>
+<div id="qr-app-release" class="qr-modal">
   <a href="#" class="qr-modal-overlay"></a>
   <div class="qr-modal-content">
     <a href="#" class="qr-modal-close">&times;</a>
@@ -32,14 +32,14 @@
 
 [provtest.apk をダウンロード](https://yhonda-ohishi-alc.github.io/AlcoholChecker/provtest.apk){ .md-button }
 
-<figure class="qr-figure" markdown>
+<figure class="qr-figure">
   <a href="#qr-provtest">
-    ![ProvisioningTest QR](images/qr-provtest.png){ width="160" }
+    <img src="images/qr-provtest.png" alt="ProvisioningTest QR" width="160">
   </a>
   <figcaption>QRコードをタップで拡大</figcaption>
 </figure>
 
-<div id="qr-provtest" class="qr-modal" markdown>
+<div id="qr-provtest" class="qr-modal">
   <a href="#" class="qr-modal-overlay"></a>
   <div class="qr-modal-content">
     <a href="#" class="qr-modal-close">&times;</a>
@@ -47,6 +47,17 @@
     <p>ProvisioningTest ダウンロード</p>
   </div>
 </div>
+
+---
+
+## マニュアル PDF
+
+操作マニュアル全体を PDF として保存できます。
+
+[印刷用ページを開く（PDF保存可）](../print_page/){ .md-button }
+
+!!! tip "PDF保存方法"
+    印刷用ページを開いた後、ブラウザの印刷機能（`Ctrl+P` / `⌘+P`）で「**PDFに保存**」を選択してください。
 
 ---
 
