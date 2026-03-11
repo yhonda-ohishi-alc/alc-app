@@ -1,0 +1,8 @@
+/* 印刷用微調整 */
+@media print {
+  .md-sidebar,
+  .md-header,
+  .md-footer {
+    display: none !important;
+  }
+}

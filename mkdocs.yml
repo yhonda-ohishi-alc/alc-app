@@ -1,0 +1,96 @@
+site_name: ALC アプリ 操作マニュアル
+site_url: https://yhonda-ohishi-alc.github.io/alc-app/
+site_description: アルコールチェッカーシステム 操作マニュアル
+repo_url: https://github.com/yhonda-ohishi-alc/alc-app
+repo_name: yhonda-ohishi-alc/alc-app
+
+theme:
+  name: material
+  language: ja
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: ダークモードに切り替え
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: ライトモードに切り替え
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - toc.integrate
+  font:
+    text: Noto Sans JP
+    code: Roboto Mono
+
+plugins:
+  - search:
+      lang: ja
+  - print-site:
+      add_cover_page: true
+      cover_page_template: ""
+      add_table_of_contents: true
+      toc_title: "目次"
+      toc_depth: 3
+      add_full_urls: false
+      enumerate_headings: false
+      enumerate_figures: false
+      print_page_title: "印刷用ページ"
+      path_to_pdf: ""
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - ホーム: index.md
+  - 管理者向け:
+      - admin/index.md
+      - 初期設定: admin/getting-started.md
+      - ダッシュボード: admin/dashboard.md
+      - 点呼管理:
+          - 点呼スケジュール: admin/tenko-schedule.md
+          - 点呼記録・履歴: admin/tenko-record.md
+          - 遠隔点呼: admin/remote-tenko.md
+      - 乗務員管理:
+          - 乗務員一覧: admin/employee-management.md
+          - 健康基準値: admin/health-baseline.md
+      - デバイス管理: admin/device-management.md
+      - タイムカード: admin/timecard.md
+      - 中間点呼: admin/tenko-call.md
+      - 機器故障記録: admin/equipment-failure.md
+      - Webhook設定: admin/webhook.md
+  - 運行者向け:
+      - operator/index.md
+      - はじめに: operator/getting-started.md
+      - 顔認証: operator/face-auth.md
+      - アルコール測定: operator/alcohol-measurement.md
+      - 点呼:
+          - 自動点呼: operator/tenko.md
+          - 遠隔点呼: operator/remote-tenko.md
+          - 自己申告: operator/self-declaration.md
+          - 日常点検: operator/daily-inspection.md
+      - タイムカード: operator/timecard.md
+      - 中間点呼: operator/tenko-call.md
+      - デバイス登録: operator/device-registration.md

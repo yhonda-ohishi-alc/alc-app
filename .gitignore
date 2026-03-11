@@ -13,3 +13,6 @@ node_modules/
 
 # Rust ビルド成果物
 target/
+
+# MkDocs ビルド出力
+site/
