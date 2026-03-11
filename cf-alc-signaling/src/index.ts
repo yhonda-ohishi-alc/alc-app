@@ -60,6 +60,20 @@ export default {
       });
     }
 
+    // DELETE /device-schedule/:deviceId → delete schedule from RoomRegistry DO
+    if (request.method === 'DELETE' && scheduleMatch) {
+      const deviceId = scheduleMatch[1];
+      const id = env.ROOM_REGISTRY.idFromName('registry');
+      const stub = env.ROOM_REGISTRY.get(id);
+      await stub.fetch(new Request(`https://registry/schedule/${deviceId}`, {
+        method: 'DELETE',
+      }));
+      return new Response(null, {
+        status: 204,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
     // GET /watchers → list connected watcher device_ids (debug)
     if (request.method === 'GET' && url.pathname === '/watchers') {
       const id = env.ROOM_REGISTRY.idFromName('registry');

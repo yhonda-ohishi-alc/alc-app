@@ -34,6 +34,7 @@ export class RoomRegistry extends DurableObject<Env> {
       // Send current state immediately on connect
       const rooms = await this.getActiveRooms();
       pair[1].send(JSON.stringify({ type: 'rooms_updated', rooms }));
+      console.log(`[WS] device=${deviceId || '(none)'} connected, active_rooms=${rooms.length}, total_ws=${this.ctx.getWebSockets().length}`);
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
@@ -91,6 +92,14 @@ export class RoomRegistry extends DurableObject<Env> {
       } catch {
         return new Response('Invalid JSON', { status: 400 });
       }
+    }
+
+    // DELETE /schedule/:deviceId → スケジュール削除
+    if (request.method === 'DELETE' && scheduleMatch) {
+      const deviceId = scheduleMatch[1];
+      await this.ctx.storage.delete(`schedule:${deviceId}`);
+      console.log(`Schedule deleted for ${deviceId}`);
+      return new Response(null, { status: 204 });
     }
 
     // GET /watchers → list connected watcher device_ids (debug)
@@ -344,10 +353,14 @@ export class RoomRegistry extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket) {
+    const deviceId = this.getDeviceId(ws);
+    console.log(`[WS] device=${deviceId || '(none)'} disconnected, remaining_ws=${this.ctx.getWebSockets().length - 1}`);
     ws.close();
   }
 
   async webSocketError(ws: WebSocket) {
+    const deviceId = this.getDeviceId(ws);
+    console.log(`[WS] device=${deviceId || '(none)'} error`);
     ws.close();
   }
 
@@ -376,21 +389,36 @@ export class RoomRegistry extends DurableObject<Env> {
   private async broadcastRooms() {
     const rooms = await this.getActiveRooms();
     const msg = JSON.stringify({ type: 'rooms_updated', rooms });
+    const allWs = this.ctx.getWebSockets();
+    console.log(`[broadcast] rooms=${JSON.stringify(rooms)}, ws_count=${allWs.length}`);
 
     // WS broadcast (works when connection is healthy)
-    for (const ws of this.ctx.getWebSockets()) {
+    let wsSent = 0;
+    let wsBlocked = 0;
+    for (const ws of allWs) {
+      const deviceId = this.getDeviceId(ws);
       try {
         const shouldSend = await this.shouldNotify(ws);
         if (shouldSend) {
           ws.send(msg);
+          wsSent++;
+          console.log(`[broadcast] WS sent to device=${deviceId}`);
+        } else {
+          wsBlocked++;
+          const reason = await this.getBlockReason(ws);
+          console.log(`[broadcast] WS blocked device=${deviceId} reason=${reason}`);
         }
-      } catch { /* ignore closed */ }
+      } catch (e) {
+        console.log(`[broadcast] WS error device=${deviceId}: ${e}`);
+      }
     }
+    console.log(`[broadcast] WS total: sent=${wsSent}, blocked=${wsBlocked}`);
 
     // Always send FCM to all eligible devices (Android-side dedup handles overlap)
     // ws.send() can silently succeed on stale connections, so we cannot rely on
     // WS delivery to exclude devices from FCM.
     if (rooms.length > 0 && this.env.BACKEND_API_URL) {
+      console.log(`[broadcast] FCM requesting to ${this.env.BACKEND_API_URL}`);
       this.ctx.waitUntil(
         fetch(`${this.env.BACKEND_API_URL}/api/devices/fcm-notify-call`, {
           method: 'POST',
@@ -404,15 +432,26 @@ export class RoomRegistry extends DurableObject<Env> {
             room_ids: rooms,
             exclude_device_ids: [],
           }),
-        }).catch(e => console.log('FCM notify failed:', e))
+        })
+        .then(res => console.log(`[broadcast] FCM response: ${res.status}`))
+        .catch(e => console.log(`[broadcast] FCM failed: ${e}`))
       );
+    } else {
+      console.log(`[broadcast] FCM skipped: rooms=${rooms.length}, backend=${!!this.env.BACKEND_API_URL}`);
     }
   }
 
   private async shouldNotify(ws: WebSocket): Promise<boolean> {
+    const deviceId = this.getDeviceId(ws);
     const schedule = await this.getSchedule(ws);
-    if (!schedule) return true; // スケジュール未設定 → 通知する
-    if (!schedule.enabled) return false; // 着信OFF → 通知しない
+    if (!schedule) {
+      console.log(`[shouldNotify] device=${deviceId} no_schedule → allow`);
+      return true;
+    }
+    if (!schedule.enabled) {
+      console.log(`[shouldNotify] device=${deviceId} schedule.enabled=false → block`);
+      return false;
+    }
 
     // JST = UTC+9
     const now = new Date();

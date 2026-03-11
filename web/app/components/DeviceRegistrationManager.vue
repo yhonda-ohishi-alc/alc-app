@@ -295,7 +295,7 @@ function toggleCallSettings(dev: Device) {
   } else {
     editingSchedules.value[id] = dev.call_schedule
       ? { ...dev.call_schedule }
-      : { ...defaultSchedule }
+      : null
     expandedCallSettings.value.add(id)
     expandedCallSettings.value = new Set(expandedCallSettings.value)
   }
@@ -307,14 +307,17 @@ function updateScheduleForDevice(deviceId: string, schedule: CallSchedule) {
 
 async function toggleCallEnabled(dev: Device) {
   const newEnabled = !dev.call_enabled
+  console.log(`[CallSettings] toggleCallEnabled device=${dev.id} name=${dev.device_name} ${dev.call_enabled}→${newEnabled} schedule=${dev.call_schedule ? 'set' : 'null'}`)
   try {
     await updateDeviceCallSettings(dev.id, newEnabled, dev.call_schedule)
-    // DOにも通知
-    await syncScheduleToDO(dev.id, newEnabled
-      ? { ...(dev.call_schedule || { startHour: 0, startMin: 0, endHour: 23, endMin: 59, days: [0, 1, 2, 3, 4, 5, 6] }), enabled: true }
-      : { ...defaultSchedule, enabled: false })
+    if (dev.call_schedule) {
+      await syncScheduleToDO(dev.id, { ...dev.call_schedule, enabled: newEnabled })
+    } else {
+      await deleteScheduleFromDO(dev.id)
+    }
     await refresh()
   } catch (e) {
+    console.error(`[CallSettings] toggleCallEnabled failed:`, e)
     error.value = e instanceof Error ? e.message : '着信設定の更新に失敗しました'
   }
 }
@@ -322,13 +325,29 @@ async function toggleCallEnabled(dev: Device) {
 async function saveCallSchedule(dev: Device) {
   const schedule = editingSchedules.value[dev.id]
   if (!schedule) return
+  console.log(`[CallSettings] saveSchedule device=${dev.id} name=${dev.device_name}`, JSON.stringify(schedule))
   try {
     await updateDeviceCallSettings(dev.id, dev.call_enabled, schedule)
-    // DOにも通知 (enabled は dev.call_enabled を使う)
     await syncScheduleToDO(dev.id, { ...schedule, enabled: dev.call_enabled })
     await refresh()
   } catch (e) {
+    console.error(`[CallSettings] saveSchedule failed:`, e)
     error.value = e instanceof Error ? e.message : 'スケジュール保存に失敗しました'
+  }
+}
+
+async function deleteCallSchedule(dev: Device) {
+  console.log(`[CallSettings] deleteSchedule device=${dev.id} name=${dev.device_name}`)
+  try {
+    await updateDeviceCallSettings(dev.id, dev.call_enabled, null)
+    await deleteScheduleFromDO(dev.id)
+    delete editingSchedules.value[dev.id]
+    expandedCallSettings.value.delete(dev.id)
+    expandedCallSettings.value = new Set(expandedCallSettings.value)
+    await refresh()
+  } catch (e) {
+    console.error(`[CallSettings] deleteSchedule failed:`, e)
+    error.value = e instanceof Error ? e.message : 'スケジュール削除に失敗しました'
   }
 }
 
@@ -521,13 +540,25 @@ async function syncScheduleToDO(deviceId: string, schedule: CallSchedule) {
   if (!signalingUrl) return
   try {
     const url = signalingUrl.replace(/\/$/, '')
-    await fetch(`${url}/device-schedule/${deviceId}`, {
+    const res = await fetch(`${url}/device-schedule/${deviceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(schedule),
     })
-  } catch {
-    // DO通知失敗は致命的でない (次回接続時にRoomWatcherが同期)
+    console.log(`[CallSettings] syncToDO device=${deviceId} status=${res.status}`, JSON.stringify(schedule))
+  } catch (e) {
+    console.error(`[CallSettings] syncToDO failed device=${deviceId}:`, e)
+  }
+}
+
+async function deleteScheduleFromDO(deviceId: string) {
+  if (!signalingUrl) return
+  try {
+    const url = signalingUrl.replace(/\/$/, '')
+    const res = await fetch(`${url}/device-schedule/${deviceId}`, { method: 'DELETE' })
+    console.log(`[CallSettings] deleteFromDO device=${deviceId} status=${res.status}`)
+  } catch (e) {
+    console.error(`[CallSettings] deleteFromDO failed device=${deviceId}:`, e)
   }
 }
 
@@ -1030,16 +1061,35 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
           </p>
           <!-- 着信スケジュール設定 (展開時) -->
           <div v-if="expandedCallSettings.has(dev.id)" class="mt-3 ml-4 border-l-2 border-blue-200 pl-3">
-            <CallScheduleSettings
-              :model-value="editingSchedules[dev.id] || defaultSchedule"
-              @update:model-value="updateScheduleForDevice(dev.id, $event)"
-            />
-            <button
-              class="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-              @click="saveCallSchedule(dev)"
-            >
-              保存
-            </button>
+            <template v-if="editingSchedules[dev.id]">
+              <CallScheduleSettings
+                :model-value="editingSchedules[dev.id]!"
+                @update:model-value="updateScheduleForDevice(dev.id, $event)"
+              />
+              <div class="mt-2 flex gap-2">
+                <button
+                  class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                  @click="saveCallSchedule(dev)"
+                >
+                  保存
+                </button>
+                <button
+                  class="px-3 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
+                  @click="deleteCallSchedule(dev)"
+                >
+                  削除
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <p class="text-xs text-gray-500 mb-2">スケジュール未設定</p>
+              <button
+                class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                @click="editingSchedules[dev.id] = { ...defaultSchedule }"
+              >
+                スケジュールを設定
+              </button>
+            </template>
           </div>
         </div>
       </div>
