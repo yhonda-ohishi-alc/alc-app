@@ -94,3 +94,4 @@ nav:
       - タイムカード: operator/timecard.md
       - 中間点呼: operator/tenko-call.md
       - デバイス登録: operator/device-registration.md
+  - ダウンロード: downloads.md
