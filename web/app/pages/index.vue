@@ -71,6 +71,68 @@ const roleLabels: Record<RoleTab, string> = {
 const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
 
+// WatchdogService ステータス (Android端末のみ)
+const { isAndroidApp } = useFingerprint()
+const watchdogStatus = ref<string | null>(null)
+function refreshWatchdogStatus() {
+  if (!isAndroidApp.value) { watchdogStatus.value = null; return }
+  try {
+    watchdogStatus.value = (window as any).Android?.isCallEnabled?.() ? '稼働中' : '停止中'
+  } catch { watchdogStatus.value = null }
+}
+watch(menuOpen, (open) => { if (open) refreshWatchdogStatus() })
+
+// QRスキャンでデバイス登録
+const qrRegistering = ref(false)
+const qrResult = ref<string | null>(null)
+
+function scanQrForRegistration() {
+  menuOpen.value = false
+  qrResult.value = null
+  qrRegistering.value = true
+  try {
+    ;(window as any).Android?.scanQrCode?.()
+  } catch {
+    qrResult.value = 'QRスキャナーを起動できません'
+    qrRegistering.value = false
+  }
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('qr-scanned', async (e: any) => {
+      const value = e.detail?.value
+      if (!value) { qrRegistering.value = false; return }
+      try {
+        // URLからtokenを抽出 (/device-claim?token=xxx or コード直接)
+        let code = value
+        try {
+          const url = new URL(value)
+          code = url.searchParams.get('token') || value
+        } catch { /* URLでなければそのまま使う */ }
+
+        const { claimDeviceRegistration } = await import('~/utils/api')
+        let phoneNumber: string | undefined
+        try { phoneNumber = (window as any).Android?.getPhoneNumber?.() || undefined } catch {}
+        const res = await claimDeviceRegistration({
+          registration_code: code,
+          phone_number: phoneNumber,
+        })
+        if (res.device_id) {
+          ;(window as any).Android?.setDeviceId?.(res.device_id)
+          qrResult.value = `登録完了: ${res.device_id.slice(0, 8)}...`
+        } else {
+          qrResult.value = res.message || '登録に失敗しました'
+        }
+      } catch (err) {
+        qrResult.value = err instanceof Error ? err.message : '登録エラー'
+      } finally {
+        qrRegistering.value = false
+      }
+    })
+  }
+})
+
 function onMenuSelect(tab: DriverSubTab) {
   driverSubTab.value = tab
   menuOpen.value = false
@@ -180,6 +242,27 @@ function onRoleTabClick(role: RoleTab) {
             >
               {{ item.label }}
             </button>
+            <!-- QRスキャンでデバイス登録 (Android のみ) -->
+            <template v-if="isAndroidApp">
+              <div class="border-t my-1" />
+              <button
+                class="w-full text-left px-4 py-2 text-sm transition-colors text-gray-700 hover:bg-gray-100"
+                :disabled="qrRegistering"
+                @click="scanQrForRegistration"
+              >
+                {{ qrRegistering ? 'スキャン中...' : 'QRでデバイス登録' }}
+              </button>
+              <div v-if="qrResult" class="px-4 py-1 text-xs" :class="qrResult.includes('完了') ? 'text-green-600' : 'text-red-500'">
+                {{ qrResult }}
+              </div>
+            </template>
+            <div v-if="watchdogStatus" class="border-t my-1" />
+            <div v-if="watchdogStatus" class="px-4 py-2 text-xs text-gray-500">
+              常時起動:
+              <span
+                :class="watchdogStatus === '稼働中' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'"
+              >{{ watchdogStatus }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -259,6 +342,27 @@ function onRoleTabClick(role: RoleTab) {
                 <MeasurementLog :sidebar="true" />
               </div>
               <div class="border-t my-1" />
+              <!-- QRスキャンでデバイス登録 (Android のみ) -->
+              <template v-if="isAndroidApp">
+                <button
+                  class="w-full text-left px-4 py-2 text-sm transition-colors text-gray-700 hover:bg-gray-100"
+                  :disabled="qrRegistering"
+                  @click="scanQrForRegistration"
+                >
+                  {{ qrRegistering ? 'スキャン中...' : 'QRでデバイス登録' }}
+                </button>
+                <div v-if="qrResult" class="px-4 py-1 text-xs" :class="qrResult.includes('完了') ? 'text-green-600' : 'text-red-500'">
+                  {{ qrResult }}
+                </div>
+              </template>
+              <!-- 常時起動ステータス -->
+              <div v-if="watchdogStatus" class="px-4 py-2 text-xs text-gray-500">
+                常時起動:
+                <span
+                  :class="watchdogStatus === '稼働中' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'"
+                >{{ watchdogStatus }}</span>
+              </div>
+              <div v-if="watchdogStatus || isAndroidApp" class="border-t my-1" />
               <!-- ページ更新 -->
               <button
                 class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
@@ -290,6 +394,21 @@ function onRoleTabClick(role: RoleTab) {
       <!-- 測定ログ: フッターバー (縦画面時のみ。横画面時はサイドバー内) -->
       <MeasurementLog v-if="!isAndroidLandscape" />
     </template>
+
+    <!-- 横画面: 管理者/admin → 運行者に戻るバー -->
+    <div v-if="isAndroidLandscape && activeRole !== 'driver'"
+         class="shrink-0 bg-gray-50 border-b flex items-center px-2 py-1 gap-2">
+      <button
+        class="px-3 py-1.5 rounded-md text-xs font-medium text-blue-700 hover:bg-blue-50 transition-colors flex items-center gap-1"
+        @click="activeRole = 'driver'"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        運行者に戻る
+      </button>
+      <span class="text-xs text-gray-500">{{ roleLabels[activeRole] }}</span>
+    </div>
 
     <!-- 運行管理者タブ -->
     <!-- 着信通知モード: RoleAuthGate スキップ → 直接 ManagerDashboard 表示 -->

@@ -305,6 +305,17 @@ function updateScheduleForDevice(deviceId: string, schedule: CallSchedule) {
   editingSchedules.value[deviceId] = schedule
 }
 
+async function toggleAlwaysOn(dev: Device) {
+  const newValue = !dev.always_on
+  try {
+    await updateDeviceCallSettings(dev.id, dev.call_enabled, dev.call_schedule, newValue)
+    await refresh()
+  } catch (e) {
+    console.error(`[CallSettings] toggleAlwaysOn failed:`, e)
+    error.value = e instanceof Error ? e.message : '常時起動設定の更新に失敗しました'
+  }
+}
+
 async function toggleCallEnabled(dev: Device) {
   const newEnabled = !dev.call_enabled
   console.log(`[CallSettings] toggleCallEnabled device=${dev.id} name=${dev.device_name} ${dev.call_enabled}→${newEnabled} schedule=${dev.call_schedule ? 'set' : 'null'}`)
@@ -817,6 +828,7 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
           >
             {{ testingAll ? '送信中...' : '一斉テスト' }}
           </button>
+          <span class="text-[10px] text-gray-400">WS接続中のみ</span>
           <button
             class="px-3 py-1 text-xs rounded"
             :class="testingAllWithFcm
@@ -947,6 +959,10 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
                     :class="dev.fcm_token ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
                   >{{ dev.fcm_token ? 'FCM' : 'FCM未' }}</span>
                   <span
+                    class="ml-1 px-1 rounded text-[10px] font-medium"
+                    :class="dev.always_on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
+                  >常時起動</span>
+                  <span
                     v-if="dev.app_version_name"
                     class="ml-1 px-1 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
                   >v{{ dev.app_version_name }}</span>
@@ -961,6 +977,16 @@ Latest Release: {{ latestApkVersion || '取得中...' }}</pre>
               </div>
             </div>
             <div class="flex gap-1">
+              <!-- 常時起動ON/OFF -->
+              <button
+                class="px-2 py-1 text-xs rounded"
+                :class="dev.always_on
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                @click="toggleAlwaysOn(dev)"
+              >
+                常時起動{{ dev.always_on ? 'ON' : 'OFF' }}
+              </button>
               <!-- 着信ON/OFF -->
               <button
                 class="px-2 py-1 text-xs rounded"

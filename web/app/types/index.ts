@@ -742,6 +742,8 @@ export interface Device {
   app_version_name?: string | null
   is_device_owner: boolean
   is_dev_device: boolean
+  always_on: boolean
+  watchdog_running?: boolean | null
   created_at: string
   updated_at: string
 }
@@ -753,6 +755,7 @@ export interface DeviceSettingsResponse {
   last_login_employee_id?: string | null
   last_login_employee_name?: string | null
   last_login_employee_role?: string[] | null
+  always_on: boolean
 }
 
 export interface DeviceRegistrationRequest {

@@ -695,10 +695,13 @@ export async function updateDeviceCallSettings(
   id: string,
   callEnabled: boolean,
   callSchedule?: CallSchedule | null,
+  alwaysOn?: boolean,
 ): Promise<void> {
+  const body: Record<string, unknown> = { call_enabled: callEnabled, call_schedule: callSchedule }
+  if (alwaysOn !== undefined) body.always_on = alwaysOn
   return request<void>(`/api/devices/${id}/call-settings`, {
     method: 'PUT',
-    body: JSON.stringify({ call_enabled: callEnabled, call_schedule: callSchedule }),
+    body: JSON.stringify(body),
   })
 }
 
