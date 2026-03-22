@@ -7,7 +7,7 @@ const props = defineProps<{
 }>()
 
 const config = useRuntimeConfig()
-const { authenticatedManagerId, setManagerId } = useManagerAuth()
+const { authenticatedManagerId, setManagerId, loadFromDevice } = useManagerAuth()
 
 // 管理者側 WebRTC
 const webRtc = useWebRtc('admin')
@@ -122,7 +122,8 @@ function requestCall(roomId: string) {
   faceAuthError.value = null
   modalIdError.value = null
   faceAuthActive.value = true
-  // authenticatedManagerId があれば ID 入力スキップ
+  // デバイスから管理者IDを復元 → あれば ID 入力スキップ
+  loadFromDevice()
   if (authenticatedManagerId.value) {
     modalEmployeeId.value = authenticatedManagerId.value
     modalStep.value = 'face_auth'
