@@ -1,3 +1,10 @@
+/* スクリーンショット画像に枠線 */
+.md-content img {
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
 /* 印刷用微調整 */
 @media print {
   .md-sidebar,
