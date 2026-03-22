@@ -14,8 +14,7 @@
 4. 検出条件（顔サイズ、正面向き、まばたき）がすべて緑色になったら、確認ダイアログが表示されます
 5. 「登録する」をタップして登録を完了します
 
-<!-- TODO: 顔を合成加工した画像に差し替え -->
-![顔登録確認画面](../images/operator-face-register-raw.png)
+![顔登録確認画面](../images/operator-face-register.png)
 
 ### 撮影のコツ
 
@@ -28,8 +27,7 @@
 
 点呼フロー中に自動で顔認証ステップに進みます。
 
-<!-- TODO: 顔を合成加工した画像に差し替え -->
-![顔認証画面](../images/operator-face-auth-raw.png)
+![顔認証画面](../images/operator-face-auth.png)
 
 画面下部に検出ステータスが表示されます:
 
