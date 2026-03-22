@@ -5,9 +5,9 @@ export function useManagerAuth() {
     setManagerId: (id: string | null) => {
       console.log('[useManagerAuth] setManagerId:', id, '→', authenticatedManagerId.value)
       authenticatedManagerId.value = id
-      // Android SharedPreferences に永続化
-      if (import.meta.client) {
-        try { (window as any).Android?.setManagerId?.(id || '') } catch {}
+      // Android SharedPreferences に永続化（null時はメモリのみクリア、デバイスには残す）
+      if (import.meta.client && id) {
+        try { (window as any).Android?.setManagerId?.(id) } catch {}
       }
     },
     /** 通話応答時に Android SharedPreferences から復元 */
