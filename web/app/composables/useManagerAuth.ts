@@ -7,14 +7,14 @@ export function useManagerAuth() {
       authenticatedManagerId.value = id
       // Android SharedPreferences に永続化
       if (import.meta.client) {
-        try { (window as any).AndroidBridge?.setManagerId?.(id || '') } catch {}
+        try { (window as any).Android?.setManagerId?.(id || '') } catch {}
       }
     },
     /** 通話応答時に Android SharedPreferences から復元 */
     loadFromDevice: () => {
       if (!import.meta.client) return
       try {
-        const id = (window as any).AndroidBridge?.getManagerId?.()
+        const id = (window as any).Android?.getManagerId?.()
         if (id) {
           authenticatedManagerId.value = id
           console.log('[useManagerAuth] loadFromDevice:', id)
