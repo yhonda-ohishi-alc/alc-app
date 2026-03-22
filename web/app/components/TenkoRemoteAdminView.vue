@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FaceAuthResult, TenkoSession } from '~/types'
-import { getEmployeeByCode, getEmployees, getTenkoSession, getDeviceSettings } from '~/utils/api'
+import { getEmployeeByCode, getEmployeeById, getEmployees, getTenkoSession, getDeviceSettings } from '~/utils/api'
 
 const props = defineProps<{
   initialRoomId?: string | null
@@ -28,7 +28,7 @@ onMounted(async () => {
   loadFromDevice()
   if (authenticatedManagerId.value) {
     try {
-      const emp = await getEmployeeByCode(authenticatedManagerId.value)
+      const emp = await getEmployeeById(authenticatedManagerId.value)
       deviceManagerName.value = emp.name
     }
     catch { deviceManagerName.value = null }

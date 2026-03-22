@@ -179,6 +179,11 @@ export async function getEmployeeByCode(code: string): Promise<ApiEmployee> {
   return request<ApiEmployee>(`/api/employees/by-code/${encodeURIComponent(code)}`)
 }
 
+/** 乗務員をIDで取得 */
+export async function getEmployeeById(id: string): Promise<ApiEmployee> {
+  return request<ApiEmployee>(`/api/employees/${encodeURIComponent(id)}`)
+}
+
 /** 乗務員を登録 */
 export async function createEmployee(data: { code?: string; nfc_id?: string; name: string; role?: string[] }): Promise<ApiEmployee> {
   return request<ApiEmployee>('/api/employees', {

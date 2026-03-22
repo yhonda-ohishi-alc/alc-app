@@ -9,7 +9,7 @@
  * (/login 後は /dashboard にリダイレクトされ顔認証が完全にスキップされるため)
  */
 import type { FaceAuthResult } from '~/types'
-import { getEmployeeByNfcId, getEmployeeByCode, updateDeviceLastLogin } from '~/utils/api'
+import { getEmployeeByNfcId, getEmployeeByCode, getEmployeeById, updateDeviceLastLogin } from '~/utils/api'
 import { checkFaceApproval } from '~/utils/face-approval'
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ onMounted(async () => {
   loadFromDevice()
   if (authenticatedManagerId.value) {
     try {
-      const emp = await getEmployeeByCode(authenticatedManagerId.value)
+      const emp = await getEmployeeById(authenticatedManagerId.value)
       deviceManagerName.value = emp.name
     }
     catch { deviceManagerName.value = null }
