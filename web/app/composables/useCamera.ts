@@ -1,3 +1,42 @@
+// コンソールから window.switchToDummyCamera() で全videoをシルエット映像に差し替え
+// マニュアル用スクリーンショット撮影時に使用
+if (import.meta.client) {
+  (window as any).switchToDummyCamera = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 720
+    canvas.height = 720
+    const ctx = canvas.getContext('2d')!
+
+    // シルエット描画
+    function drawFrame() {
+      ctx.fillStyle = '#2d3340'
+      ctx.fillRect(0, 0, 720, 720)
+      // 頭
+      ctx.fillStyle = '#5a6578'
+      ctx.beginPath()
+      ctx.arc(360, 260, 80, 0, Math.PI * 2)
+      ctx.fill()
+      // 体
+      ctx.beginPath()
+      ctx.ellipse(360, 420, 120, 80, 0, 0, Math.PI * 2)
+      ctx.fill()
+      // 検出枠
+      ctx.strokeStyle = '#4ade80'
+      ctx.lineWidth = 3
+      ctx.strokeRect(80, 60, 560, 600)
+    }
+    drawFrame()
+
+    const dummyStream = canvas.captureStream(30)
+    // 全videoのsrcObjectを差し替え
+    document.querySelectorAll('video').forEach((v) => {
+      v.srcObject = dummyStream
+      v.play()
+    })
+    console.log('[DummyCamera] switched all video elements to silhouette stream')
+  }
+}
+
 export function useCamera() {
   const stream = ref<MediaStream | null>(null)
   const videoRef = ref<HTMLVideoElement | null>(null)
