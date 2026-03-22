@@ -323,15 +323,7 @@ onUnmounted(() => {
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <h2 class="text-lg font-bold text-gray-800">遠隔点呼モニター</h2>
-        <span v-if="authenticatedManagerId" class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-          管理者: {{ deviceManagerName || authenticatedManagerId }}
-        </span>
-        <span v-else class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">
-          管理者未登録
-        </span>
-      </div>
+      <h2 class="text-lg font-bold text-gray-800">遠隔点呼モニター</h2>
       <button
         class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
         :disabled="isLoading"
@@ -524,6 +516,9 @@ onUnmounted(() => {
 
       <!-- Step 1: 社員番号入力 (authenticatedManagerId が未設定時) -->
       <div v-if="modalStep === 'id_input'">
+        <div v-if="deviceManagerName" class="mb-3 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-700">
+          登録済み管理者: <strong>{{ deviceManagerName }}</strong>（ID: {{ authenticatedManagerId }}）
+        </div>
         <p class="text-sm text-gray-500 mb-4">管理者の社員番号を入力してください</p>
         <div v-if="modalIdError" class="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
           {{ modalIdError }}
