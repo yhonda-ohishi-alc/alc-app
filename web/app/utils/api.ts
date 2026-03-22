@@ -318,6 +318,24 @@ export async function uploadReportAudio(blob: Blob): Promise<string> {
   return data.url
 }
 
+export async function uploadBlowVideo(blob: Blob): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', blob, 'blow.webm')
+
+  if (!apiBase) throw new Error('API 未初期化')
+
+  const authHeaders = buildAuthHeaders()
+  const res = await fetch(`${apiBase}/api/upload/blow-video`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: formData,
+  })
+
+  if (!res.ok) throw new Error(`録画アップロード失敗 (${res.status})`)
+  const data = await res.json()
+  return data.url
+}
+
 // ============================================================
 // 自動点呼 (Tenko) API
 // ============================================================

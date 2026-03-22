@@ -9,6 +9,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   result: [result: MeasurementResult]
   error: [message: string]
+  stateChange: [state: string]
 }>()
 
 const {
@@ -31,6 +32,11 @@ watch(isConnected, (connected) => {
   if (connected) {
     startMeasurement()
   }
+})
+
+// 状態変化を親に通知 (録画制御用)
+watch(state, (s) => {
+  emit('stateChange', s)
 })
 
 // マウント時に自動接続を試行

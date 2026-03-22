@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FaceAuthResult, MeasurementResult } from '~/types'
-import { getEmployeeByNfcId, getEmployeeByCode, startMeasurement, updateMeasurement, uploadFacePhoto } from '~/utils/api'
+import { getEmployeeByNfcId, getEmployeeByCode, startMeasurement, updateMeasurement, uploadFacePhoto, uploadBlowVideo } from '~/utils/api'
+import { saveVideo, markVideoUploaded, getPendingVideos, cleanupOldVideos } from '~/utils/video-store'
 import { checkLicenseExpiry, formatExpiryDate, type LicenseExpiryStatus } from '~/utils/license'
 import { checkFaceApproval } from '~/utils/face-approval'
 
@@ -42,6 +43,19 @@ const useManualInput = ref(false)
 const activeMeasurementId = ref<string | null>(null)
 const facePhotoUploaded = ref(false)
 const faceVerified = ref<boolean | null>(null)
+
+// 録画 (measuring ステップ用)
+const {
+  stream: measuringStream,
+  videoRef: measuringVideoRef,
+  isActive: isMeasuringCameraActive,
+  start: startMeasuringCamera,
+  stop: stopMeasuringCamera,
+} = useCamera()
+const { isRecording, startRecording, stopRecording } = useVideoRecorder()
+const recordedVideoBlob = ref<Blob | null>(null)
+const videoStoreId = ref<string | null>(null)
+const videoUploadStatus = ref<'pending' | 'uploading' | 'uploaded' | 'failed' | null>(null)
 
 /** 測定開始レコードを作成 (best-effort: 失敗しても測定フローは続行) */
 async function tryStartMeasurement(empId: string) {
@@ -191,6 +205,22 @@ onMounted(() => {
   }
   window.addEventListener('fingerprint-result', handler)
   onUnmounted(() => window.removeEventListener('fingerprint-result', handler))
+
+  // 録画: 7日超のローカル録画を削除 + 未アップロード分をリトライ
+  cleanupOldVideos(7).catch(() => {})
+  getPendingVideos().then(pending => {
+    for (const v of pending) {
+      if (!v.measurementId) continue
+      const mId = v.measurementId
+      uploadBlowVideo(v.videoBlob)
+        .then(url => {
+          console.log('[VideoRetry] Uploaded pending video:', v.id)
+          updateMeasurement(mId, { video_url: url }).catch(() => {})
+          markVideoUploaded(v.id).catch(() => {})
+        })
+        .catch(() => console.warn('[VideoRetry] Failed:', v.id))
+    }
+  }).catch(() => {})
 })
 
 // BLE 体温・血圧を取得時に即レコード更新（best-effort）
@@ -237,6 +267,31 @@ function onManualMedicalSubmit(data: import('~/types').SubmitMedicalData) {
   step.value = 'measuring'
 }
 
+// measuring ステップでカメラ起動/停止
+watch(step, async (s, prev) => {
+  if (s === 'measuring') {
+    try {
+      await startMeasuringCamera('user')
+      console.log('[Measurement] Recording camera started')
+      // デモモードではすぐに録画開始 (FC-1200 state 変化がないため)
+      if (isDemoMode.value && measuringStream.value) {
+        startRecording(measuringStream.value)
+      }
+    } catch (e) {
+      console.warn('[Measurement] Recording camera failed:', e)
+    }
+  } else if (prev === 'measuring') {
+    stopMeasuringCamera()
+  }
+})
+
+// AlcMeasurement の状態変化 → 録画開始/停止
+function onAlcStateChange(alcState: string) {
+  if (alcState === 'blow_waiting' && measuringStream.value && !isRecording.value) {
+    startRecording(measuringStream.value)
+  }
+}
+
 // FC-1200 測定結果 → BLE 医療データ / 手動入力データをマージ → API に保存
 async function onMeasurementResult(result: MeasurementResult) {
   // BLE Medical Gateway のデータをマージ
@@ -273,6 +328,18 @@ async function onMeasurementResult(result: MeasurementResult) {
   measurementResult.value = result
   step.value = 'result'
 
+  // 録画停止 + ローカル保存
+  const videoBlob = await stopRecording()
+  if (videoBlob) {
+    recordedVideoBlob.value = videoBlob
+    const vid = crypto.randomUUID()
+    videoStoreId.value = vid
+    saveVideo(vid, videoBlob, employeeId.value, activeMeasurementId.value || undefined)
+      .catch(e => console.warn('[Measurement] video local save failed:', e))
+    console.log(`[Measurement] Video recorded: ${(videoBlob.size / 1024).toFixed(0)}KB`)
+  }
+  stopMeasuringCamera()
+
   isSaving.value = true
   saveError.value = null
   saveStatus.value = null
@@ -303,16 +370,38 @@ async function onMeasurementResult(result: MeasurementResult) {
       await updateMeasurement(activeMeasurementId.value, updateData)
       console.log('[Measurement] updateMeasurement success')
       saveStatus.value = 'saved'
+
+      // 録画をバックグラウンドでアップロード
+      if (recordedVideoBlob.value && activeMeasurementId.value) {
+        const mId = activeMeasurementId.value
+        const vId = videoStoreId.value
+        videoUploadStatus.value = 'uploading'
+        uploadBlowVideo(recordedVideoBlob.value)
+          .then(url => {
+            console.log('[Measurement] Video uploaded:', url)
+            videoUploadStatus.value = 'uploaded'
+            updateMeasurement(mId, { video_url: url }).catch(() => {})
+            if (vId) markVideoUploaded(vId).catch(() => {})
+          })
+          .catch(e => {
+            console.warn('[Measurement] Video upload failed (will retry later):', e)
+            videoUploadStatus.value = 'failed'
+          })
+      } else if (recordedVideoBlob.value) {
+        videoUploadStatus.value = 'pending'
+      }
     } else {
       // オフラインまたは activeMeasurementId なし → 従来のフロー
       console.log('[Measurement] fallback to offlineSave')
-      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined)
+      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined, videoStoreId.value || undefined)
+      if (recordedVideoBlob.value) videoUploadStatus.value = 'pending'
     }
   } catch (e) {
     // 更新失敗時はオフラインキューにフォールバック
     console.error('[Measurement] updateMeasurement failed:', e)
     try {
-      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined)
+      saveStatus.value = await offlineSave(result, faceSnapshot.value || undefined, activeMeasurementId.value || undefined, videoStoreId.value || undefined)
+      if (recordedVideoBlob.value) videoUploadStatus.value = 'pending'
     } catch (e2) {
       saveError.value = e2 instanceof Error ? e2.message : '保存エラー'
       console.warn('測定結果の保存に失敗:', e2)
@@ -343,6 +432,10 @@ function reset() {
   faceVerified.value = null
   manualMedicalData.value = null
   medicalInputSource.value = null
+  recordedVideoBlob.value = null
+  videoStoreId.value = null
+  videoUploadStatus.value = null
+  stopMeasuringCamera()
 }
 
 const steps = ['NFC', '顔認証', '体温・血圧', '測定', '結果'] as const
@@ -593,10 +686,30 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">アルコール測定</h2>
           <p class="text-sm text-gray-500 mb-4">{{ employeeName }}</p>
+
+          <!-- 録画カメラプレビュー -->
+          <div v-if="isMeasuringCameraActive" class="relative mb-4 flex justify-center">
+            <video
+              ref="measuringVideoRef"
+              autoplay
+              playsinline
+              muted
+              class="w-40 h-30 rounded-lg object-cover border border-gray-200"
+            />
+            <div
+              v-if="isRecording"
+              class="absolute top-1 left-1 flex items-center gap-1 bg-red-600 text-white text-xs px-1.5 py-0.5 rounded"
+            >
+              <span class="w-2 h-2 rounded-full bg-white animate-pulse" />
+              録画中
+            </div>
+          </div>
+
           <AlcMeasurement
             :employee-id="employeeId"
             :demo-mode="isDemoMode"
             @result="onMeasurementResult"
+            @state-change="onAlcStateChange"
           />
         </div>
       </div>
@@ -630,6 +743,32 @@ const currentStepIndex = computed(() => stepKeys.indexOf(step.value))
         </div>
         <div v-else-if="saveError" class="text-center text-sm text-red-500">
           保存失敗: {{ saveError }}
+        </div>
+        <!-- 録画アップロード状態 -->
+        <div v-if="videoUploadStatus" class="text-center text-xs">
+          <span
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full"
+            :class="{
+              'bg-blue-100 text-blue-700': videoUploadStatus === 'uploading',
+              'bg-green-100 text-green-700': videoUploadStatus === 'uploaded',
+              'bg-amber-100 text-amber-700': videoUploadStatus === 'pending',
+              'bg-red-100 text-red-700': videoUploadStatus === 'failed',
+            }"
+          >
+            <template v-if="videoUploadStatus === 'uploading'">
+              <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              録画アップロード中...
+            </template>
+            <template v-else-if="videoUploadStatus === 'uploaded'">
+              録画アップロード完了
+            </template>
+            <template v-else-if="videoUploadStatus === 'pending'">
+              録画はローカルに保存済み (後でアップロード)
+            </template>
+            <template v-else-if="videoUploadStatus === 'failed'">
+              録画アップロード失敗 (次回起動時にリトライ)
+            </template>
+          </span>
         </div>
       </div>
     </main>

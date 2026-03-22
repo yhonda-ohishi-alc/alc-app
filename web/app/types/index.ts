@@ -12,6 +12,7 @@ export interface MeasurementResult {
   resultType: 'normal' | 'over' | 'error'
   deviceUseCount: number
   facePhotoUrl?: string
+  videoUrl?: string
   measuredAt: Date
   // Medical data (BLE Medical Gateway)
   temperature?: number
@@ -124,6 +125,7 @@ export interface ApiMeasurement {
   result_type: string | null
   device_use_count: number
   face_photo_url?: string
+  video_url?: string | null
   measured_at: string
   created_at: string
   updated_at: string

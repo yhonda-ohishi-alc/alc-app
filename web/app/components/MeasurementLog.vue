@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getEmployees } from '~/utils/api'
+import { getVideo, type VideoRecord } from '~/utils/video-store'
 
 const props = defineProps<{
   sidebar?: boolean
@@ -122,9 +123,45 @@ function formatBp(sys?: number, dia?: number) {
   return `${sys ?? '-'}/${dia ?? '-'}`
 }
 
+// 録画状態ルックアップ
+const videoStatusMap = ref<Record<string, 'uploaded' | 'pending' | 'none'>>({})
+
+async function loadVideoStatuses() {
+  const map: Record<string, 'uploaded' | 'pending' | 'none'> = {}
+  for (const item of allItems.value) {
+    const vid = item.result.videoStoreId
+    if (!vid) { map[String(item.id)] = 'none'; continue }
+    try {
+      const record = await getVideo(vid)
+      if (!record) map[String(item.id)] = 'none'
+      else if (record.uploadedAt) map[String(item.id)] = 'uploaded'
+      else map[String(item.id)] = 'pending'
+    } catch {
+      map[String(item.id)] = 'none'
+    }
+  }
+  videoStatusMap.value = map
+}
+
+function videoLabel(itemId: number) {
+  const s = videoStatusMap.value[String(itemId)]
+  if (s === 'uploaded') return '済'
+  if (s === 'pending') return '未'
+  return '-'
+}
+
+function videoColor(itemId: number) {
+  const s = videoStatusMap.value[String(itemId)]
+  if (s === 'uploaded') return 'bg-green-100 text-green-800'
+  if (s === 'pending') return 'bg-yellow-100 text-yellow-800'
+  return 'text-gray-400'
+}
+
+watch(allItems, () => loadVideoStatuses(), { immediate: false })
+
 onMounted(() => {
   loadEmployees()
-  refreshQueue()
+  refreshQueue().then(() => loadVideoStatuses())
 })
 </script>
 
@@ -195,6 +232,7 @@ onMounted(() => {
                         <th class="px-2 py-2 text-left font-medium">乗務員</th>
                         <th class="px-2 py-2 text-right font-medium">ALC</th>
                         <th class="px-2 py-2 text-center font-medium">結果</th>
+                        <th class="px-2 py-2 text-center font-medium">録画</th>
                         <th class="px-2 py-2 text-center font-medium">状態</th>
                       </tr>
                     </thead>
@@ -206,6 +244,11 @@ onMounted(() => {
                         <td class="px-2 py-1.5 text-center">
                           <span class="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="resultColor(item.result.resultType)">
                             {{ resultLabel(item.result.resultType) }}
+                          </span>
+                        </td>
+                        <td class="px-2 py-1.5 text-center">
+                          <span class="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="videoColor(item.id)">
+                            {{ videoLabel(item.id) }}
                           </span>
                         </td>
                         <td class="px-2 py-1.5 text-center">
@@ -314,6 +357,7 @@ onMounted(() => {
                     <th class="px-2 py-2 text-center font-medium">結果</th>
                     <th class="px-2 py-2 text-right font-medium">体温</th>
                     <th class="px-2 py-2 text-right font-medium">血圧</th>
+                    <th class="px-2 py-2 text-center font-medium">録画</th>
                     <th class="px-2 py-2 text-center font-medium">状態</th>
                   </tr>
                 </thead>
@@ -341,6 +385,14 @@ onMounted(() => {
                     </td>
                     <td class="px-2 py-1.5 text-right text-gray-700 tabular-nums">
                       {{ formatBp(item.result.systolic, item.result.diastolic) }}
+                    </td>
+                    <td class="px-2 py-1.5 text-center">
+                      <span
+                        class="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                        :class="videoColor(item.id)"
+                      >
+                        {{ videoLabel(item.id) }}
+                      </span>
                     </td>
                     <td class="px-2 py-1.5 text-center">
                       <span

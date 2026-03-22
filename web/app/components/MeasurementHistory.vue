@@ -167,6 +167,7 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium">乗務員</th>
               <th class="px-4 py-3 text-center font-medium">状態</th>
               <th class="px-4 py-3 text-center font-medium">顔認証</th>
+              <th class="px-4 py-3 text-center font-medium">録画</th>
               <th class="px-4 py-3 text-right font-medium">アルコール値</th>
               <th class="px-4 py-3 text-center font-medium">結果</th>
               <th class="px-4 py-3 text-right font-medium">体温</th>
@@ -197,6 +198,15 @@ onMounted(() => {
                   class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
                 >
                   スキップ
+                </span>
+                <span v-else class="text-gray-400 text-xs">-</span>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span
+                  v-if="m.video_url"
+                  class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                >
+                  済
                 </span>
                 <span v-else class="text-gray-400 text-xs">-</span>
               </td>

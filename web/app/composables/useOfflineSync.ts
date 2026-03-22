@@ -27,21 +27,21 @@ export function useOfflineSync() {
   }
 
   /** 測定結果を保存 (オフラインならキュー、オンラインなら直接 API) */
-  async function save(result: MeasurementResult, facePhotoBlob?: Blob, activeMeasurementId?: string): Promise<'saved' | 'queued'> {
+  async function save(result: MeasurementResult, facePhotoBlob?: Blob, activeMeasurementId?: string, videoStoreId?: string): Promise<'saved' | 'queued'> {
     if (!isOnline.value) {
-      await enqueue(result, facePhotoBlob, activeMeasurementId)
+      await enqueue(result, facePhotoBlob, activeMeasurementId, undefined, videoStoreId)
       await refreshQueue()
       return 'queued'
     }
     try {
       await saveMeasurement(result, facePhotoBlob)
       // オンライン送信成功時もローカルに記録 (顔写真は省略、URLのみ)
-      await enqueue(result, undefined, activeMeasurementId, new Date().toISOString())
+      await enqueue(result, undefined, activeMeasurementId, new Date().toISOString(), videoStoreId)
       await refreshQueue()
       return 'saved'
     } catch {
       // API 失敗時もキューに退避
-      await enqueue(result, facePhotoBlob, activeMeasurementId)
+      await enqueue(result, facePhotoBlob, activeMeasurementId, undefined, videoStoreId)
       await refreshQueue()
       return 'queued'
     }

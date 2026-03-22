@@ -1,4 +1,6 @@
 import type { MeasurementResult } from '~/types'
+import { getVideo, markVideoUploaded } from '~/utils/video-store'
+import { uploadBlowVideo } from '~/utils/api'
 
 const DB_NAME = 'alc-offline-db'
 const DB_VERSION = 2
@@ -19,6 +21,8 @@ export interface SerializedResult {
   diastolic?: number
   pulse?: number
   medicalMeasuredAt?: string
+  // 録画
+  videoStoreId?: string
 }
 
 export interface PendingMeasurement {
@@ -81,6 +85,7 @@ export async function enqueue(
   facePhotoBlob?: Blob,
   activeMeasurementId?: string,
   syncedAt?: string,
+  videoStoreId?: string,
 ): Promise<number> {
   const db = await openDb()
   const serialized: SerializedResult = {
@@ -96,6 +101,7 @@ export async function enqueue(
     diastolic: result.diastolic,
     pulse: result.pulse,
     medicalMeasuredAt: result.medicalMeasuredAt?.toISOString(),
+    videoStoreId,
   }
   const entry: Omit<PendingMeasurement, 'id'> = {
     result: serialized,
@@ -236,6 +242,27 @@ export async function estimateDbSize(): Promise<{ totalBytes: number; recordCoun
 
 const MAX_RETRIES = 5
 
+/** 紐づいた録画をアップロードし、measurement に video_url を設定 (best-effort) */
+async function uploadLinkedVideo(
+  videoStoreId: string | undefined,
+  measurementId: string | undefined,
+  updateFn?: (id: string, data: Record<string, unknown>) => Promise<unknown>,
+): Promise<void> {
+  if (!videoStoreId) return
+  try {
+    const record = await getVideo(videoStoreId)
+    if (!record || record.uploadedAt) return
+    const url = await uploadBlowVideo(record.videoBlob)
+    if (measurementId && updateFn) {
+      await updateFn(measurementId, { video_url: url }).catch(() => {})
+    }
+    await markVideoUploaded(videoStoreId)
+    console.log('[OfflineSync] Video uploaded:', videoStoreId)
+  } catch (e) {
+    console.warn('[OfflineSync] Video upload failed:', videoStoreId, e)
+  }
+}
+
 /** キュー内の未送信測定結果を順次 API 送信 (オンライン復帰時に呼ぶ) */
 export async function flush(
   saveFn: (result: MeasurementResult, blob?: Blob) => Promise<unknown>,
@@ -301,6 +328,8 @@ export async function flush(
       }
       await markSynced(entry.id)
       sent++
+      // 録画があればバックグラウンドでアップロード
+      uploadLinkedVideo(entry.result.videoStoreId, entry.result.activeMeasurementId, updateFn)
     } catch {
       await incrementRetry(entry.id)
       failed++
