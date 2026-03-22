@@ -50,7 +50,11 @@ plugins:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - attr_list
@@ -64,21 +68,8 @@ extra_css:
 
 nav:
   - ホーム: index.md
-  - 管理者向け:
-      - admin/index.md
-      - 初期設定: admin/getting-started.md
-      - ダッシュボード: admin/dashboard.md
-      - 点呼管理:
-          - 点呼スケジュール: admin/tenko-schedule.md
-          - 点呼記録・履歴: admin/tenko-record.md
-          - 遠隔点呼: admin/remote-tenko.md
-      - 乗務員管理:
-          - 乗務員一覧: admin/employee-management.md
-          - 健康基準値: admin/health-baseline.md
-      - デバイス管理: admin/device-management.md
-      - タイムカード: admin/timecard.md
-      - 中間点呼: admin/tenko-call.md
-      - 機器故障記録: admin/equipment-failure.md
-      - Webhook設定: admin/webhook.md
   - 運行者向け: operator/index.md
+  - 運行管理者: admin/index.md
+  - システム管理者: admin/sysadmin.md
+  - 遠隔点呼: admin/remote-tenko.md
   - ダウンロード: downloads.md
