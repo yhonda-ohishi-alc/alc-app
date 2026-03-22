@@ -10,7 +10,7 @@
 
 <figure class="qr-figure">
   <a href="#qr-app-release">
-    <img src="images/qr-app-release.png" alt="AlcoholChecker QR" width="160">
+    <img src="../images/qr-app-release.png" alt="AlcoholChecker QR" width="160">
   </a>
   <figcaption>QRコードをタップで拡大</figcaption>
 </figure>
@@ -19,7 +19,7 @@
   <a href="#" class="qr-modal-overlay"></a>
   <div class="qr-modal-content">
     <a href="#" class="qr-modal-close">&times;</a>
-    <img src="images/qr-app-release.png" alt="AlcoholChecker QR">
+    <img src="../images/qr-app-release.png" alt="AlcoholChecker QR">
     <p>AlcoholChecker ダウンロード</p>
   </div>
 </div>
@@ -34,7 +34,7 @@
 
 <figure class="qr-figure">
   <a href="#qr-provtest">
-    <img src="images/qr-provtest.png" alt="ProvisioningTest QR" width="160">
+    <img src="../images/qr-provtest.png" alt="ProvisioningTest QR" width="160">
   </a>
   <figcaption>QRコードをタップで拡大</figcaption>
 </figure>
@@ -43,7 +43,7 @@
   <a href="#" class="qr-modal-overlay"></a>
   <div class="qr-modal-content">
     <a href="#" class="qr-modal-close">&times;</a>
-    <img src="images/qr-provtest.png" alt="ProvisioningTest QR">
+    <img src="../images/qr-provtest.png" alt="ProvisioningTest QR">
     <p>ProvisioningTest ダウンロード</p>
   </div>
 </div>
