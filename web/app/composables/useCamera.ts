@@ -7,23 +7,107 @@ if (import.meta.client) {
     canvas.height = 720
     const ctx = canvas.getContext('2d')!
 
-    // シルエット描画
+    // リアルな人物イラスト描画
     function drawFrame() {
-      ctx.fillStyle = '#2d3340'
+      // 背景（部屋っぽいグラデーション）
+      const bg = ctx.createLinearGradient(0, 0, 0, 720)
+      bg.addColorStop(0, '#e8e4e0')
+      bg.addColorStop(1, '#d0ccc8')
+      ctx.fillStyle = bg
       ctx.fillRect(0, 0, 720, 720)
-      // 頭
-      ctx.fillStyle = '#5a6578'
+
+      // 体（グレーのTシャツ）
+      ctx.fillStyle = '#888e96'
       ctx.beginPath()
-      ctx.arc(360, 260, 80, 0, Math.PI * 2)
+      ctx.moveTo(200, 520)
+      ctx.quadraticCurveTo(200, 420, 280, 390)
+      ctx.lineTo(440, 390)
+      ctx.quadraticCurveTo(520, 420, 520, 520)
+      ctx.lineTo(520, 720)
+      ctx.lineTo(200, 720)
+      ctx.closePath()
       ctx.fill()
-      // 体
+      // 襟
+      ctx.fillStyle = '#7d838b'
       ctx.beginPath()
-      ctx.ellipse(360, 420, 120, 80, 0, 0, Math.PI * 2)
+      ctx.moveTo(310, 390)
+      ctx.quadraticCurveTo(360, 430, 410, 390)
+      ctx.quadraticCurveTo(360, 410, 310, 390)
       ctx.fill()
-      // 検出枠
-      ctx.strokeStyle = '#4ade80'
+
+      // 首
+      ctx.fillStyle = '#d4a574'
+      ctx.fillRect(330, 330, 60, 70)
+
+      // 顔（楕円）
+      ctx.fillStyle = '#dbb08c'
+      ctx.beginPath()
+      ctx.ellipse(360, 260, 85, 105, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 髪（上部）
+      ctx.fillStyle = '#3a3028'
+      ctx.beginPath()
+      ctx.ellipse(360, 190, 95, 70, 0, Math.PI, Math.PI * 2)
+      ctx.fill()
+      // 髪サイド
+      ctx.fillRect(268, 190, 20, 60)
+      ctx.fillRect(432, 190, 20, 60)
+
+      // 耳
+      ctx.fillStyle = '#d4a574'
+      ctx.beginPath()
+      ctx.ellipse(272, 270, 14, 22, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.ellipse(448, 270, 14, 22, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 目
+      ctx.fillStyle = '#2c2420'
+      ctx.beginPath()
+      ctx.ellipse(325, 265, 12, 8, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.ellipse(395, 265, 12, 8, 0, 0, Math.PI * 2)
+      ctx.fill()
+      // 白目のハイライト
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(328, 263, 3, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.arc(398, 263, 3, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 眉
+      ctx.strokeStyle = '#3a3028'
       ctx.lineWidth = 3
-      ctx.strokeRect(80, 60, 560, 600)
+      ctx.beginPath()
+      ctx.moveTo(308, 245)
+      ctx.quadraticCurveTo(325, 238, 342, 245)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(378, 245)
+      ctx.quadraticCurveTo(395, 238, 412, 245)
+      ctx.stroke()
+
+      // 鼻
+      ctx.strokeStyle = '#c49570'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(360, 270)
+      ctx.lineTo(355, 300)
+      ctx.quadraticCurveTo(360, 308, 370, 300)
+      ctx.stroke()
+
+      // 口
+      ctx.strokeStyle = '#b07060'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.moveTo(335, 325)
+      ctx.quadraticCurveTo(360, 338, 385, 325)
+      ctx.stroke()
     }
     drawFrame()
 

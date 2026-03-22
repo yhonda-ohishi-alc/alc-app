@@ -22,7 +22,6 @@ theme:
         name: ライトモードに切り替え
   features:
     - navigation.tabs
-    - navigation.sections
     - navigation.expand
     - navigation.top
     - search.suggest
@@ -81,17 +80,5 @@ nav:
       - 中間点呼: admin/tenko-call.md
       - 機器故障記録: admin/equipment-failure.md
       - Webhook設定: admin/webhook.md
-  - 運行者向け:
-      - operator/index.md
-      - はじめに: operator/getting-started.md
-      - 顔認証: operator/face-auth.md
-      - アルコール測定: operator/alcohol-measurement.md
-      - 点呼:
-          - 自動点呼: operator/tenko.md
-          - 遠隔点呼: operator/remote-tenko.md
-          - 自己申告: operator/self-declaration.md
-          - 日常点検: operator/daily-inspection.md
-      - タイムカード: operator/timecard.md
-      - 中間点呼: operator/tenko-call.md
-      - デバイス登録: operator/device-registration.md
+  - 運行者向け: operator/index.md
   - ダウンロード: downloads.md
