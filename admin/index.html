@@ -990,6 +990,53 @@
 <h3 id="_12">測定履歴<a class="headerlink" href="#_12" title="Permanent link">&para;</a></h3>
 <p>アルコール測定・バイタル測定の履歴を確認できます。</p>
 <p><img alt="測定履歴タブ" src="../images/admin-mgr-measurements.png" /></p>
+<table>
+<thead>
+<tr>
+<th>列</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>日時</td>
+<td>測定を実施した日時</td>
+</tr>
+<tr>
+<td>乗務員</td>
+<td>測定対象の乗務員名</td>
+</tr>
+<tr>
+<td>状態</td>
+<td>開始 / 顔認証済 / 完了</td>
+</tr>
+<tr>
+<td>顔認証</td>
+<td>済 / スキップ</td>
+</tr>
+<tr>
+<td>録画</td>
+<td>済（R2にアップロード済み） / -（録画なし）</td>
+</tr>
+<tr>
+<td>アルコール値</td>
+<td>測定値（mg/L）</td>
+</tr>
+<tr>
+<td>結果</td>
+<td>正常 / 基準超 / エラー</td>
+</tr>
+<tr>
+<td>体温</td>
+<td>BLE 体温計で測定した体温</td>
+</tr>
+<tr>
+<td>血圧</td>
+<td>BLE 血圧計で測定した血圧</td>
+</tr>
+</tbody>
+</table>
+<p><strong>録画について</strong>: アルコール測定時に「息を吹きかけてください」と表示された時点から測定完了まで、端末のカメラで自動的に録画されます。録画はまず端末のローカルストレージ（IndexedDB）に保存され、バックグラウンドでサーバー（R2）にアップロードされます。ローカルの録画は7日で自動削除、サーバー側は2年間保存されます。</p>
 <h3 id="_13">予定管理<a class="headerlink" href="#_13" title="Permanent link">&para;</a></h3>
 <p>点呼スケジュールの作成・編集・削除を行います。</p>
 <p><img alt="予定管理タブ" src="../images/admin-mgr-schedule.png" /></p>
