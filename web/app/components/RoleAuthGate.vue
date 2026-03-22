@@ -17,7 +17,20 @@ const props = defineProps<{
 }>()
 
 const { isAuthenticated, deviceId } = useAuth()
-const { setManagerId } = useManagerAuth()
+const { setManagerId, loadFromDevice, authenticatedManagerId } = useManagerAuth()
+
+// デバイスに保存された管理者情報を表示用に取得
+const deviceManagerName = ref<string | null>(null)
+onMounted(async () => {
+  loadFromDevice()
+  if (authenticatedManagerId.value) {
+    try {
+      const emp = await getEmployeeByCode(authenticatedManagerId.value)
+      deviceManagerName.value = emp.name
+    }
+    catch { deviceManagerName.value = null }
+  }
+})
 const { sync: faceSync, isSyncing: isFaceSyncing } = useFaceSync()
 
 // 認証状態
@@ -192,6 +205,11 @@ function resetAuth() {
         <p class="text-sm text-gray-500 mb-4">
           {{ roleLabel[requiredRole] }}機能にアクセスするには、ID + 顔認証が必要です。
         </p>
+
+        <!-- デバイスに保存された管理者情報 -->
+        <div v-if="deviceManagerName && requiredRole === 'manager'" class="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-700">
+          登録済み管理者: <strong>{{ deviceManagerName }}</strong>
+        </div>
 
         <!-- エラー -->
         <div v-if="errorMessage" class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
