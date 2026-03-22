@@ -22,6 +22,19 @@ const isCallActive = ref(false)
 const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 
+// デバイスに保存された管理者情報
+const deviceManagerName = ref<string | null>(null)
+onMounted(async () => {
+  loadFromDevice()
+  if (authenticatedManagerId.value) {
+    try {
+      const emp = await getEmployeeByCode(authenticatedManagerId.value)
+      deviceManagerName.value = emp.name
+    }
+    catch { deviceManagerName.value = null }
+  }
+})
+
 // 顔認証モーダル状態 (セッション接続前確認)
 const pendingRoomId = ref<string | null>(null)
 const faceAuthActive = ref(false)
@@ -310,7 +323,15 @@ onUnmounted(() => {
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
-      <h2 class="text-lg font-bold text-gray-800">遠隔点呼モニター</h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-lg font-bold text-gray-800">遠隔点呼モニター</h2>
+        <span v-if="authenticatedManagerId" class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+          管理者: {{ deviceManagerName || authenticatedManagerId }}
+        </span>
+        <span v-else class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+          管理者未登録
+        </span>
+      </div>
       <button
         class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
         :disabled="isLoading"
