@@ -45,6 +45,9 @@ const modalEmployeeName = ref('')
 const modalIdInput = ref('')
 const modalIdError = ref<string | null>(null)
 
+// 運転者情報パネル
+const showDriverInfoPanel = ref(false)
+
 // 通話中セッションのリアルタイムデータ
 const liveSession = ref<TenkoSession | null>(null)
 const liveEmployeeName = ref('')
@@ -431,13 +434,30 @@ onUnmounted(() => {
         :fullscreen="true"
         class="w-full h-full"
       />
-      <!-- 通話終了ボタン (右上) -->
-      <button
-        class="absolute top-3 right-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg transition-colors z-10"
-        @click="endCall"
-      >
-        通話終了
-      </button>
+      <!-- 通話終了ボタン + 運転者情報ボタン (右上) -->
+      <div class="absolute top-3 right-3 flex gap-2 z-10">
+        <button
+          v-if="liveSession?.employee_id"
+          class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-lg transition-colors"
+          @click="showDriverInfoPanel = !showDriverInfoPanel"
+        >
+          {{ showDriverInfoPanel ? '情報を閉じる' : '運転者情報' }}
+        </button>
+        <button
+          class="px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg transition-colors"
+          @click="endCall"
+        >
+          通話終了
+        </button>
+      </div>
+
+      <!-- 運転者情報パネル -->
+      <TenkoDriverInfoPanel
+        v-if="showDriverInfoPanel && liveSession?.employee_id"
+        :employee-id="liveSession.employee_id"
+        :session-id="liveSession.id"
+        @close="showDriverInfoPanel = false"
+      />
     </div>
 
     <!-- 下: 点呼データテーブル -->

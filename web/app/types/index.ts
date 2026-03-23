@@ -271,6 +271,7 @@ export type TenkoSessionStatus =
   | 'self_declaration_pending'
   | 'safety_judgment_pending'
   | 'daily_inspection_pending'
+  | 'carrying_items_pending'
   | 'instruction_pending'
   | 'report_pending'
   | 'interrupted'
@@ -396,6 +397,7 @@ export interface TenkoSession {
   self_declaration: SelfDeclaration | null
   safety_judgment: SafetyJudgment | null
   daily_inspection: DailyInspection | null
+  carrying_items_checked: CarryingItemsChecked | null
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -814,4 +816,89 @@ export interface ApproveDeviceResponse {
   success: boolean
   device_id: string
   tenant_id: string
+}
+
+// --- 携行品 ---
+
+export interface CarryingItem {
+  id: string
+  tenant_id: string
+  item_name: string
+  is_required: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface CreateCarryingItem {
+  item_name: string
+  is_required?: boolean
+  sort_order?: number
+}
+
+export interface UpdateCarryingItem {
+  item_name?: string
+  is_required?: boolean
+  sort_order?: number
+}
+
+export interface CarryingItemCheckInput {
+  item_id: string
+  checked: boolean
+}
+
+export interface CarryingItemsChecked {
+  items: Array<{
+    item_id: string
+    item_name: string
+    checked: boolean
+  }>
+  checked_at: string
+}
+
+// --- 運転者情報パネル ---
+
+export interface DriverInfo {
+  // イ 健康状態
+  health_baseline: EmployeeHealthBaseline | null
+  recent_measurements: Array<{
+    id: string
+    temperature: number | null
+    systolic: number | null
+    diastolic: number | null
+    pulse: number | null
+    measured_at: string | null
+  }>
+  // ロ 労働時間
+  working_hours: Array<{
+    id: string
+    driver_id: string
+    work_date: string
+    start_time: string
+    total_work_minutes: number | null
+    total_drive_minutes: number | null
+    total_rest_minutes: number | null
+    late_night_minutes: number
+    drive_minutes: number
+    cargo_minutes: number
+  }>
+  // ハ 指導監督の記録
+  past_instructions: Array<{
+    session_id: string
+    instruction: string
+    instruction_confirmed_at: string | null
+    recorded_at: string
+  }>
+  // ニ 携行品
+  carrying_items: CarryingItem[]
+  // ホ 乗務員台帳
+  employee: ApiEmployee
+  // ヘ 過去の点呼記録
+  past_tenko_records: TenkoRecord[]
+  // ト 車両整備状況
+  recent_daily_inspections: Array<{
+    session_id: string
+    daily_inspection: DailyInspection
+    recorded_at: string
+  }>
+  equipment_failures: EquipmentFailure[]
 }

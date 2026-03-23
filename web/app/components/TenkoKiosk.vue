@@ -31,9 +31,15 @@ const {
   stepLabels, currentStepIndex,
   identifyEmployee, selectSchedule, onFaceAuthComplete,
   onAlcoholResult, onMedicalSubmit, onSelfDeclarationSubmit,
-  onDailyInspectionSubmit, onInstructionConfirm, onReportSubmit,
+  onDailyInspectionSubmit, carryingItems, loadCarryingItems, onCarryingItemsSubmit,
+  onInstructionConfirm, onReportSubmit,
   reset,
 } = useTenkoKiosk({ remoteMode: props.remoteMode })
+
+// carrying_items ステップに入ったら携行品マスタをロード
+watch(() => step.value, (s) => {
+  if (s === 'carrying_items') loadCarryingItems()
+})
 
 // アルコール測定完了後 (instruction / report ステップ) に WebRTC 接続
 watch(
@@ -515,6 +521,18 @@ onUnmounted(() => {
         <div class="bg-white rounded-2xl p-4 shadow-sm">
           <h2 class="text-lg font-semibold text-gray-700 mb-4">日常点検</h2>
           <TenkoDailyInspection @submit="onDailyInspectionSubmit" />
+        </div>
+      </div>
+
+      <!-- Step 7.5: 携行品チェック -->
+      <div v-else-if="step === 'carrying_items'" class="flex flex-col gap-4">
+        <div class="bg-white rounded-2xl p-4 shadow-sm">
+          <TenkoCarryingItemsCheck
+            v-if="carryingItems.length > 0"
+            :items="carryingItems"
+            @submit="onCarryingItemsSubmit"
+          />
+          <div v-else class="text-center py-4 text-gray-400">携行品マスタ未登録</div>
         </div>
       </div>
 

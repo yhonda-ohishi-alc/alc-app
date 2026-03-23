@@ -2,13 +2,14 @@ import type {
   TenkoSchedule, TenkoSession, TenkoSessionStatus, TenkoType,
   FaceAuthResult, SubmitAlcoholResult, SubmitMedicalData,
   SubmitSelfDeclaration, SubmitDailyInspection, SubmitOperationReport,
-  StartTenkoSession, SafetyJudgment,
+  StartTenkoSession, SafetyJudgment, CarryingItem, CarryingItemCheckInput,
 } from '~/types'
 import {
   getPendingSchedules, startTenkoSession,
   submitAlcohol, submitMedical, submitSelfDeclaration,
   submitDailyInspection, confirmInstruction, submitReport,
   cancelTenkoSession, uploadFacePhoto,
+  getCarryingItems, submitCarryingItemChecks,
 } from '~/utils/api'
 
 /** UI ステップ (バックエンド status とは別) */
@@ -21,6 +22,7 @@ export type TenkoStep =
   | 'self_declaration'
   | 'safety_result'
   | 'daily_inspection'
+  | 'carrying_items'
   | 'instruction'
   | 'report'
   | 'completed'
@@ -35,6 +37,7 @@ export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
   const pendingSchedules = ref<TenkoSchedule[]>([])
   const selectedSchedule = ref<TenkoSchedule | null>(null)
   const session = ref<TenkoSession | null>(null)
+  const carryingItems = ref<CarryingItem[]>([])
   const error = ref<string | null>(null)
   const isLoading = ref(false)
 
@@ -62,7 +65,7 @@ export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
   const stepKeys = computed<TenkoStep[]>(() => {
     const scheduleKey: TenkoStep[] = remoteMode ? [] : ['schedule_select']
     if (isPreOperation.value) {
-      return ['nfc', ...scheduleKey, 'face_auth', 'medical', 'self_declaration', 'daily_inspection', 'alcohol', 'instruction', 'completed']
+      return ['nfc', ...scheduleKey, 'face_auth', 'medical', 'self_declaration', 'daily_inspection', 'carrying_items', 'alcohol', 'instruction', 'completed']
     }
     return ['nfc', ...scheduleKey, 'face_auth', 'alcohol', 'instruction', 'report', 'completed']
   })
@@ -236,6 +239,35 @@ export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
     }
   }
 
+  // --- 携行品チェック ---
+  async function loadCarryingItems() {
+    try {
+      carryingItems.value = await getCarryingItems()
+    } catch {
+      carryingItems.value = []
+    }
+    // マスタが空なら自動スキップ
+    if (carryingItems.value.length === 0 && step.value === 'carrying_items') {
+      step.value = 'alcohol'
+    }
+  }
+
+  async function onCarryingItemsSubmit(checks: CarryingItemCheckInput[]) {
+    if (!session.value) return
+    error.value = null
+    isLoading.value = true
+
+    try {
+      const s = await submitCarryingItemChecks(session.value.id, checks)
+      session.value = s
+      _advanceByStatus(s.status)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '携行品チェック送信に失敗しました'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // --- 指示確認 ---
   async function onInstructionConfirm() {
     if (!session.value) return
@@ -308,6 +340,9 @@ export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
       case 'daily_inspection_pending':
         step.value = 'daily_inspection'
         break
+      case 'carrying_items_pending':
+        step.value = 'carrying_items'
+        break
       case 'instruction_pending':
         step.value = 'instruction'
         break
@@ -371,6 +406,9 @@ export function useTenkoKiosk(options?: { remoteMode?: boolean }) {
     onMedicalSubmit,
     onSelfDeclarationSubmit,
     onDailyInspectionSubmit,
+    carryingItems,
+    loadCarryingItems,
+    onCarryingItemsSubmit,
     onInstructionConfirm,
     onReportSubmit,
     cancel,

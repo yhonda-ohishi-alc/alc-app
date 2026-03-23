@@ -763,3 +763,36 @@ export interface TriggerUpdateResult {
 export async function triggerUpdate(opts?: { device_ids?: string[]; dev_only?: boolean }): Promise<TriggerUpdateResult> {
   return request(`/api/devices/trigger-update`, { method: 'POST', body: JSON.stringify(opts ?? {}) })
 }
+
+// --- 携行品 ---
+
+import type { CarryingItem, CreateCarryingItem, UpdateCarryingItem, CarryingItemCheckInput, DriverInfo } from '~/types'
+
+export async function getCarryingItems(): Promise<CarryingItem[]> {
+  return request('/api/carrying-items')
+}
+
+export async function createCarryingItem(data: CreateCarryingItem): Promise<CarryingItem> {
+  return request('/api/carrying-items', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateCarryingItem(id: string, data: UpdateCarryingItem): Promise<CarryingItem> {
+  return request(`/api/carrying-items/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+}
+
+export async function deleteCarryingItem(id: string): Promise<void> {
+  return request(`/api/carrying-items/${id}`, { method: 'DELETE' })
+}
+
+export async function submitCarryingItemChecks(sessionId: string, checks: CarryingItemCheckInput[]): Promise<any> {
+  return request(`/api/tenko/sessions/${sessionId}/carrying-items`, {
+    method: 'PUT',
+    body: JSON.stringify({ checks }),
+  })
+}
+
+// --- 運転者情報 ---
+
+export async function getDriverInfo(employeeId: string): Promise<DriverInfo> {
+  return request(`/api/tenko/driver-info/${employeeId}`)
+}

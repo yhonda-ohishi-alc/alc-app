@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures' | 'timecard' | 'devices'
+type TabKey = 'employees' | 'license' | 'history' | 'tenko' | 'remote_tenko' | 'screen_share' | 'schedules' | 'records' | 'baselines' | 'failures' | 'carrying_items' | 'timecard' | 'devices'
 
 const props = defineProps<{
   initialTab?: string
@@ -26,6 +26,7 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
             { key: 'records', label: '点呼記録' },
             { key: 'baselines', label: '健康基準' },
             { key: 'failures', label: '故障記録' },
+            { key: 'carrying_items', label: '携行品' },
             { key: 'timecard', label: 'タイムカード' },
             { key: 'devices', label: 'デバイス管理' },
           ]"
@@ -80,6 +81,10 @@ const tenkoDashboardSummaryRef = ref<{ refresh: () => void } | null>(null)
 
       <div v-if="activeTab === 'failures'">
         <EquipmentFailureManager />
+      </div>
+
+      <div v-if="activeTab === 'carrying_items'">
+        <CarryingItemsManager />
       </div>
 
       <div v-if="activeTab === 'timecard'">
