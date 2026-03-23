@@ -710,6 +710,57 @@ export interface TimePunchesResponse {
   per_page: number
 }
 
+// --- 車両分類 ---
+
+export interface VehicleCategories {
+  car_kinds: string[]
+  uses: string[]
+  car_shapes: string[]
+  private_businesses: string[]
+}
+
+// --- 日常健康状態 ---
+
+export interface DailyHealthRow {
+  employee_id: string
+  employee_name: string
+  employee_code: string | null
+  session_id: string | null
+  tenko_type: string | null
+  completed_at: string | null
+  temperature: number | null
+  systolic: number | null
+  diastolic: number | null
+  pulse: number | null
+  medical_measured_at: string | null
+  medical_manual_input: boolean | null
+  alcohol_result: string | null
+  alcohol_value: number | null
+  self_declaration: SelfDeclaration | null
+  safety_judgment: SafetyJudgment | null
+  has_baseline: boolean | null
+  baseline_systolic: number | null
+  baseline_diastolic: number | null
+  baseline_temperature: number | null
+  systolic_tolerance: number | null
+  diastolic_tolerance: number | null
+  temperature_tolerance: number | null
+}
+
+export interface DailyHealthSummary {
+  total_employees: number
+  checked_count: number
+  unchecked_count: number
+  pass_count: number
+  fail_count: number
+}
+
+export interface DailyHealthResponse {
+  date: string
+  employees: DailyHealthRow[]
+  summary: DailyHealthSummary
+}
+
 // --- Device Registration ---
 
 export type DeviceFlowType = 'qr_temp' | 'qr_permanent' | 'url'
@@ -820,6 +871,18 @@ export interface ApproveDeviceResponse {
 
 // --- 携行品 ---
 
+export interface VehicleCondition {
+  id: string
+  carrying_item_id: string
+  category: string
+  value: string
+}
+
+export interface VehicleConditionInput {
+  category: string
+  value: string
+}
+
 export interface CarryingItem {
   id: string
   tenant_id: string
@@ -827,18 +890,21 @@ export interface CarryingItem {
   is_required: boolean
   sort_order: number
   created_at: string
+  vehicle_conditions: VehicleCondition[]
 }
 
 export interface CreateCarryingItem {
   item_name: string
   is_required?: boolean
   sort_order?: number
+  vehicle_conditions?: VehicleConditionInput[]
 }
 
 export interface UpdateCarryingItem {
   item_name?: string
   is_required?: boolean
   sort_order?: number
+  vehicle_conditions?: VehicleConditionInput[]
 }
 
 export interface CarryingItemCheckInput {
@@ -853,6 +919,88 @@ export interface CarryingItemsChecked {
     checked: boolean
   }>
   checked_at: string
+}
+
+// --- 指導監督の記録 ---
+
+export interface GuidanceRecordAttachment {
+  id: string
+  record_id: string
+  file_name: string
+  file_type: string
+  file_size: number | null
+  storage_url: string
+  created_at: string
+}
+
+export interface GuidanceRecord {
+  id: string
+  tenant_id: string
+  employee_id: string
+  employee_name?: string
+  guidance_type: string
+  title: string
+  content: string
+  guided_by: string | null
+  guided_at: string
+  parent_id: string | null
+  depth: number
+  children?: GuidanceRecord[]
+  attachments?: GuidanceRecordAttachment[]
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateGuidanceRecord {
+  employee_id: string
+  guidance_type?: string
+  title: string
+  content?: string
+  guided_by?: string
+  guided_at?: string
+  parent_id?: string | null
+}
+
+export interface GuidanceRecordsResponse {
+  records: GuidanceRecord[]
+  total: number
+  page: number
+  per_page: number
+}
+
+// --- 伝達事項 ---
+
+export interface CommunicationItem {
+  id: string
+  tenant_id: string
+  title: string
+  content: string
+  priority: string
+  target_employee_id: string | null
+  target_employee_name?: string | null
+  is_active: boolean
+  effective_from: string | null
+  effective_until: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCommunicationItem {
+  title: string
+  content?: string
+  priority?: string
+  target_employee_id?: string | null
+  effective_from?: string | null
+  effective_until?: string | null
+  created_by?: string
+}
+
+export interface CommunicationItemsResponse {
+  items: CommunicationItem[]
+  total: number
+  page: number
+  per_page: number
 }
 
 // --- 運転者情報パネル ---
@@ -901,4 +1049,44 @@ export interface DriverInfo {
     recorded_at: string
   }>
   equipment_failures: EquipmentFailure[]
+}
+
+// --- 労働時間 (dtako) ---
+
+export interface DtakoDriver {
+  id: string
+  tenant_id: string
+  driver_cd: string | null
+  driver_name: string
+}
+
+export interface DtakoDailyWorkHours {
+  id: string
+  tenant_id: string
+  driver_id: string
+  work_date: string
+  start_time: string
+  total_work_minutes: number | null
+  total_drive_minutes: number | null
+  total_rest_minutes: number | null
+  late_night_minutes: number
+  drive_minutes: number
+  cargo_minutes: number
+  overlap_drive_minutes: number
+  overlap_cargo_minutes: number
+  overlap_break_minutes: number
+  overlap_restraint_minutes: number
+  ot_late_night_minutes: number
+  total_distance: number | null
+  operation_count: number
+  unko_nos: string[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DtakoDailyHoursResponse {
+  items: DtakoDailyWorkHours[]
+  total: number
+  page: number
+  per_page: number
 }

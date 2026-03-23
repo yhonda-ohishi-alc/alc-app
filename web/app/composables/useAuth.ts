@@ -1,5 +1,13 @@
 import type { AuthUser, AuthResponse, RefreshResponse } from '~/types'
 
+/** Base64url → UTF-8 JSON デコード (マルチバイト文字対応) */
+function decodeJwtPayload(base64url: string): any {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(base64)
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0))
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
 const REFRESH_TOKEN_KEY = 'alc_refresh_token'
 const DEVICE_TENANT_KEY = 'alc_device_tenant_id'
 const DEVICE_ID_KEY = 'alc_device_id'
@@ -146,7 +154,7 @@ export function useAuth() {
     try {
       const parts = data.access_token.split('.')
       if (!parts[1]) throw new Error('Invalid JWT')
-      const payload = JSON.parse(atob(parts[1]))
+      const payload = decodeJwtPayload(parts[1])
       user.value = {
         id: payload.sub,
         email: payload.email,
@@ -229,7 +237,7 @@ export function useAuth() {
     try {
       const parts = token.split('.')
       if (!parts[1]) return
-      const payload = JSON.parse(atob(parts[1]))
+      const payload = decodeJwtPayload(parts[1])
       if (!payload.exp) return
 
       const expiresAt = payload.exp * 1000
@@ -320,6 +328,52 @@ export function useAuth() {
     }
   }
 
+  /** LINE WORKS コールバックの hash fragment からトークンをセット (auth-worker 形式) */
+  function handleLineworksHash(): boolean {
+    if (typeof window === 'undefined') return false
+    const hash = window.location.hash
+    const search = window.location.search
+    if (!hash.includes('token=')) return false
+
+    const params = new URLSearchParams(hash.slice(1))
+    // lw_callback=1 がハッシュまたはクエリに含まれる場合のみ処理
+    if (!params.get('lw_callback') && !search.includes('lw_callback=1')) return false
+
+    const token = params.get('token')
+    const refreshToken = params.get('refresh_token')
+    if (!token) return false
+
+    // JWT payload からユーザー情報をデコード
+    accessToken.value = token
+
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    }
+    try {
+      const parts = token.split('.')
+      if (!parts[1]) throw new Error('Invalid JWT')
+      const payload = decodeJwtPayload(parts[1])
+      const tenantId = payload.tenant_id || payload.org || ''
+      user.value = {
+        id: payload.sub || payload.user_id || '',
+        email: payload.email || '',
+        name: payload.name || '',
+        tenant_id: tenantId,
+        role: payload.role || 'viewer',
+      }
+      // tenant_id があればデバイスをアクティベート (X-Tenant-ID ヘッダー用)
+      if (tenantId) activateDevice(tenantId)
+    } catch { /* デコード失敗してもログイン状態は維持 */ }
+
+    // hash をクリア（lw_callback パラメータも除去）
+    const cleanSearch = new URLSearchParams(search.slice(1))
+    cleanSearch.delete('lw_callback')
+    const qs = cleanSearch.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+
+    return true
+  }
+
   return {
     user: readonly(user),
     accessToken: readonly(accessToken),
@@ -331,6 +385,7 @@ export function useAuth() {
     init,
     loginWithGoogleRedirect,
     handleGoogleCallback,
+    handleLineworksHash,
     refreshAccessToken,
     logout,
     activateDevice,

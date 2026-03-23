@@ -16,6 +16,9 @@ import type {
   Device, DeviceRegistrationRequest, CreateRegistrationResponse, RegistrationStatusResponse,
   ClaimRegistrationRequest, ClaimRegistrationResponse, CreateTokenResponse, CreatePermanentQrResponse, ApproveDeviceResponse,
   DeviceSettingsResponse, CallSchedule,
+  DailyHealthResponse, VehicleCategories,
+  GuidanceRecord, CreateGuidanceRecord, GuidanceRecordsResponse, GuidanceRecordAttachment,
+  CommunicationItem, CreateCommunicationItem, CommunicationItemsResponse,
 } from '~/types'
 
 let apiBase = ''
@@ -795,4 +798,111 @@ export async function submitCarryingItemChecks(sessionId: string, checks: Carryi
 
 export async function getDriverInfo(employeeId: string): Promise<DriverInfo> {
   return request(`/api/tenko/driver-info/${employeeId}`)
+}
+
+// --- 労働時間 (dtako) ---
+
+import type { DtakoDriver, DtakoDailyHoursResponse } from '~/types'
+
+export async function getDtakoDrivers(): Promise<DtakoDriver[]> {
+  return request('/api/drivers')
+}
+
+export async function getDtakoDailyHours(filter: {
+  driver_id?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}): Promise<DtakoDailyHoursResponse> {
+  return request(`/api/daily-hours${toParams(filter)}`)
+}
+
+// --- 車両分類 ---
+
+export async function getVehicleCategories(): Promise<VehicleCategories> {
+  return request<VehicleCategories>('/api/car-inspections/vehicle-categories')
+}
+
+// --- 日常健康状態 ---
+
+export async function getDailyHealthStatus(date?: string): Promise<DailyHealthResponse> {
+  const params = date ? toParams({ date }) : ''
+  return request<DailyHealthResponse>(`/api/tenko/daily-health-status${params}`)
+}
+
+// --- 指導監督の記録 ---
+
+export async function listGuidanceRecords(filter: {
+  employee_id?: string
+  guidance_type?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+} = {}): Promise<GuidanceRecordsResponse> {
+  return request<GuidanceRecordsResponse>(`/api/guidance-records${toParams(filter)}`)
+}
+
+export async function createGuidanceRecord(data: CreateGuidanceRecord): Promise<GuidanceRecord> {
+  return request<GuidanceRecord>('/api/guidance-records', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteGuidanceRecord(id: string): Promise<void> {
+  await request<void>(`/api/guidance-records/${id}`, { method: 'DELETE' })
+}
+
+export async function uploadGuidanceAttachment(recordId: string, file: File): Promise<GuidanceRecordAttachment> {
+  if (!apiBase) throw new Error('API 未初期化')
+  const formData = new FormData()
+  formData.append('file', file, file.name)
+  const headers = buildAuthHeaders()
+  const res = await fetch(`${apiBase}/api/guidance-records/${recordId}/attachments`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteGuidanceAttachment(recordId: string, attachmentId: string): Promise<void> {
+  await request<void>(`/api/guidance-records/${recordId}/attachments/${attachmentId}`, { method: 'DELETE' })
+}
+
+// --- 伝達事項 ---
+
+export async function listCommunicationItems(filter: {
+  is_active?: boolean
+  target_employee_id?: string
+  page?: number
+  per_page?: number
+} = {}): Promise<CommunicationItemsResponse> {
+  return request<CommunicationItemsResponse>(`/api/communication-items${toParams(filter)}`)
+}
+
+export async function getActiveCommunicationItems(targetEmployeeId?: string): Promise<CommunicationItem[]> {
+  const params = targetEmployeeId ? toParams({ target_employee_id: targetEmployeeId }) : ''
+  return request<CommunicationItem[]>(`/api/communication-items/active${params}`)
+}
+
+export async function createCommunicationItem(data: CreateCommunicationItem): Promise<CommunicationItem> {
+  return request<CommunicationItem>('/api/communication-items', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateCommunicationItem(id: string, data: Partial<CommunicationItem>): Promise<CommunicationItem> {
+  return request<CommunicationItem>(`/api/communication-items/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteCommunicationItem(id: string): Promise<void> {
+  await request<void>(`/api/communication-items/${id}`, { method: 'DELETE' })
 }

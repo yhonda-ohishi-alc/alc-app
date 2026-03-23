@@ -5,7 +5,20 @@ const config = useRuntimeConfig()
 const route = useRoute()
 
 // Auth + API init (全タブ共通)
-const { accessToken, deviceTenantId, refreshAccessToken } = useAuth()
+const { accessToken, isAuthenticated, deviceTenantId, refreshAccessToken, handleLineworksHash } = useAuth()
+
+// LINE WORKS コールバック処理 (hash fragment からトークン取得)
+onMounted(() => { handleLineworksHash() })
+
+// LINE WORKS ログイン (auth-worker 経由)
+const lwDomain = ref('')
+function loginWithLineworks() {
+  const input = lwDomain.value.trim()
+  if (!input) return
+  const redirectUri = encodeURIComponent(window.location.origin + '/?role=general')
+  const address = encodeURIComponent(input)
+  window.location.href = `https://auth.mtamaramu.com/oauth/lineworks/redirect?address=${address}&redirect_uri=${redirectUri}`
+}
 initApi(
   config.public.apiBase as string,
   () => accessToken.value,
@@ -24,14 +37,20 @@ const incomingCallMode = ref(route.query.mode === 'incoming_call')
 const incomingCallRoom = ref<string | null>((route.query.room as string) || null)
 
 // --- ロールタブ ---
-type RoleTab = 'driver' | 'manager' | 'admin'
-const roleTabOptions: RoleTab[] = ['driver', 'manager', 'admin']
+type RoleTab = 'driver' | 'manager' | 'admin' | 'general'
+const roleTabOptions: RoleTab[] = ['driver', 'manager', 'admin', 'general']
 const activeRole = ref<RoleTab>(
   incomingCallMode.value ? 'manager'
   : roleTabOptions.includes(route.query.role as RoleTab)
     ? (route.query.role as RoleTab)
     : 'driver',
 )
+
+// PC判定 (汎用管理タブはPCのみ表示)
+const isPC = ref(false)
+onMounted(() => {
+  isPC.value = window.innerWidth >= 1024 && !/Android|iPhone|iPad/i.test(navigator.userAgent)
+})
 
 // --- 運行者サブタブ ---
 type DriverSubTab = 'normal' | 'tenko' | 'remote' | 'timecard' | 'demo' | 'remote_demo' | 'device'
@@ -65,7 +84,12 @@ const roleLabels: Record<RoleTab, string> = {
   driver: '運行者',
   manager: '運行管理者',
   admin: 'システム管理者',
+  general: '汎用管理',
 }
+
+const visibleRoleTabs = computed(() =>
+  isPC.value ? roleTabOptions : roleTabOptions.filter(r => r !== 'general')
+)
 
 // ハンバーガーメニュー
 const menuOpen = ref(false)
@@ -150,7 +174,6 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 // 同タブ再クリックで再認証させるためのキー
 const managerAuthKey = ref(0)
 const adminAuthKey = ref(0)
-
 function onRoleTabClick(role: RoleTab) {
   if (activeRole.value === role) {
     if (role === 'manager') managerAuthKey.value++
@@ -166,7 +189,7 @@ function onRoleTabClick(role: RoleTab) {
     <div v-if="!isAndroidLandscape" class="w-full max-w-lg mx-auto px-4 pt-2 flex items-center gap-2">
       <div class="flex-1 flex gap-1 bg-gray-200 rounded-lg p-1">
         <button
-          v-for="role in roleTabOptions"
+          v-for="role in visibleRoleTabs"
           :key="role"
           class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
           :class="activeRole === role
@@ -309,7 +332,7 @@ function onRoleTabClick(role: RoleTab) {
               <!-- ロール切替 -->
               <div class="px-3 py-1 text-xs text-gray-400 font-medium">ロール切替</div>
               <button
-                v-for="role in (['manager', 'admin'] as const)"
+                v-for="role in (['manager', 'admin', 'general'] as const)"
                 :key="role"
                 class="w-full text-left px-4 py-2 text-sm transition-colors"
                 :class="activeRole === role
@@ -426,5 +449,39 @@ function onRoleTabClick(role: RoleTab) {
     <RoleAuthGate v-if="activeRole === 'admin'" :key="adminAuthKey" required-role="admin" class="flex-1 min-h-0">
       <AdminDashboard />
     </RoleAuthGate>
+
+    <!-- 汎用管理タブ (PCのみ, Google/LINE WORKS認証) -->
+    <template v-if="activeRole === 'general'">
+      <div v-if="isAuthenticated" class="flex-1 min-h-0">
+        <GeneralDashboard />
+      </div>
+      <div v-else class="flex flex-col items-center justify-center flex-1 p-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm max-w-md w-full text-center space-y-4">
+          <h2 class="text-lg font-semibold text-gray-700">汎用管理</h2>
+          <p class="text-sm text-gray-500">Google アカウントまたは LINE WORKS でログインしてください。</p>
+          <NuxtLink to="/login" class="block px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">
+            Google アカウントでログイン
+          </NuxtLink>
+          <div class="border-t pt-4">
+            <p class="text-xs text-gray-400 mb-2">LINE WORKS</p>
+            <div class="flex gap-2">
+              <input
+                v-model="lwDomain"
+                type="text"
+                placeholder="ドメインまたはメール"
+                class="flex-1 border rounded px-3 py-2 text-sm"
+              />
+              <button
+                class="px-4 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                :disabled="!lwDomain.trim()"
+                @click="loginWithLineworks"
+              >
+                ログイン
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
