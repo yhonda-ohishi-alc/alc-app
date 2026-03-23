@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { FaceAuthResult, TenkoSession } from '~/types'
-import { getEmployeeByCode, getEmployeeById, getEmployees, getTenkoSession, getDeviceSettings } from '~/utils/api'
+import type { FaceAuthResult, TenkoSession, DriverInfo } from '~/types'
+import { getEmployeeByCode, getEmployeeById, getEmployees, getTenkoSession, getDeviceSettings, getDriverInfo } from '~/utils/api'
 
 const props = defineProps<{
   initialRoomId?: string | null
@@ -48,6 +48,9 @@ const modalIdError = ref<string | null>(null)
 // 運転者情報パネル
 const showDriverInfoPanel = ref(false)
 
+// 運転者情報 (労働時間表示用)
+const liveDriverInfo = ref<DriverInfo | null>(null)
+
 // 通話中セッションのリアルタイムデータ
 const liveSession = ref<TenkoSession | null>(null)
 const liveEmployeeName = ref('')
@@ -65,18 +68,22 @@ function stopSessionPolling() {
   if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null }
   liveSession.value = null
   liveEmployeeName.value = ''
+  liveDriverInfo.value = null
 }
 
 async function fetchSession(sessionId: string) {
   try {
     const session = await getTenkoSession(sessionId)
     liveSession.value = session
-    // 社員名を取得 (初回のみ)
+    // 社員名 + 運転者情報を取得 (初回のみ)
     if (!liveEmployeeName.value && session.employee_id) {
       try {
         const employees = await getEmployees()
         const emp = employees.find(e => e.id === session.employee_id)
         if (emp) liveEmployeeName.value = emp.name
+      } catch { /* ignore */ }
+      try {
+        liveDriverInfo.value = await getDriverInfo(session.employee_id)
       } catch { /* ignore */ }
     }
   } catch { /* セッション未作成の場合は無視 */ }
@@ -517,6 +524,24 @@ onUnmounted(() => {
             <span v-else class="text-sm text-red-700 font-semibold">NG あり</span>
           </div>
           <span v-else class="text-sm text-gray-400">-</span>
+        </div>
+        <!-- 直近労働時間 -->
+        <div v-if="liveDriverInfo?.working_hours?.length" class="px-3 py-1">
+          <span class="text-xs text-gray-500">直近労働時間</span>
+          <div class="mt-0.5 grid grid-cols-5 gap-x-2 text-xs">
+            <span class="text-gray-400">日付</span>
+            <span class="text-gray-400 text-right">拘束</span>
+            <span class="text-gray-400 text-right">運転</span>
+            <span class="text-gray-400 text-right">荷役</span>
+            <span class="text-gray-400 text-right">深夜</span>
+            <template v-for="wh in liveDriverInfo.working_hours.slice(0, 3)" :key="wh.id">
+              <span>{{ new Date(wh.work_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) }}</span>
+              <span class="text-right font-mono">{{ wh.total_work_minutes != null ? `${Math.floor(wh.total_work_minutes / 60)}:${String(wh.total_work_minutes % 60).padStart(2, '0')}` : '-' }}</span>
+              <span class="text-right font-mono">{{ `${Math.floor(wh.drive_minutes / 60)}:${String(wh.drive_minutes % 60).padStart(2, '0')}` }}</span>
+              <span class="text-right font-mono">{{ `${Math.floor(wh.cargo_minutes / 60)}:${String(wh.cargo_minutes % 60).padStart(2, '0')}` }}</span>
+              <span class="text-right font-mono" :class="wh.late_night_minutes > 0 ? 'text-purple-600' : ''">{{ `${Math.floor(wh.late_night_minutes / 60)}:${String(wh.late_night_minutes % 60).padStart(2, '0')}` }}</span>
+            </template>
+          </div>
         </div>
         <div class="px-3 py-1 flex justify-between items-center">
           <span class="text-xs text-gray-500">担当管理者</span>
