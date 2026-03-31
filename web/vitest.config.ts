@@ -1,17 +1,31 @@
-import { defineConfig } from 'vitest/config'
+import { defineVitestConfig } from '@nuxt/test-utils/config'
 import { resolve } from 'path'
 
-export default defineConfig({
+export default defineVitestConfig({
   test: {
     globals: true,
-    environment: 'happy-dom',
+    environment: 'nuxt',
+    environmentOptions: {
+      nuxt: {
+        domEnvironment: 'happy-dom',
+      },
+    },
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'json-summary', 'html'],
+      include: ['app/**/*.ts'],
+      exclude: [
+        'app/types/**',
+        'app/workers/**',
+        'app/web-serial.d.ts',
+      ],
+    },
   },
   resolve: {
     alias: {
-      '~': resolve(__dirname, 'app'),
-      '#imports': resolve(__dirname, 'tests/mocks/nuxt-imports.ts'),
+      'fc1200-wasm': resolve(import.meta.dirname!, 'tests/mocks/fc1200-wasm.ts'),
     },
   },
 })

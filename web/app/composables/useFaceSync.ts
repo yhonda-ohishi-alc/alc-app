@@ -95,18 +95,15 @@ export function useFaceSync() {
     }
   }
 
-  // マウント時に自動同期 (クライアントサイドのみ)
-  if (import.meta.client) {
-    onMounted(() => {
-      // deviceTenantId も accessToken も無い場合は認証未準備 — 同期スキップ
-      const { deviceTenantId, accessToken } = useAuth()
-      if (!deviceTenantId.value && !accessToken.value) {
-        console.warn('[FaceSync] 認証未準備のため初回同期スキップ')
-        return
-      }
-      sync()
-    })
-  }
+  // マウント時に自動同期
+  onMounted(() => {
+    const { deviceTenantId, accessToken } = useAuth()
+    if (!deviceTenantId.value && !accessToken.value) {
+      console.warn('[FaceSync] 認証未準備のため初回同期スキップ')
+      return
+    }
+    sync()
+  })
 
   return {
     isSyncing: readonly(isSyncing),

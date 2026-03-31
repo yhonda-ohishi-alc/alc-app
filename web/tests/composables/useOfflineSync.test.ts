@@ -4,16 +4,21 @@ import type { MeasurementResult } from '~/types'
 // Mock the API and offline-queue modules
 vi.mock('~/utils/api', () => ({
   saveMeasurement: vi.fn(),
+  updateMeasurement: vi.fn(),
 }))
 
 vi.mock('~/utils/offline-queue', () => ({
   enqueue: vi.fn().mockResolvedValue(undefined),
   flush: vi.fn().mockResolvedValue({ sent: 0, failed: 0 }),
   pendingCount: vi.fn().mockResolvedValue(0),
+  getAllWithStatus: vi.fn().mockResolvedValue([]),
+  remove: vi.fn().mockResolvedValue(undefined),
+  clearAll: vi.fn().mockResolvedValue(undefined),
+  cleanupOld: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { useOfflineSync } from '~/composables/useOfflineSync'
-import { saveMeasurement } from '~/utils/api'
+import { saveMeasurement, updateMeasurement } from '~/utils/api'
 import { enqueue, flush } from '~/utils/offline-queue'
 
 function createResult(overrides: Partial<MeasurementResult> = {}): MeasurementResult {
@@ -51,21 +56,8 @@ describe('useOfflineSync', () => {
 
       expect(status).toBe('saved')
       expect(saveMeasurement).toHaveBeenCalledTimes(1)
-      expect(enqueue).not.toHaveBeenCalled()
-    })
-
-    it('should enqueue when offline (via API failure fallback)', async () => {
-      // In a real browser, navigator.onLine=false triggers direct enqueue.
-      // In happy-dom, navigator.onLine is not easily mockable.
-      // We verify the fallback path: API failure → enqueue, which covers the same logic.
-      vi.mocked(saveMeasurement).mockRejectedValueOnce(new Error('offline'))
-
-      const { save } = useOfflineSync()
-      const status = await save(createResult())
-
-      expect(status).toBe('queued')
+      // save() now also enqueues locally on success (for local record)
       expect(enqueue).toHaveBeenCalledTimes(1)
-      expect(saveMeasurement).toHaveBeenCalledTimes(1)
     })
 
     it('should enqueue when API call fails', async () => {
@@ -86,7 +78,7 @@ describe('useOfflineSync', () => {
       const { syncQueue, lastSyncResult } = useOfflineSync()
       await syncQueue()
 
-      expect(flush).toHaveBeenCalledWith(saveMeasurement)
+      expect(flush).toHaveBeenCalledWith(saveMeasurement, updateMeasurement)
       expect(lastSyncResult.value).toEqual({ sent: 3, failed: 0 })
     })
 
@@ -108,7 +100,6 @@ describe('useOfflineSync', () => {
     })
 
     it('should not sync when isSyncing is true (guard)', async () => {
-      // Test that concurrent syncs are prevented
       let resolveFlush2!: () => void
       vi.mocked(flush)
         .mockReturnValueOnce(

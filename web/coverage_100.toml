@@ -1,0 +1,54 @@
+# 100% カバレッジ達成済みファイル登録簿 (Lines 基準)
+# CI で coverage-summary.json と照合してリグレッション検出
+# 確認: npm run test:coverage → node scripts/check_coverage_100.mjs
+
+# --- composables ---
+
+[[files]]
+path = "app/composables/useAndroidLandscape.ts"
+
+[[files]]
+path = "app/composables/useDemoMode.ts"
+
+[[files]]
+path = "app/composables/useFaceSync.ts"
+
+[[files]]
+path = "app/composables/useFingerprint.ts"
+
+[[files]]
+path = "app/composables/useManagerAuth.ts"
+
+[[files]]
+path = "app/composables/useNfcBridgeUpdate.ts"
+
+[[files]]
+path = "app/composables/useSerialDeviceManager.ts"
+
+[[files]]
+path = "app/composables/useTenkoAdmin.ts"
+
+[[files]]
+path = "app/composables/useVideoRecorder.ts"
+
+# --- middleware ---
+
+[[files]]
+path = "app/middleware/auth.global.ts"
+
+# --- utils ---
+
+[[files]]
+path = "app/utils/face-approval.ts"
+
+[[files]]
+path = "app/utils/fc1200.ts"
+
+[[files]]
+path = "app/utils/human-config.ts"
+
+[[files]]
+path = "app/utils/license.ts"
+
+[[files]]
+path = "app/utils/video-store.ts"

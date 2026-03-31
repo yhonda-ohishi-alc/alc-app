@@ -1,0 +1,46 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/test.yml']
+  pull_request:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/test.yml']
+
+jobs:
+  test:
+    name: Vitest + Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      # fc1200-wasm is a local file: dependency — stub it for CI
+      - name: Stub fc1200-wasm
+        run: |
+          mkdir -p ../fc1200-wasm/pkg
+          echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
+          echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
+
+      - run: npm ci
+
+      - run: npx vitest run --coverage
+
+      - name: Coverage 100% regression check
+        run: node scripts/check_coverage_100.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: web/coverage/
+          retention-days: 30

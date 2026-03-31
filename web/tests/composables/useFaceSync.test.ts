@@ -16,17 +16,19 @@ vi.mock('~/utils/face-db', () => ({
   bulkSaveFaceDescriptors: (...args: any[]) => mockBulkSaveFaceDescriptors(...args),
 }))
 
-// Mock useAuth (Nuxt auto-import)
-;(globalThis as any).useAuth = () => ({
-  deviceTenantId: ref('test-tenant'),
-  accessToken: ref('test-token'),
-})
+import { withSetup } from '../helpers/with-setup'
+import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 
-// Disable onMounted auto-sync in tests
-;(globalThis as any).onMounted = () => {}
+// Mock useAuth (Nuxt auto-import)
+const { useAuthMock } = vi.hoisted(() => ({
+  useAuthMock: vi.fn(() => ({
+    deviceTenantId: { value: 'test-tenant' },
+    accessToken: { value: 'test-token' },
+  })),
+}))
+mockNuxtImport('useAuth', () => useAuthMock)
 
 // useFaceSync must be imported AFTER mocks are set up
-// Use dynamic import to ensure mocks are in place
 let useFaceSync: typeof import('~/composables/useFaceSync').useFaceSync
 
 const UUID_1 = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
@@ -98,6 +100,21 @@ describe('useFaceSync', () => {
     expect(desc[1]).toBeCloseTo(0.6)
   })
 
+  it('should download new entry when local has no record', async () => {
+    mockGetFaceData.mockResolvedValue([
+      { id: UUID_1, face_embedding: [0.1, 0.2], face_embedding_at: '2026-03-05T10:00:00Z', face_model_version: 'v1' },
+    ])
+    mockGetAllDescriptorsWithTimestamp.mockResolvedValue([])
+    mockBulkSaveFaceDescriptors.mockResolvedValue(undefined)
+
+    const { sync } = useFaceSync()
+    await sync()
+
+    expect(mockBulkSaveFaceDescriptors).toHaveBeenCalledWith([
+      expect.objectContaining({ employeeId: UUID_1, modelVersion: 'v1' }),
+    ])
+  })
+
   it('should skip upload for non-UUID employee IDs', async () => {
     mockGetFaceData.mockResolvedValue([])
     mockGetAllDescriptorsWithTimestamp.mockResolvedValue([
@@ -140,6 +157,62 @@ describe('useFaceSync', () => {
     await sync()
 
     expect(syncError.value).toBe('network error')
+  })
+
+  it('should handle non-Error sync errors', async () => {
+    mockGetFaceData.mockRejectedValue('unknown')
+
+    const { sync, syncError } = useFaceSync()
+    await sync()
+
+    expect(syncError.value).toBe('顔データ同期エラー')
+  })
+
+  it('onMounted で認証済みなら sync が呼ばれる', async () => {
+    mockGetFaceData.mockResolvedValue([])
+    mockGetAllDescriptorsWithTimestamp.mockResolvedValue([])
+    useAuthMock.mockReturnValue({
+      deviceTenantId: { value: 'tenant-001' },
+      accessToken: { value: 'token-001' },
+    })
+
+    const [result, app] = withSetup(() => useFaceSync())
+
+    await vi.waitFor(() => {
+      expect(mockGetFaceData).toHaveBeenCalled()
+    })
+
+    app.unmount()
+  })
+
+  it('onMounted で認証未準備なら sync がスキップされる', async () => {
+    useAuthMock.mockReturnValue({
+      deviceTenantId: { value: null },
+      accessToken: { value: null },
+    })
+
+    const [result, app] = withSetup(() => useFaceSync())
+
+    // sync は呼ばれないはず
+    await new Promise(r => setTimeout(r, 50))
+    expect(mockGetFaceData).not.toHaveBeenCalled()
+
+    app.unmount()
+  })
+
+  it('should handle upload failure gracefully', async () => {
+    mockGetFaceData.mockResolvedValue([])
+    mockGetAllDescriptorsWithTimestamp.mockResolvedValue([
+      { employeeId: UUID_1, descriptor: new Float32Array([0.5, 0.6]), updatedAt: Date.now() },
+    ])
+    mockUpdateEmployeeFace.mockRejectedValue(new Error('upload failed'))
+
+    const { sync, syncError } = useFaceSync()
+    await sync()
+
+    // upload 失敗は個別 catch されるので syncError にはならない
+    expect(syncError.value).toBeNull()
+    expect(mockUpdateEmployeeFace).toHaveBeenCalledTimes(1)
   })
 
   it('should download new entries and upload only entries not on server', async () => {
