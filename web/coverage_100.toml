@@ -11,6 +11,9 @@ path = "app/composables/useAndroidLandscape.ts"
 path = "app/composables/useDemoMode.ts"
 
 [[files]]
+path = "app/composables/useFaceAuth.ts"
+
+[[files]]
 path = "app/composables/useFaceSync.ts"
 
 [[files]]
@@ -23,6 +26,9 @@ path = "app/composables/useManagerAuth.ts"
 path = "app/composables/useNfcBridgeUpdate.ts"
 
 [[files]]
+path = "app/composables/useScreenShare.ts"
+
+[[files]]
 path = "app/composables/useSerialDeviceManager.ts"
 
 [[files]]
@@ -30,6 +36,9 @@ path = "app/composables/useTenkoAdmin.ts"
 
 [[files]]
 path = "app/composables/useVideoRecorder.ts"
+
+[[files]]
+path = "app/composables/useWebRtc.ts"
 
 # --- middleware ---
 
@@ -42,6 +51,9 @@ path = "app/middleware/auth.global.ts"
 path = "app/utils/face-approval.ts"
 
 [[files]]
+path = "app/utils/face-db.ts"
+
+[[files]]
 path = "app/utils/fc1200.ts"
 
 [[files]]
@@ -49,6 +61,9 @@ path = "app/utils/human-config.ts"
 
 [[files]]
 path = "app/utils/license.ts"
+
+[[files]]
+path = "app/utils/offline-queue.ts"
 
 [[files]]
 path = "app/utils/video-store.ts"
