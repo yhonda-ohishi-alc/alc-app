@@ -37,6 +37,11 @@ const defaultPayload = {
   role: 'admin',
 }
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 describe('useAuth', () => {
   beforeEach(async () => {
     vi.stubGlobal('fetch', mockFetch)
@@ -944,6 +949,126 @@ describe('useAuth', () => {
     })
   })
 
+  describe('handleLineworksHash JWT fallback fields', () => {
+    it('should handle token with no payload part (no dots)', async () => {
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          hash: '#token=headerwithoutdots&lw_callback=1',
+          search: '',
+          pathname: '/p',
+        },
+        writable: true,
+        configurable: true,
+      })
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      const result = auth.handleLineworksHash()
+
+      expect(result).toBe(true)
+      // Token is set even with no payload
+      expect(auth.accessToken.value).toBe('headerwithoutdots')
+      // user remains null because decode throws
+      expect(auth.user.value).toBeNull()
+
+      replaceStateSpy.mockRestore()
+    })
+
+    it('should use user_id when sub is missing', async () => {
+      const fakeJwt = createFakeJwt({
+        user_id: 'fallback-user-id',
+        email: 'fb@example.com',
+        name: 'Fallback User',
+        tenant_id: 'tenant-fb',
+        role: 'admin',
+      })
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          hash: `#token=${fakeJwt}&lw_callback=1`,
+          search: '',
+          pathname: '/p',
+        },
+        writable: true,
+        configurable: true,
+      })
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      const result = auth.handleLineworksHash()
+
+      expect(result).toBe(true)
+      expect(auth.user.value?.id).toBe('fallback-user-id')
+
+      replaceStateSpy.mockRestore()
+    })
+
+    it('should default id to empty string when both sub and user_id are missing', async () => {
+      const fakeJwt = createFakeJwt({
+        email: 'noid@example.com',
+        name: 'No ID',
+        tenant_id: 'tenant-noid',
+        role: 'admin',
+      })
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          hash: `#token=${fakeJwt}&lw_callback=1`,
+          search: '',
+          pathname: '/p',
+        },
+        writable: true,
+        configurable: true,
+      })
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      const result = auth.handleLineworksHash()
+
+      expect(result).toBe(true)
+      expect(auth.user.value?.id).toBe('')
+
+      replaceStateSpy.mockRestore()
+    })
+
+    it('should default role to viewer when role is missing', async () => {
+      const fakeJwt = createFakeJwt({
+        sub: 'user-no-role',
+        email: 'nr@example.com',
+        name: 'No Role',
+        tenant_id: 'tenant-nr',
+      })
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      Object.defineProperty(window, 'location', {
+        value: {
+          hash: `#token=${fakeJwt}&lw_callback=1`,
+          search: '',
+          pathname: '/p',
+        },
+        writable: true,
+        configurable: true,
+      })
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      const result = auth.handleLineworksHash()
+
+      expect(result).toBe(true)
+      expect(auth.user.value?.role).toBe('viewer')
+
+      replaceStateSpy.mockRestore()
+    })
+  })
+
   describe('isAuthenticated computed', () => {
     it('should be false when no access token', async () => {
       const { useAuth } = await import('~/composables/useAuth')
@@ -963,6 +1088,86 @@ describe('useAuth', () => {
       await auth.refreshAccessToken('rt_test')
 
       expect(auth.isAuthenticated.value).toBe(true)
+    })
+  })
+
+  describe('SSR branches (isClient=false)', () => {
+    beforeEach(() => {
+      envMock.isClient = false
+      vi.stubGlobal('fetch', mockFetch)
+      mockFetch.mockReset()
+    })
+
+    afterEach(() => {
+      envMock.isClient = true
+    })
+
+    it('deviceTenantId and deviceId are null on server', async () => {
+      localStorage.setItem('alc_device_tenant_id', 'should-not-read')
+      localStorage.setItem('alc_device_id', 'should-not-read')
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      expect(auth.deviceTenantId.value).toBeNull()
+      expect(auth.deviceId.value).toBeNull()
+    })
+
+    it('activateDevice does not touch localStorage when isClient=false', async () => {
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      auth.activateDevice('tenant-ssr', 'dev-ssr')
+
+      // refs are updated (in-memory)
+      expect(auth.deviceTenantId.value).toBe('tenant-ssr')
+      expect(auth.deviceId.value).toBe('dev-ssr')
+      // but localStorage is not touched
+      expect(localStorage.getItem('alc_device_tenant_id')).toBeNull()
+      expect(localStorage.getItem('alc_device_id')).toBeNull()
+    })
+
+    it('deactivateDevice does not touch localStorage when isClient=false', async () => {
+      localStorage.setItem('alc_device_tenant_id', 'pre-existing')
+      localStorage.setItem('alc_device_id', 'pre-existing')
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      auth.deactivateDevice()
+
+      // refs are cleared
+      expect(auth.deviceTenantId.value).toBeNull()
+      expect(auth.deviceId.value).toBeNull()
+      // localStorage is NOT touched (guard skips the block)
+      expect(localStorage.getItem('alc_device_tenant_id')).toBe('pre-existing')
+      expect(localStorage.getItem('alc_device_id')).toBe('pre-existing')
+    })
+
+    it('logout does not create iframe or remove localStorage when isClient=false', async () => {
+      const appendSpy = vi.spyOn(document.body, 'appendChild')
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      // Set up a refresh token in localStorage (simulating pre-existing state)
+      localStorage.setItem('alc_refresh_token', 'rt-ssr-test')
+
+      await auth.logout()
+
+      // No iframe should be created
+      expect(appendSpy).not.toHaveBeenCalled()
+      // localStorage should not be touched
+      expect(localStorage.getItem('alc_refresh_token')).toBe('rt-ssr-test')
+
+      appendSpy.mockRestore()
+    })
+
+    it('handleLineworksHash returns false when isClient=false', async () => {
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      expect(auth.handleLineworksHash()).toBe(false)
     })
   })
 })

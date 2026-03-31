@@ -21,6 +21,11 @@ vi.mock('~/utils/fc1200', () => ({
   createFc1200Session: vi.fn(() => ({ ...mockSession })),
 }))
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 // --- Mock WebSocket ---
 
 type WsHandler = ((ev: any) => void) | null
@@ -172,6 +177,18 @@ describe('useFc1200Serial', () => {
     await fc.disconnect()
     delete (navigator as any).serial
     vi.useRealTimers()
+  })
+
+  // ---------- SSR (isClient=false) ----------
+
+  describe('SSR (isClient=false)', () => {
+    it('isSupported() returns false when isClient=false', () => {
+      envMock.isClient = false
+      removeSerialMock()
+      const ssrFc = useFc1200Serial()
+      expect(ssrFc.isSupported()).toBe(false)
+      envMock.isClient = true
+    })
   })
 
   // ---------- Initial state ----------

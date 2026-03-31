@@ -145,7 +145,7 @@ export function useBleGateway() {
   }
 
   function sendWsCommand(cmd: Record<string, string>): void {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (ws?.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify(cmd))
     console.log('[BLE-GW WS TX]', cmd)
   }

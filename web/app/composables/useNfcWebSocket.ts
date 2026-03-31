@@ -1,4 +1,5 @@
 import type { NfcWebSocketEvent, NfcReadEvent, NfcLicenseReadEvent, NfcErrorEvent } from '~/types'
+import { isClient } from '~/utils/env'
 
 const DEFAULT_URL = 'ws://127.0.0.1:9876'
 const RECONNECT_DELAY_MS = 3000
@@ -158,13 +159,13 @@ export function useNfcWebSocket(url: string = DEFAULT_URL) {
       connect()
     }
   }
-  if (import.meta.client) {
+  if (isClient) {
     window.addEventListener('bridge-restarted', bridgeRestartHandler)
   }
 
   onUnmounted(() => {
     disconnect()
-    if (import.meta.client) {
+    if (isClient) {
       window.removeEventListener('bridge-restarted', bridgeRestartHandler)
     }
   })

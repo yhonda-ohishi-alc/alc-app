@@ -6,13 +6,12 @@ export function useManagerAuth() {
       console.log('[useManagerAuth] setManagerId:', id, '→', authenticatedManagerId.value)
       authenticatedManagerId.value = id
       // Android SharedPreferences に永続化（null時はメモリのみクリア、デバイスには残す）
-      if (import.meta.client && id) {
-        try { (window as any).Android?.setManagerId?.(id) } catch {}
+      if (id) {
+        try { (window as any).Android?.setManagerId?.(id) } catch { /* SSR or no bridge */ }
       }
     },
     /** 通話応答時に Android SharedPreferences から復元 */
     loadFromDevice: () => {
-      if (!import.meta.client) return
       try {
         const id = (window as any).Android?.getManagerId?.()
         if (id) {
@@ -20,7 +19,7 @@ export function useManagerAuth() {
           console.log('[useManagerAuth] loadFromDevice:', id)
         }
       }
-      catch {}
+      catch { /* SSR or no bridge */ }
     },
   }
 }

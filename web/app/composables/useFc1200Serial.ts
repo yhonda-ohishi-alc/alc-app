@@ -1,4 +1,5 @@
 import type { Fc1200State, Fc1200Event, MeasurementResult, SensorLifetime, MemoryRecord } from '~/types'
+import { isClient } from '~/utils/env'
 import type { Fc1200WasmSession } from 'fc1200-wasm'
 import { initFc1200Wasm, createFc1200Session } from '~/utils/fc1200'
 
@@ -62,7 +63,7 @@ export function useFc1200Serial() {
     // WebSerial 対応 or Android WebView (WebSocket フォールバック)
     if (isWebSerialSupported()) return true
     // WebView 内 = WebSocket ブリッジが使える
-    if (typeof window !== 'undefined' && typeof WebSocket !== 'undefined') return true
+    if (isClient && typeof WebSocket !== 'undefined') return true
     return false
   }
 
@@ -146,7 +147,7 @@ export function useFc1200Serial() {
   }
 
   function sendWsCommand(command: string): void {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (ws?.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({ command }))
     console.log('[FC-1200 WS TX]', command)
   }
@@ -382,9 +383,8 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.start_measurement()
-    state.value = session.state() as Fc1200State
+    session!.start_measurement()
+    state.value = session!.state() as Fc1200State
     await sendPendingResponse()
   }
 
@@ -402,8 +402,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.check_sensor_lifetime()
+    session!.check_sensor_lifetime()
     await sendPendingResponse()
   }
 
@@ -421,8 +420,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.start_memory_read()
+    session!.start_memory_read()
     await sendPendingResponse()
   }
 
@@ -438,8 +436,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.complete_memory_read()
+    session!.complete_memory_read()
     await sendPendingResponse()
   }
 
@@ -458,8 +455,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.update_date(dt)
+    session!.update_date(dt)
     await sendPendingResponse()
   }
 

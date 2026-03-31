@@ -189,6 +189,15 @@ describe('useTenkoKiosk', () => {
       k.step.value = 'cancelled'
       expect(k.currentStepIndex.value).toBe(k.stepKeys.value.length - 1)
     })
+
+    it('safety_result + post_operation (self_declaration not in stepKeys) → 0', () => {
+      const k = useTenkoKiosk()
+      k.selectedSchedule.value = makeSchedule({ tenko_type: 'post_operation' })
+      k.step.value = 'safety_result'
+      // post_operation stepKeys doesn't include 'self_declaration'
+      // indexOf('self_declaration') returns -1, so -1 + 1 = 0
+      expect(k.currentStepIndex.value).toBe(0)
+    })
   })
 
   // ---------- identifyEmployee ----------
@@ -849,6 +858,19 @@ describe('useTenkoKiosk', () => {
       await k.onMedicalSubmit({ temperature: 36.5 })
       // default case does nothing, so step stays
       expect(k.step.value).toBe('medical')
+    })
+
+    it('safety_judgment_pending + fail via onMedicalSubmit → interrupted', async () => {
+      const sj: SafetyJudgment = { status: 'fail', failed_items: ['temperature'], judged_at: '2026-03-31T00:00:00Z', medical_diffs: null }
+      const sess = makeSession({ status: 'safety_judgment_pending', safety_judgment: sj })
+      vi.mocked(submitMedical).mockResolvedValue(sess)
+
+      const k = useTenkoKiosk()
+      k.session.value = makeSession()
+
+      await k.onMedicalSubmit({ temperature: 39.0 })
+      expect(k.session.value?.safety_judgment?.status).toBe('fail')
+      expect(k.step.value).toBe('interrupted')
     })
   })
 

@@ -109,6 +109,106 @@ describe('useVideoRecorder', () => {
     expect(result.isRecording.value).toBe(false)
   })
 
+  it('stopRecording chains prevOnStop handler when onstop was already set', async () => {
+    const externalOnStop = vi.fn()
+    let capturedRecorder: any = null
+    vi.stubGlobal('MediaRecorder', class {
+      state = 'inactive' as string
+      ondataavailable: any = null
+      onstop: any = null
+      onerror: any = null
+      static isTypeSupported = vi.fn(() => true)
+      constructor() { capturedRecorder = this }
+      start() { this.state = 'recording' }
+      stop() {
+        this.state = 'inactive'
+        this.ondataavailable?.({ data: new Blob(['data'], { type: 'video/webm' }) })
+        this.onstop?.(new Event('stop'))
+      }
+    })
+
+    const { startRecording, stopRecording, recordedBlob } = useVideoRecorder()
+    startRecording({} as MediaStream)
+
+    // Save original onstop (set by startRecording) and replace with a custom one
+    // that calls the original first (simulating a chain), then our spy
+    const originalOnStop = capturedRecorder.onstop
+    capturedRecorder.onstop = (e: Event) => {
+      originalOnStop?.(e) // This sets recordedBlob
+      externalOnStop(e)
+    }
+
+    const blob = await stopRecording()
+    // stopRecording wraps the existing onstop, so the chain is:
+    // stopRecording wrapper → prevOnStop (our custom) → originalOnStop (sets recordedBlob)
+    expect(externalOnStop).toHaveBeenCalled()
+    expect(recordedBlob.value).toBeInstanceOf(Blob)
+    expect(blob).toBeInstanceOf(Blob)
+  })
+
+  it('stopRecording when prevOnStop is null (onstop cleared before stop)', async () => {
+    let capturedRecorder: any = null
+    vi.stubGlobal('MediaRecorder', class {
+      state = 'inactive' as string
+      ondataavailable: any = null
+      onstop: any = null
+      onerror: any = null
+      static isTypeSupported = vi.fn(() => true)
+      constructor() { capturedRecorder = this }
+      start() { this.state = 'recording' }
+      stop() {
+        this.state = 'inactive'
+        this.ondataavailable?.({ data: new Blob(['data'], { type: 'video/webm' }) })
+        this.onstop?.(new Event('stop'))
+      }
+    })
+
+    const { startRecording, stopRecording } = useVideoRecorder()
+    startRecording({} as MediaStream)
+
+    // Explicitly set onstop to null before stopRecording — prevOnStop will be null
+    capturedRecorder.onstop = null
+
+    const blob = await stopRecording()
+    // stopRecording wraps null prevOnStop, so resolve still works
+    // recordedBlob won't be set since original onstop was nulled, but resolve still fires
+    expect(blob).toBeNull()
+  })
+
+  it('onUnmounted で録画未開始なら stop しない (mediaRecorder=null)', () => {
+    const [, app] = withSetup(() => useVideoRecorder())
+    // startRecording を呼ばずに unmount — mediaRecorder は null
+    app.unmount()
+    // No error should occur
+  })
+
+  it('onUnmounted で録画停止済みなら stop しない (state=inactive)', () => {
+    let capturedRecorder: any = null
+    vi.stubGlobal('MediaRecorder', class {
+      state = 'inactive' as string
+      ondataavailable: any = null
+      onstop: any = null
+      onerror: any = null
+      static isTypeSupported = vi.fn(() => true)
+      constructor() { capturedRecorder = this }
+      start() { this.state = 'recording' }
+      stop = vi.fn(() => {
+        this.state = 'inactive'
+        this.onstop?.(new Event('stop'))
+      })
+    })
+
+    const [result, app] = withSetup(() => useVideoRecorder())
+    result.startRecording({} as MediaStream)
+    // Stop recording first so state is 'inactive'
+    capturedRecorder.stop()
+    capturedRecorder.stop.mockClear()
+
+    app.unmount()
+    // onUnmounted should NOT call stop again since state is 'inactive'
+    expect(capturedRecorder.stop).not.toHaveBeenCalled()
+  })
+
   it('ondataavailable で size=0 のデータは無視', async () => {
     vi.stubGlobal('MediaRecorder', class {
       state = 'inactive' as string

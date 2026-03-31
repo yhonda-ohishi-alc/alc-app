@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useCamera } from '~/composables/useCamera'
 import { withSetup } from '../helpers/with-setup'
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 describe('useCamera', () => {
   let mockGetUserMedia: ReturnType<typeof vi.fn>
   let mockTrackStop: ReturnType<typeof vi.fn>
@@ -320,6 +325,20 @@ describe('useCamera', () => {
       app.unmount()
       expect(cam.isActive.value).toBe(false)
       expect(mockTrackStop).toHaveBeenCalled()
+    })
+  })
+
+  describe('SSR (isClient=false)', () => {
+    it('switchToDummyCamera is not set when isClient=false', async () => {
+      delete (window as any).switchToDummyCamera
+      envMock.isClient = false
+      vi.resetModules()
+      await import('~/composables/useCamera')
+      expect((window as any).switchToDummyCamera).toBeUndefined()
+      // Restore: re-import with isClient=true to re-register the side effect
+      envMock.isClient = true
+      vi.resetModules()
+      await import('~/composables/useCamera')
     })
   })
 

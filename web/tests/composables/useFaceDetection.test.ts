@@ -125,6 +125,23 @@ describe('useFaceDetection', () => {
       expect(workerInstances).toHaveLength(1) // no new worker
     })
 
+    it('ignores unknown message type during init', async () => {
+      const fd = useFaceDetection()
+
+      const loadPromise = fd.load()
+      const w = workerInstances[0]!
+
+      // Simulate an unknown message type — neither 'ready' nor 'error'
+      w.simulateMessage({ type: 'unknown' })
+
+      // The promise should still be pending (not resolved or rejected)
+      // Now resolve it properly with 'ready'
+      w.simulateMessage({ type: 'ready' })
+      await loadPromise
+
+      expect(fd.isReady.value).toBe(true)
+    })
+
     it('skips if already loading (isLoading guard)', async () => {
       const fd = useFaceDetection()
 

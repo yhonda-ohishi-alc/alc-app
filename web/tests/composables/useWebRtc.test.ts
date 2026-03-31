@@ -199,18 +199,69 @@ describe('useWebRtc', () => {
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'sdp_answer', sdp: 'mock-answer-sdp' }))
   })
 
-  it('handleSignalingMessage: sdp_offer without pc → createPeerConnection is called', async () => {
-    // connect creates a pc, but we test the path where pc exists
+  it('handleOffer when pc is null → creates new PC then processes offer', async () => {
+    const rtc = useWebRtc('admin')
+    await rtc.connect('wss://sig.example.com', 'room-1')
+    const ws = getWs()
+    ws.onopen?.()
+
+    // Save the onmessage handler before disconnect nullifies pc
+    const savedOnMessage = ws.onmessage
+
+    // Disconnect sets pc=null and ws=null internally
+    rtc.disconnect()
+
+    const pcCountBefore = pcInstances.length
+
+    // Simulate a late-arriving sdp_offer message via the saved handler
+    // This exercises the if (!pc) createPeerConnection() path in handleOffer
+    savedOnMessage?.({ data: JSON.stringify({ type: 'sdp_offer', sdp: 'late-offer-sdp' }) } as any)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // A new PC should have been created by handleOffer
+    expect(pcInstances.length).toBe(pcCountBefore + 1)
+    const newPc = getPc()
+    expect(newPc.setRemoteDescription).toHaveBeenCalledWith({ type: 'offer', sdp: 'late-offer-sdp' })
+    expect(newPc.createAnswer).toHaveBeenCalled()
+  })
+
+  it('handleIceCandidate when pc is null → no-op, no throw', async () => {
     const rtc = useWebRtc('device')
     await rtc.connect('wss://sig.example.com', 'room-1')
     const ws = getWs()
     ws.onopen?.()
 
-    // pc already exists from connect, verify offer handling works
-    ws.onmessage?.({ data: JSON.stringify({ type: 'sdp_offer', sdp: 'offer-sdp' }) } as any)
+    const savedOnMessage = ws.onmessage
+
+    // Disconnect nullifies pc
+    rtc.disconnect()
+
+    const pcCountBefore = pcInstances.length
+
+    // Send ice_candidate after disconnect — pc is null, should be silently ignored
+    const candidate = { candidate: 'candidate-string', sdpMid: '0', sdpMLineIndex: 0 }
+    savedOnMessage?.({ data: JSON.stringify({ type: 'ice_candidate', candidate }) } as any)
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(getPc().setRemoteDescription).toHaveBeenCalled()
+    // No new PC should have been created (handleIceCandidate just returns if pc is null)
+    expect(pcInstances.length).toBe(pcCountBefore)
+  })
+
+  it('handleAnswer when pc is null → no-op', async () => {
+    const rtc = useWebRtc('device')
+    await rtc.connect('wss://sig.example.com', 'room-1')
+    const ws = getWs()
+    ws.onopen?.()
+
+    const savedOnMessage = ws.onmessage
+    rtc.disconnect()
+
+    // Send sdp_answer after disconnect — pc is null
+    savedOnMessage?.({ data: JSON.stringify({ type: 'sdp_answer', sdp: 'answer-sdp' }) } as any)
+    await vi.advanceTimersByTimeAsync(0)
+
+    // No crash, no new PC
+    expect(pcInstances.length).toBe(1) // only the one from connect()
   })
 
   it('handleSignalingMessage: sdp_answer → setRemoteDescription', async () => {
@@ -488,6 +539,36 @@ describe('useWebRtc', () => {
     expect(pc.addTrack).toHaveBeenCalledWith(mockTrack, stream)
   })
 
+  it('startStreaming: sender があるが kind が異なる場合は addTrack', async () => {
+    const rtc = useWebRtc('device')
+    await rtc.connect('wss://sig.example.com', 'room-1')
+    const pc = getPc()
+
+    // Sender exists but with audio kind, while we add a video track
+    pc.getSenders.mockReturnValue([{ track: { kind: 'audio' }, replaceTrack: vi.fn() }])
+
+    const mockTrack = { kind: 'video', id: 't-vid' }
+    const stream = { getTracks: () => [mockTrack] } as any as MediaStream
+
+    await rtc.startStreaming(stream)
+    expect(pc.addTrack).toHaveBeenCalledWith(mockTrack, stream)
+  })
+
+  it('startStreaming: sender.track が null の場合は addTrack', async () => {
+    const rtc = useWebRtc('device')
+    await rtc.connect('wss://sig.example.com', 'room-1')
+    const pc = getPc()
+
+    // Sender exists but track is null
+    pc.getSenders.mockReturnValue([{ track: null, replaceTrack: vi.fn() }])
+
+    const mockTrack = { kind: 'video', id: 't-vid2' }
+    const stream = { getTracks: () => [mockTrack] } as any as MediaStream
+
+    await rtc.startStreaming(stream)
+    expect(pc.addTrack).toHaveBeenCalledWith(mockTrack, stream)
+  })
+
   it('startStreaming: 既存 sender がある場合は replaceTrack', async () => {
     const rtc = useWebRtc('device')
     await rtc.connect('wss://sig.example.com', 'room-1')
@@ -522,6 +603,18 @@ describe('useWebRtc', () => {
 
     expect(pc.createOffer).toHaveBeenCalled()
     expect(ws.send).toHaveBeenCalledWith(expect.stringContaining('sdp_offer'))
+  })
+
+  it('startStreaming: pc が null の場合は localStream のみ保存 (addTrack されない)', async () => {
+    const rtc = useWebRtc('device')
+    // Do not call connect — pc is null
+
+    const mockTrack = { kind: 'video', id: 't-nopc' }
+    const stream = { getTracks: () => [mockTrack] } as any as MediaStream
+
+    await rtc.startStreaming(stream)
+    // No PC exists, so no addTrack call
+    expect(pcInstances).toHaveLength(0)
   })
 
   it('startStreaming: isPeerConnected=false なら offer を送らない', async () => {

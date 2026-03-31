@@ -1,3 +1,5 @@
+import { isClient } from '~/utils/env'
+
 const STORAGE_KEY = 'fingerprint_device_employees'
 
 interface AndroidBridge {
@@ -8,7 +10,7 @@ interface AndroidBridge {
 }
 
 function getAndroid(): AndroidBridge | null {
-  if (typeof window === 'undefined') return null
+  if (!isClient) return null
   const w = window as any
   if (typeof w.Android?.getAndroidId === 'function') return w.Android
   return null
