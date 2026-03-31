@@ -1,7 +1,27 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import type { MeasurementResult } from '~/types'
-import { enqueue, getAll, remove, pendingCount, flush } from '~/utils/offline-queue'
+import {
+  enqueue,
+  getAll,
+  getAllWithStatus,
+  remove,
+  pendingCount,
+  flush,
+  clearAll,
+  cleanupOld,
+  markSynced,
+  estimateDbSize,
+} from '~/utils/offline-queue'
+
+vi.mock('~/utils/video-store', () => ({
+  getVideo: vi.fn(),
+  markVideoUploaded: vi.fn(),
+}))
+
+vi.mock('~/utils/api', () => ({
+  uploadBlowVideo: vi.fn(),
+}))
 
 function createResult(overrides: Partial<MeasurementResult> = {}): MeasurementResult {
   return {
@@ -18,6 +38,7 @@ describe('offline-queue', () => {
   beforeEach(() => {
     // Create a completely fresh IndexedDB instance for each test
     globalThis.indexedDB = new IDBFactory()
+    vi.clearAllMocks()
   })
 
   describe('enqueue', () => {
@@ -136,6 +157,334 @@ describe('offline-queue', () => {
       const savedResult = saveFn.mock.calls[0][0]
       expect(savedResult.measuredAt).toBeInstanceOf(Date)
       expect(savedResult.measuredAt.toISOString()).toBe('2026-01-15T08:00:00.000Z')
+    })
+
+    it('should use updateFn path when activeMeasurementId is present (no photo)', async () => {
+      await enqueue(
+        createResult({ facePhotoUrl: 'https://example.com/photo.jpg' }),
+        undefined,
+        'measurement-123',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      expect(saveFn).not.toHaveBeenCalled()
+      expect(updateFn).toHaveBeenCalledTimes(1)
+      expect(updateFn.mock.calls[0][0]).toBe('measurement-123')
+      expect(updateFn.mock.calls[0][1]).toMatchObject({
+        status: 'completed',
+        alcohol_value: 0.0,
+        result_type: 'normal',
+        face_photo_url: 'https://example.com/photo.jpg',
+      })
+      expect(result).toEqual({ sent: 1, failed: 0 })
+    })
+
+    it('should use updateFn path with facePhotoBase64 and existing facePhotoUrl', async () => {
+      const blob = new Blob(['photo-data'], { type: 'image/jpeg' })
+      await enqueue(
+        createResult({ facePhotoUrl: 'https://example.com/photo.jpg' }),
+        blob,
+        'measurement-456',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      // Should use updateFn since facePhotoUrl is present
+      expect(updateFn).toHaveBeenCalledTimes(1)
+      expect(saveFn).not.toHaveBeenCalled()
+      expect(result).toEqual({ sent: 1, failed: 0 })
+    })
+
+    it('should fallback to saveFn when activeMeasurementId + facePhotoBase64 but no facePhotoUrl', async () => {
+      const blob = new Blob(['photo-data'], { type: 'image/jpeg' })
+      await enqueue(
+        createResult(), // no facePhotoUrl
+        blob,
+        'measurement-789',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      // Falls back to saveFn because no facePhotoUrl
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      expect(updateFn).not.toHaveBeenCalled()
+      expect(result).toEqual({ sent: 1, failed: 0 })
+    })
+
+    it('should reconstruct medicalMeasuredAt as Date when present', async () => {
+      await enqueue(createResult({
+        medicalMeasuredAt: new Date('2026-01-15T09:00:00Z'),
+        temperature: 36.5,
+      }))
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn)
+
+      const savedResult = saveFn.mock.calls[0][0]
+      expect(savedResult.medicalMeasuredAt).toBeInstanceOf(Date)
+      expect(savedResult.medicalMeasuredAt.toISOString()).toBe('2026-01-15T09:00:00.000Z')
+    })
+
+    it('should pass face photo blob to saveFn (traditional POST path)', async () => {
+      const blob = new Blob(['photo'], { type: 'image/jpeg' })
+      await enqueue(createResult(), blob)
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn)
+
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      const passedBlob = saveFn.mock.calls[0][1]
+      expect(passedBlob).toBeInstanceOf(Blob)
+    })
+
+    it('should upload linked video after successful send', async () => {
+      const { getVideo, markVideoUploaded } = await import('~/utils/video-store')
+      const { uploadBlowVideo } = await import('~/utils/api')
+
+      const mockGetVideo = vi.mocked(getVideo)
+      const mockMarkUploaded = vi.mocked(markVideoUploaded)
+      const mockUploadVideo = vi.mocked(uploadBlowVideo)
+
+      const videoBlob = new Blob(['video-data'], { type: 'video/webm' })
+      mockGetVideo.mockResolvedValue({ id: 'vid-1', videoBlob, employeeId: 'EMP001', createdAt: new Date().toISOString() })
+      mockUploadVideo.mockResolvedValue('https://example.com/video.webm')
+      mockMarkUploaded.mockResolvedValue(undefined)
+
+      await enqueue(
+        createResult(),
+        undefined,
+        undefined,
+        undefined,
+        'vid-1',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn, updateFn)
+
+      // Wait for background uploadLinkedVideo to complete
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      expect(mockGetVideo).toHaveBeenCalledWith('vid-1')
+      expect(mockUploadVideo).toHaveBeenCalledWith(videoBlob)
+      expect(mockMarkUploaded).toHaveBeenCalledWith('vid-1')
+    })
+
+    it('should not crash when video upload fails', async () => {
+      const { getVideo } = await import('~/utils/video-store')
+      vi.mocked(getVideo).mockRejectedValue(new Error('video error'))
+
+      await enqueue(
+        createResult(),
+        undefined,
+        undefined,
+        undefined,
+        'vid-fail',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(result).toEqual({ sent: 1, failed: 0 })
+    })
+
+    it('should skip video upload when video already uploaded', async () => {
+      const { getVideo } = await import('~/utils/video-store')
+      const { uploadBlowVideo } = await import('~/utils/api')
+
+      vi.mocked(getVideo).mockResolvedValue({
+        id: 'vid-2',
+        videoBlob: new Blob([]),
+        employeeId: 'EMP001',
+        createdAt: new Date().toISOString(),
+        uploadedAt: new Date().toISOString(),
+      })
+
+      await enqueue(createResult(), undefined, undefined, undefined, 'vid-2')
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(vi.mocked(uploadBlowVideo)).not.toHaveBeenCalled()
+    })
+
+    it('should call updateFn for video url when measurementId is present', async () => {
+      const { getVideo, markVideoUploaded } = await import('~/utils/video-store')
+      const { uploadBlowVideo } = await import('~/utils/api')
+
+      vi.mocked(getVideo).mockResolvedValue({
+        id: 'vid-3',
+        videoBlob: new Blob(['data']),
+        employeeId: 'EMP001',
+        createdAt: new Date().toISOString(),
+      })
+      vi.mocked(uploadBlowVideo).mockResolvedValue('https://example.com/v.webm')
+      vi.mocked(markVideoUploaded).mockResolvedValue(undefined)
+
+      await enqueue(
+        createResult({ facePhotoUrl: 'https://photo.jpg' }),
+        undefined,
+        'meas-id-1',
+        undefined,
+        'vid-3',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn, updateFn)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      // updateFn called once for measurement completion, once for video_url
+      expect(updateFn).toHaveBeenCalledWith('meas-id-1', { video_url: 'https://example.com/v.webm' })
+    })
+  })
+
+  describe('getAllWithStatus', () => {
+    it('should return all items including synced ones', async () => {
+      const id1 = await enqueue(createResult({ employeeId: 'A' }))
+      await enqueue(createResult({ employeeId: 'B' }))
+      await markSynced(id1)
+
+      const all = await getAllWithStatus()
+      expect(all).toHaveLength(2)
+
+      const pending = await getAll()
+      expect(pending).toHaveLength(1)
+      expect(pending[0].result.employeeId).toBe('B')
+    })
+  })
+
+  describe('markSynced', () => {
+    it('should set syncedAt on a pending item', async () => {
+      const id = await enqueue(createResult())
+      await markSynced(id)
+
+      const all = await getAllWithStatus()
+      expect(all[0].syncedAt).toBeTruthy()
+    })
+
+    it('should not throw for non-existent id', async () => {
+      await expect(markSynced(9999)).resolves.not.toThrow()
+    })
+  })
+
+  describe('clearAll', () => {
+    it('should remove only unsent items', async () => {
+      const id1 = await enqueue(createResult({ employeeId: 'A' }))
+      await enqueue(createResult({ employeeId: 'B' }))
+      await markSynced(id1)
+
+      await clearAll()
+
+      const all = await getAllWithStatus()
+      // Only the synced one should remain
+      expect(all).toHaveLength(1)
+      expect(all[0].syncedAt).toBeTruthy()
+    })
+
+    it('should do nothing when no pending items', async () => {
+      await expect(clearAll()).resolves.not.toThrow()
+    })
+  })
+
+  describe('cleanupOld', () => {
+    it('should delete synced items older than retention days', async () => {
+      // Enqueue with syncedAt in the past
+      const oldDate = new Date()
+      oldDate.setDate(oldDate.getDate() - 10)
+      const id = await enqueue(createResult(), undefined, undefined, oldDate.toISOString())
+
+      const deleted = await cleanupOld(5)
+      expect(deleted).toBe(1)
+
+      const all = await getAllWithStatus()
+      expect(all).toHaveLength(0)
+    })
+
+    it('should not delete recent synced items', async () => {
+      const recentDate = new Date()
+      await enqueue(createResult(), undefined, undefined, recentDate.toISOString())
+
+      const deleted = await cleanupOld(5)
+      expect(deleted).toBe(0)
+
+      const all = await getAllWithStatus()
+      expect(all).toHaveLength(1)
+    })
+
+    it('should not delete unsynced items', async () => {
+      await enqueue(createResult())
+
+      const deleted = await cleanupOld(0)
+      expect(deleted).toBe(0)
+    })
+
+    it('should return 0 when no items to clean', async () => {
+      const deleted = await cleanupOld(5)
+      expect(deleted).toBe(0)
+    })
+  })
+
+  describe('estimateDbSize', () => {
+    it('should return 0 for empty database', async () => {
+      const size = await estimateDbSize()
+      expect(size).toEqual({ totalBytes: 0, recordCount: 0 })
+    })
+
+    it('should return positive size for non-empty database', async () => {
+      await enqueue(createResult())
+      await enqueue(createResult())
+
+      const size = await estimateDbSize()
+      expect(size.recordCount).toBe(2)
+      expect(size.totalBytes).toBeGreaterThan(0)
+    })
+  })
+
+  describe('enqueue extras', () => {
+    it('should serialize medicalMeasuredAt as ISO string', async () => {
+      await enqueue(createResult({
+        medicalMeasuredAt: new Date('2026-03-15T12:00:00Z'),
+        temperature: 36.7,
+      }))
+      const items = await getAll()
+      expect(items[0].result.medicalMeasuredAt).toBe('2026-03-15T12:00:00.000Z')
+      expect(items[0].result.temperature).toBe(36.7)
+    })
+
+    it('should store activeMeasurementId', async () => {
+      await enqueue(createResult(), undefined, 'act-123')
+      const items = await getAll()
+      expect(items[0].result.activeMeasurementId).toBe('act-123')
+    })
+
+    it('should store videoStoreId', async () => {
+      await enqueue(createResult(), undefined, undefined, undefined, 'vid-store-1')
+      const items = await getAll()
+      expect(items[0].result.videoStoreId).toBe('vid-store-1')
+    })
+
+    it('should store medical data fields', async () => {
+      await enqueue(createResult({
+        temperature: 36.5,
+        systolic: 120,
+        diastolic: 80,
+        pulse: 72,
+      }))
+      const items = await getAll()
+      expect(items[0].result.temperature).toBe(36.5)
+      expect(items[0].result.systolic).toBe(120)
+      expect(items[0].result.diastolic).toBe(80)
+      expect(items[0].result.pulse).toBe(72)
     })
   })
 })
