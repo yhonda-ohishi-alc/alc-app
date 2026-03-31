@@ -2,6 +2,17 @@
 # CI で coverage-summary.json と照合してリグレッション検出
 # 追加: npm run test:coverage → node scripts/check_coverage_100.mjs
 
+# --- composables ---
+
+[[files]]
+path = "app/composables/useDemoMode.ts"
+
+[[files]]
+path = "app/composables/useManagerAuth.ts"
+
+[[files]]
+path = "app/composables/useSerialDeviceManager.ts"
+
 # --- utils ---
 
 [[files]]

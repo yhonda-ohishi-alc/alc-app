@@ -57,6 +57,61 @@
 
 - **semver patch のみ** — バージョンアップは常に patch (例: 0.2.1 → 0.2.2)。minor/major は上げない。
 
+## テスト
+
+### テスト実行
+
+```bash
+npm test                # 全テスト (vitest run)
+npm run test:watch      # ウォッチモード
+npm run test:coverage   # カバレッジ付き
+node scripts/check_coverage_100.mjs  # 100% リグレッション検出
+```
+
+### テスト環境
+
+- **フレームワーク**: Vitest 4 + `@nuxt/test-utils` (Nuxt 環境)
+- **DOM**: happy-dom (`@nuxt/test-utils` 経由)
+- **IndexedDB**: `fake-indexeddb`
+- **fc1200-wasm**: `tests/mocks/fc1200-wasm.ts` でモック (CI に wasm-pack 不要)
+- `import.meta.client` は `@nuxt/test-utils` が自動で `true` に設定
+- Nuxt auto-import (`useRoute`, `useState`, `ref` 等) も自動解決
+
+### カバレッジ
+
+- **Provider**: `@vitest/coverage-v8`
+- **100% 達成ファイル**: `coverage_100.toml` で管理、CI でリグレッション検出
+- **レポート**: `web/coverage/` (`.gitignore` 済み)
+
+### テストパターン
+
+- **pure utils**: モック不要、直接テスト (`license.ts`, `face-approval.ts`)
+- **composables**: `vi.mock('~/utils/api')` で API モック、`vi.resetModules()` でモジュールキャッシュリセット
+- **ブラウザ API** (WebSerial, BLE, NFC): `(navigator as any).serial = { ... }` でモック
+- **Android bridge**: `(window as any).Android = { ... }` でモック
+- **Nuxt auto-import のモック**: `mockNuxtImport('useRoute', () => mockFn)` (`@nuxt/test-utils/runtime`)
+- **useState 共有ステート**: `beforeEach` でリセットすること (テスト間で値が共有される)
+
+### 型同期 (ts-rs)
+
+Rust バックエンドの models.rs → TypeScript 型を自動生成:
+```bash
+cd ~/rust/rust-alc-api
+bash scripts/sync-types.sh
+# → web/app/types/generated/ に 91 ファイル生成
+```
+
+- `types/generated/` は git 管理 (CI で差分チェック可能)
+- `types/index.ts` から `Backend` namespace で参照: `import { Backend } from '~/types'`
+- フロント固有型 (`FaceAuthResult`, `Fc1200State` 等) は `types/index.ts` に手動定義
+
+### CI
+
+- **GitHub Actions**: `.github/workflows/test.yml`
+  - `npm ci` → `vitest run --coverage` → `check_coverage_100.mjs` → artifact アップロード
+  - fc1200-wasm は CI でスタブ化 (ダミー package.json + index.js)
+  - トリガー: push/PR to main (`web/**` パス変更時)
+
 ## 重要な注意事項
 
 - **リポジトリは public** — 機密情報のコミットに注意
