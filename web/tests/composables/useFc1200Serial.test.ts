@@ -36,10 +36,11 @@ describe('useFc1200Serial', () => {
     expect(isWebSerialSupported()).toBe(false)
   })
 
-  it('should report error when WebSerial is not supported', async () => {
+  it('should fall back to WebSocket when WebSerial is not supported', async () => {
     const { connect, error } = useFc1200Serial()
     await connect()
-    expect(error.value).toContain('WebSerial API 非対応')
+    // WebSerial 非対応時は WebSocket フォールバック (エラーにはならない)
+    expect(error.value).toBeNull()
   })
 
   it('should return error when starting measurement without connection', async () => {

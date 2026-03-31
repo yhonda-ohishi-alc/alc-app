@@ -16,3 +16,4 @@ target/
 
 # MkDocs ビルド出力
 site/
+web/coverage/

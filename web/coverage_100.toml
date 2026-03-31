@@ -1,0 +1,14 @@
+# 100% カバレッジ達成済みファイル登録簿
+# CI で coverage-summary.json と照合してリグレッション検出
+# 追加: npm run test:coverage → node scripts/check_coverage_100.mjs
+
+# --- utils ---
+
+[[files]]
+path = "app/utils/face-approval.ts"
+
+[[files]]
+path = "app/utils/fc1200.ts"
+
+[[files]]
+path = "app/utils/license.ts"

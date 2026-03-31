@@ -1090,3 +1090,8 @@ export interface DtakoDailyHoursResponse {
   page: number
   per_page: number
 }
+
+// --- ts-rs 自動生成型 (Rust backend → TypeScript) ---
+// `cargo test -p alc-core --features ts-export --test export_ts` で再生成
+// 段階的に手動型からの移行を進める。まずは Backend prefix 付きで参照可能にする。
+export * as Backend from './generated'
