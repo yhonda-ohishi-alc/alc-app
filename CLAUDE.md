@@ -111,9 +111,29 @@ bash scripts/sync-types.sh
 ### CI
 
 - **GitHub Actions**: `.github/workflows/test.yml`
-  - `npm ci` → `vitest run --coverage` → `check_coverage_100.mjs` → artifact アップロード
+  - `npm ci` → `vitest run --coverage` → `check_coverage_100.mjs` → Job Summary → artifact
   - fc1200-wasm は CI でスタブ化 (ダミー package.json + index.js)
   - トリガー: push/PR to main (`web/**` パス変更時)
+  - **Job Summary**: テスト結果 + カバレッジ表 + 100% 未達ファイル一覧 (折りたたみ)
+
+### ブランチワークフロー
+
+**main に直接 push 禁止。** ブランチ保護ルール設定済み。
+
+- **CI 必須**: `Vitest + Coverage` 通過しないと merge 不可
+- **strict mode**: main 更新時はブランチの再テスト必要
+- **auto-merge**: `gh pr merge --squash --auto` で CI 通過後に自動マージ
+- **管理者バイパス**: `enforce_admins: false` (緊急時は可能)
+
+```bash
+# 基本フロー
+git checkout -b feat/xxx
+# ... 変更 ...
+git push -u origin feat/xxx
+gh pr create --title "タイトル" --body "説明"
+gh pr merge --squash --auto
+# CI 通過後に自動マージ
+```
 
 ## 重要な注意事項
 

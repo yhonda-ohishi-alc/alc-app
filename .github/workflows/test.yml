@@ -33,10 +33,80 @@ jobs:
 
       - run: npm ci
 
-      - run: npx vitest run --coverage
+      - name: Run tests with coverage
+        run: npx vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
 
       - name: Coverage 100% regression check
         run: node scripts/check_coverage_100.mjs
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## Vitest Test Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # テスト結果サマリ (vitest json reporter)
+          if [ -f coverage/test-results.json ]; then
+            node -e "
+              const s = require('./coverage/test-results.json');
+              const suites = s.numTotalTestSuites || 0;
+              const passed = s.numPassedTestSuites || 0;
+              const tests = s.numTotalTests || 0;
+              const testsPassed = s.numPassedTests || 0;
+              const failed = s.numFailedTests || 0;
+              console.log('### Summary');
+              console.log('- Test Files: ' + (failed === 0 ? '✅' : '❌') + ' ' + passed + ' passes · ' + suites + ' total');
+              console.log('- Test Results: ' + (failed === 0 ? '✅' : '❌') + ' ' + testsPassed + ' passes · ' + tests + ' total');
+              if (failed > 0) console.log('- ❌ ' + failed + ' failed');
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # カバレッジサマリ (coverage-summary.json)
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Category | Stmts | Branch | Funcs | Lines |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|--------|-------|-------|" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const s = require('./coverage/coverage-summary.json');
+              const t = s.total;
+              console.log('| **Total** | ' + t.statements.pct + '% | ' + t.branches.pct + '% | ' + t.functions.pct + '% | ' + t.lines.pct + '% |');
+            " >> $GITHUB_STEP_SUMMARY
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # 100% ファイル数
+            node -e "
+              const s = require('./coverage/coverage-summary.json');
+              const files = Object.keys(s).filter(k => k !== 'total');
+              const full = files.filter(k => s[k].lines.pct === 100);
+              console.log('**Lines 100%:** ' + full.length + ' / ' + files.length + ' files');
+            " >> $GITHUB_STEP_SUMMARY
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Lines 100% 未達ファイル一覧
+            echo "<details><summary>Lines &lt; 100% ファイル一覧</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| File | Stmts | Branch | Funcs | Lines |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|-------|--------|-------|-------|" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const path = require('path');
+              const s = require('./coverage/coverage-summary.json');
+              const cwd = process.cwd();
+              Object.keys(s).filter(k => k !== 'total').forEach(k => {
+                const e = s[k];
+                if (e.lines.pct < 100) {
+                  const rel = path.relative(cwd, k);
+                  console.log('| ' + rel + ' | ' + e.statements.pct + '% | ' + e.branches.pct + '% | ' + e.functions.pct + '% | ' + e.lines.pct + '% |');
+                }
+              });
+            " >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
