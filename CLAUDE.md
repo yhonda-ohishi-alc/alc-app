@@ -91,6 +91,9 @@ node scripts/check_coverage_100.mjs  # 100% リグレッション検出
 - **Android bridge**: `(window as any).Android = { ... }` でモック
 - **Nuxt auto-import のモック**: `mockNuxtImport('useRoute', () => mockFn)` (`@nuxt/test-utils/runtime`)
 - **useState 共有ステート**: `beforeEach` でリセットすること (テスト間で値が共有される)
+- **onMounted テスト**: `withSetup(() => useMyComposable())` ヘルパーで Vue コンポーネントコンテキストを作成 → `onMounted` / `onUnmounted` が発火する (`tests/helpers/with-setup.ts`)
+- **`v8 ignore` 禁止** — 未カバーコードは `withSetup` / テスト追加 / 到達不能コード削除で対処。SSR ガード (`if (import.meta.client)`) は `onMounted` 内に移すか削除 (`onMounted` 自体が SSR で実行されない)
+- **到達不能ブランチ**: `if (!db.objectStoreNames.contains(...))` のような初回のみ通るガードは、条件分岐を消して常に実行する形にリファクタ
 
 ### 型同期 (ts-rs)
 

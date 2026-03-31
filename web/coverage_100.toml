@@ -1,6 +1,6 @@
-# 100% カバレッジ達成済みファイル登録簿
+# 100% カバレッジ達成済みファイル登録簿 (Lines 基準)
 # CI で coverage-summary.json と照合してリグレッション検出
-# 追加: npm run test:coverage → node scripts/check_coverage_100.mjs
+# 確認: npm run test:coverage → node scripts/check_coverage_100.mjs
 
 # --- composables ---
 
@@ -8,10 +8,19 @@
 path = "app/composables/useDemoMode.ts"
 
 [[files]]
+path = "app/composables/useFaceSync.ts"
+
+[[files]]
+path = "app/composables/useFingerprint.ts"
+
+[[files]]
 path = "app/composables/useManagerAuth.ts"
 
 [[files]]
 path = "app/composables/useSerialDeviceManager.ts"
+
+[[files]]
+path = "app/composables/useTenkoAdmin.ts"
 
 # --- utils ---
 
@@ -23,3 +32,6 @@ path = "app/utils/fc1200.ts"
 
 [[files]]
 path = "app/utils/license.ts"
+
+[[files]]
+path = "app/utils/video-store.ts"

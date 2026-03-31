@@ -100,4 +100,54 @@ describe('useFingerprint', () => {
     const { isEmployeeAuthorized } = useFingerprint()
     expect(isEmployeeAuthorized('emp-001')).toBe(false)
   })
+
+  it('authorizeEmployee で既存データに追加 (既に別社員がある場合)', () => {
+    ;(window as any).Android = {
+      getAndroidId: () => 'device-001',
+      isFingerprintAvailable: () => false,
+      requestFingerprint: vi.fn(),
+    }
+
+    // 先に1人登録
+    const { authorizeEmployee, isEmployeeAuthorized } = useFingerprint()
+    authorizeEmployee('emp-001')
+
+    // 2人目を追加
+    authorizeEmployee('emp-002')
+    expect(isEmployeeAuthorized('emp-001')).toBe(true)
+    expect(isEmployeeAuthorized('emp-002')).toBe(true)
+  })
+
+  it('Android なしで getAuthorizedEmployees を呼んでもエラーにならない', () => {
+    // localStorage にデータがあるが Android がない
+    localStorage.setItem('fingerprint_device_employees', JSON.stringify({ 'device-001': ['emp-001'] }))
+    const { isEmployeeAuthorized } = useFingerprint()
+    // Android なし → deviceId 取得不可 → empty set
+    expect(isEmployeeAuthorized('emp-001')).toBe(false)
+  })
+
+  it('window が undefined なら isAndroidApp = false', () => {
+    const origWindow = globalThis.window
+    // @ts-expect-error SSR シミュレーション
+    delete globalThis.window
+    try {
+      const { isAndroidApp } = useFingerprint()
+      expect(isAndroidApp.value).toBe(false)
+    } finally {
+      globalThis.window = origWindow
+    }
+  })
+
+  it('localStorage に deviceId のキーがない場合は空セット', () => {
+    ;(window as any).Android = {
+      getAndroidId: () => 'device-999',
+      isFingerprintAvailable: () => false,
+      requestFingerprint: vi.fn(),
+    }
+
+    // 別デバイスのデータのみ
+    localStorage.setItem('fingerprint_device_employees', JSON.stringify({ 'device-001': ['emp-001'] }))
+    const { isEmployeeAuthorized } = useFingerprint()
+    expect(isEmployeeAuthorized('emp-001')).toBe(false)
+  })
 })

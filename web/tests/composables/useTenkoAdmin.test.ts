@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { withSetup } from '../helpers/with-setup'
 
 vi.mock('~/utils/api', () => ({
   getTenkoDashboard: vi.fn(),
@@ -28,6 +29,31 @@ describe('useTenkoAdmin', () => {
     expect(dashboard.value).toBeNull()
     expect(isLoading.value).toBe(false)
     expect(error.value).toBeNull()
+  })
+
+  it('onMounted で loadEmployees + refresh が呼ばれる', async () => {
+    vi.mocked(getEmployees).mockResolvedValue([
+      { id: 'emp-001', name: '田中' },
+    ] as any)
+    vi.mocked(getTenkoDashboard).mockResolvedValue({
+      pending_schedules: 1,
+      active_sessions: 0,
+      interrupted_sessions: 0,
+      completed_today: 0,
+      cancelled_today: 0,
+      overdue_schedules: [],
+    })
+
+    const [result, app] = withSetup(() => useTenkoAdmin())
+
+    // onMounted のコールバックが非同期なので待つ
+    await vi.waitFor(() => {
+      expect(result.dashboard.value).not.toBeNull()
+    })
+
+    expect(result.employees.value).toHaveLength(1)
+    expect(result.dashboard.value!.pending_schedules).toBe(1)
+    app.unmount()
   })
 
   it('refresh でダッシュボードデータを取得', async () => {
