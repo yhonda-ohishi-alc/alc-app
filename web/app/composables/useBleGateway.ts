@@ -131,11 +131,12 @@ export function useBleGateway() {
   function disconnectWebSocket(): void {
     wsIntentionalClose = true
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+    const wasWebSocket = transport.value === 'websocket'
     if (ws) {
       ws.close()
       ws = null
     }
-    if (transport.value === 'websocket') {
+    if (wasWebSocket) {
       isConnected.value = false
       transport.value = null
       thermometerConnected.value = false

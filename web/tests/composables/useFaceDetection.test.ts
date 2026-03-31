@@ -156,7 +156,7 @@ describe('useFaceDetection', () => {
       await expect(fd.detect(video)).rejects.toThrow('Worker not loaded')
     })
 
-    it.skip('sends detect-lite by default and resolves on result-lite', async () => {
+    it('sends detect-lite by default and resolves on result-lite', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -164,21 +164,22 @@ describe('useFaceDetection', () => {
       const video = {} as HTMLVideoElement
       const detectPromise = fd.detect(video)
 
-      // frameCounter=1, 1%4 !== 0 → detect-lite (also latestEmbedding is null but frame doesn't match interval)
+      // createImageBitmap の await を待つ
+      await new Promise(r => setTimeout(r, 0))
+
       expect(w.postMessage).toHaveBeenLastCalledWith(
         expect.objectContaining({ type: 'detect-lite' }),
         expect.any(Array),
       )
 
-      // Simulate result-lite
       w.simulateMessage({ type: 'result-lite', face: [{ box: {} }], gesture: {} })
 
       const result = await detectPromise
       expect(result).toEqual({ face: [{ box: {} }], gesture: {} })
-      expect(fd.latestEmbedding.value).toBeNull() // lite doesn't set embedding
+      expect(fd.latestEmbedding.value).toBeNull()
     })
 
-    it.skip('sends detect-full every FULL_DETECT_INTERVAL frames when embedding is null', async () => {
+    it('sends detect-full every FULL_DETECT_INTERVAL frames when embedding is null', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -188,12 +189,14 @@ describe('useFaceDetection', () => {
       // Frames 1, 2, 3 → detect-lite
       for (let i = 0; i < 3; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await p
       }
 
       // Frame 4 (frameCounter=4, 4%4===0, latestEmbedding=null) → detect-full
       const p4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       expect(w.postMessage).toHaveBeenLastCalledWith(
         expect.objectContaining({ type: 'detect-full' }),
         expect.any(Array),
@@ -219,6 +222,7 @@ describe('useFaceDetection', () => {
       // Frames 1-3 lite
       for (let i = 0; i < 3; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await p
       }
@@ -250,6 +254,7 @@ describe('useFaceDetection', () => {
       // Advance to frame 4
       for (let i = 0; i < 3; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await p
       }
@@ -269,6 +274,7 @@ describe('useFaceDetection', () => {
 
       for (let i = 0; i < 3; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await p
       }
@@ -287,6 +293,7 @@ describe('useFaceDetection', () => {
 
       for (let i = 0; i < 3; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await p
       }
@@ -297,13 +304,16 @@ describe('useFaceDetection', () => {
       expect(fd.latestEmbedding.value).toBeNull()
     })
 
-    it.skip('rejects on worker error message', async () => {
+    it('rejects on worker error message', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
 
       const video = {} as HTMLVideoElement
       const detectPromise = fd.detect(video)
+      
+      // createImageBitmap の await を待つ
+      await new Promise(r => setTimeout(r, 0))
 
       // Simulate error from worker
       w.simulateMessage({ type: 'error', message: 'detect failed' })
