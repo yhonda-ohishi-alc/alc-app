@@ -463,11 +463,11 @@ describe('useBleGateway', () => {
   // =============================================
 
   describe('startAutoConnect', () => {
-    it.skip('全リトライ失敗 → false', async () => {
+    it('全リトライ失敗 → false', async () => {
       const promise = gw.startAutoConnect(2, 100)
-      vi.advanceTimersByTime(500)  // 1st autoConnect wait
-      vi.advanceTimersByTime(100)  // interval
-      vi.advanceTimersByTime(500)  // 2nd autoConnect wait
+      await vi.advanceTimersByTimeAsync(500)  // 1st autoConnect wait
+      await vi.advanceTimersByTimeAsync(100)  // interval
+      await vi.advanceTimersByTimeAsync(500)  // 2nd autoConnect wait
       expect(await promise).toBe(false)
     })
   })
@@ -566,16 +566,14 @@ describe('useBleGateway', () => {
         expect(gw.latestTemperature.value!.value).toBe(36.5)
       })
 
-      it.skip('複数行まとめて受信', async () => {
+      it('複数行まとめて受信', async () => {
         const encoder = new TextEncoder()
         const lines = JSON.stringify({ type: 'temperature', value: 36.5, unit: 'celsius' }) + '\n'
           + JSON.stringify({ type: 'connected', device: 'thermometer' }) + '\n'
-        const { port } = createMockPort({
-          readValues: [
-            { value: encoder.encode(lines), done: false },
-            { value: null, done: true },
-          ],
-        })
+        const { port, reader: mockReader } = createMockPort()
+        mockReader.read
+          .mockResolvedValueOnce({ value: encoder.encode(lines), done: false })
+          .mockImplementation(async () => new Promise(() => {})) // block to prevent cleanup
         installSerialMock({
           requestPort: vi.fn(async () => port),
         })
@@ -860,7 +858,7 @@ describe('useBleGateway', () => {
         expect(result).toBe(false)
       })
 
-      it.skip('InvalidStateError → リトライ', async () => {
+      it('InvalidStateError → リトライ', async () => {
         let attempt = 0
         const { port } = createMockPort({
           readValues: [{ value: null, done: true }],
@@ -879,14 +877,13 @@ describe('useBleGateway', () => {
         })
 
         const promise = gw.autoConnect()
-        // Wait for RETRY_DELAY (500ms)
-        vi.advanceTimersByTime(500)
+        await vi.advanceTimersByTimeAsync(500)
         const result = await promise
         expect(result).toBe(true)
         expect(attempt).toBe(2)
       })
 
-      it.skip('InvalidStateError on last attempt → cleanup + false', async () => {
+      it('InvalidStateError on last attempt → cleanup + false', async () => {
         const { port } = createMockPort({
           getInfoResult: { usbVendorId: 0x1A86 },
         })
@@ -898,8 +895,8 @@ describe('useBleGateway', () => {
         })
 
         const promise = gw.autoConnect()
-        vi.advanceTimersByTime(500)
-        vi.advanceTimersByTime(500)
+        await vi.advanceTimersByTimeAsync(500)
+        await vi.advanceTimersByTimeAsync(500)
         const result = await promise
         expect(result).toBe(false)
       })
@@ -945,6 +942,76 @@ describe('useBleGateway', () => {
         }
         // After 10 attempts, should hit max
         expect(gw.error.value).toBe('BLE ゲートウェイへの再接続に失敗しました')
+      })
+
+      it('reconnect 成功 → reconnectAttempt リセット', async () => {
+        // First connect serial, readLoop ends → cleanup → scheduleReconnect
+        const { port: port1 } = createMockPort({
+          readValues: [{ value: null, done: true }],
+        })
+        installSerialMock({
+          requestPort: vi.fn(async () => port1),
+          getPorts: vi.fn(async () => []),
+        })
+
+        await gw.connect()
+        await vi.advanceTimersByTimeAsync(0)
+        // readLoop ended, scheduleReconnect called
+
+        // Now install a port that autoConnect can find
+        const { port: port2, reader: mockReader2 } = createMockPort({
+          getInfoResult: { usbVendorId: 0x1A86 },
+        })
+        mockReader2.read.mockImplementation(async () => new Promise(() => {})) // block
+        installSerialMock({
+          getPorts: vi.fn(async () => [port2]),
+        })
+
+        // Advance timer to trigger reconnect (RECONNECT_BASE_DELAY=2000)
+        await vi.advanceTimersByTimeAsync(2000)
+        await vi.advanceTimersByTimeAsync(0)
+        // autoConnect succeeds → reconnectAttempt = 0
+        expect(gw.isConnected.value).toBe(true)
+      })
+    })
+
+    describe('heartbeat timeout', () => {
+      it('heartbeat タイムアウト → cleanup + scheduleReconnect', async () => {
+        const encoder = new TextEncoder()
+        const readyLine = JSON.stringify({ type: 'ready', device: 'gw', version: '1.0' }) + '\n'
+        let readCount = 0
+        const { port, reader: mockReader } = createMockPort()
+        mockReader.read
+          .mockResolvedValueOnce({ value: encoder.encode(readyLine), done: false })
+          .mockImplementation(async () => {
+            readCount++
+            if (readCount > 100) return { value: null, done: true }
+            return new Promise(() => {})
+          })
+        installSerialMock({
+          requestPort: vi.fn(async () => port),
+          getPorts: vi.fn(async () => []),
+        })
+
+        await gw.connect()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(gw.isConnected.value).toBe(true)
+
+        // Mock Date.now to simulate time passing beyond HEARTBEAT_TIMEOUT (30s)
+        const originalNow = Date.now
+        let fakeNow = originalNow()
+        vi.spyOn(Date, 'now').mockImplementation(() => fakeNow)
+
+        // Advance past heartbeat timeout
+        fakeNow += 31000
+        // Trigger the heartbeat check interval (10s)
+        vi.advanceTimersByTime(10000)
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Heartbeat timeout triggers cleanup → isConnected = false
+        expect(gw.isConnected.value).toBe(false)
+
+        vi.spyOn(Date, 'now').mockRestore()
       })
     })
 

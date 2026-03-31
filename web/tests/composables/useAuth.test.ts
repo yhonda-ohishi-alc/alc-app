@@ -483,7 +483,7 @@ describe('useAuth', () => {
   })
 
   describe('scheduleAutoRefresh', () => {
-    it.skip('should schedule refresh before token expires', async () => {
+    it('should schedule refresh before token expires', async () => {
       // Token expires in 120 seconds
       const fakeJwt = createFakeJwtWithExp(defaultPayload, 120)
 
@@ -491,6 +491,9 @@ describe('useAuth', () => {
         ok: true,
         json: () => Promise.resolve({ access_token: fakeJwt, expires_in: 120 }),
       })
+
+      // Store refresh token so the scheduled callback can find it
+      localStorage.setItem('alc_refresh_token', 'rt_test')
 
       const { useAuth } = await import('~/composables/useAuth')
       const auth = useAuth()
@@ -504,8 +507,8 @@ describe('useAuth', () => {
         json: () => Promise.resolve({ access_token: refreshJwt, expires_in: 3600 }),
       })
 
-      // Advance timer to trigger the scheduled refresh
-      vi.advanceTimersByTime(60_000)
+      // Advance timer to trigger the scheduled refresh (async to flush promise chain)
+      await vi.advanceTimersByTimeAsync(60_000)
 
       // Wait for the async refresh
       await vi.waitFor(() => {
@@ -513,7 +516,7 @@ describe('useAuth', () => {
       })
     })
 
-    it.skip('should immediately refresh if token is already expired', async () => {
+    it('should immediately refresh if token is already expired', async () => {
       // Token already expired (exp in the past)
       const expiredJwt = createFakeJwtWithExp(defaultPayload, -10)
 
@@ -531,9 +534,15 @@ describe('useAuth', () => {
           }),
         })
 
+      // Store refresh token so the immediate re-refresh can find it
+      localStorage.setItem('alc_refresh_token', 'rt_test')
+
       const { useAuth } = await import('~/composables/useAuth')
       const auth = useAuth()
       await auth.refreshAccessToken('rt_test')
+
+      // Let the fire-and-forget refreshAccessToken() resolve
+      await vi.advanceTimersByTimeAsync(0)
 
       // The immediate refresh should have been triggered
       await vi.waitFor(() => {

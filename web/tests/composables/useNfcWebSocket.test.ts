@@ -378,13 +378,26 @@ describe('useNfcWebSocket', () => {
       expect(wsInstances).toHaveLength(1)
     })
 
-    it.skip('stops reconnecting after MAX_RECONNECT_ATTEMPTS (10)', async () => {
+    it('stops reconnecting after MAX_RECONNECT_ATTEMPTS (10)', async () => {
       let count = 0
+      // Plain object mock: only fires onclose, never onopen
+      // (MockWebSocket auto-fires onopen which resets reconnectAttempts)
       const AlwaysFailWs = function (url: string) {
         count++
-        const ws = new MockWebSocket(url)
+        const ws: any = {
+          readyState: 0,
+          url,
+          onopen: null,
+          onclose: null,
+          onmessage: null,
+          onerror: null,
+          close() {
+            this.readyState = 3
+            this.onclose?.(new CloseEvent('close'))
+          },
+        }
         setTimeout(() => {
-          ws.readyState = MockWebSocket.CLOSED
+          ws.readyState = 3
           ws.onclose?.(new CloseEvent('close'))
         }, 1)
         return ws

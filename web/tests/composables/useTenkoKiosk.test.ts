@@ -146,6 +146,9 @@ describe('useTenkoKiosk', () => {
       expect(k.stepKeys.value).not.toContain('medical')
       expect(k.stepKeys.value).not.toContain('self_declaration')
       expect(k.stepKeys.value).not.toContain('daily_inspection')
+      // stepLabels もカバー (post_operation ブランチ)
+      expect(k.stepLabels.value).toContain('運行報告')
+      expect(k.stepLabels.value).not.toContain('日常点検')
     })
 
     it('remoteMode では schedule_select / 予定選択 がない', () => {
@@ -825,6 +828,14 @@ describe('useTenkoKiosk', () => {
       k.session.value = makeSession()
       await k.onInstructionConfirm()
       expect(k.step.value).toBe('interrupted')
+    })
+
+    it('cancelled → cancelled (_advanceByStatus 経由)', async () => {
+      vi.mocked(confirmInstruction).mockResolvedValue(makeSession({ status: 'cancelled' }))
+      const k = useTenkoKiosk()
+      k.session.value = makeSession()
+      await k.onInstructionConfirm()
+      expect(k.step.value).toBe('cancelled')
     })
 
     it('unknown status → step 変更なし', async () => {

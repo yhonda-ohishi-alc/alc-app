@@ -8,10 +8,19 @@
 path = "app/composables/useAndroidLandscape.ts"
 
 [[files]]
+path = "app/composables/useAuth.ts"
+
+[[files]]
 path = "app/composables/useDemoMode.ts"
 
 [[files]]
 path = "app/composables/useFaceAuth.ts"
+
+[[files]]
+path = "app/composables/useFc1200Serial.ts"
+
+[[files]]
+path = "app/composables/useFaceDetection.ts"
 
 [[files]]
 path = "app/composables/useFaceSync.ts"
@@ -26,6 +35,18 @@ path = "app/composables/useManagerAuth.ts"
 path = "app/composables/useNfcBridgeUpdate.ts"
 
 [[files]]
+path = "app/composables/useNfcWebSocket.ts"
+
+[[files]]
+path = "app/composables/useOfflineSync.ts"
+
+[[files]]
+path = "app/composables/useBleGateway.ts"
+
+[[files]]
+path = "app/composables/useCamera.ts"
+
+[[files]]
 path = "app/composables/useScreenShare.ts"
 
 [[files]]
@@ -33,6 +54,9 @@ path = "app/composables/useSerialDeviceManager.ts"
 
 [[files]]
 path = "app/composables/useTenkoAdmin.ts"
+
+[[files]]
+path = "app/composables/useTenkoKiosk.ts"
 
 [[files]]
 path = "app/composables/useVideoRecorder.ts"
@@ -46,6 +70,9 @@ path = "app/composables/useWebRtc.ts"
 path = "app/middleware/auth.global.ts"
 
 # --- utils ---
+
+[[files]]
+path = "app/utils/api.ts"
 
 [[files]]
 path = "app/utils/face-approval.ts"
