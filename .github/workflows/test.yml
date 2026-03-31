@@ -34,7 +34,7 @@ jobs:
       - run: npm ci
 
       - name: Run tests with coverage
-        run: npx vitest run --coverage --reporter=default --reporter=json-summary --outputFile.json-summary=coverage/test-summary.json
+        run: npx vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
 
       - name: Coverage 100% regression check
         run: node scripts/check_coverage_100.mjs
@@ -45,10 +45,10 @@ jobs:
           echo "## Vitest Test Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # テスト結果サマリ
-          if [ -f coverage/test-summary.json ]; then
+          # テスト結果サマリ (vitest json reporter)
+          if [ -f coverage/test-results.json ]; then
             node -e "
-              const s = require('./coverage/test-summary.json');
+              const s = require('./coverage/test-results.json');
               const suites = s.numTotalTestSuites || 0;
               const passed = s.numPassedTestSuites || 0;
               const tests = s.numTotalTests || 0;
