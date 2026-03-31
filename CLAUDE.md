@@ -86,14 +86,55 @@ node scripts/check_coverage_100.mjs  # 100% リグレッション検出
 ### テストパターン
 
 - **pure utils**: モック不要、直接テスト (`license.ts`, `face-approval.ts`)
-- **composables**: `vi.mock('~/utils/api')` で API モック、`vi.resetModules()` でモジュールキャッシュリセット
-- **ブラウザ API** (WebSerial, BLE, NFC): `(navigator as any).serial = { ... }` でモック
+- **composables**: `vi.mock('~/utils/api')` で API モック
+- **ブラウザ API** (WebSerial, BLE, NFC): `Object.defineProperty(navigator, 'serial', { value: {...}, configurable: true })` でモック。`delete (navigator as any).serial` で削除
 - **Android bridge**: `(window as any).Android = { ... }` でモック
 - **Nuxt auto-import のモック**: `mockNuxtImport('useRoute', () => mockFn)` (`@nuxt/test-utils/runtime`)
 - **useState 共有ステート**: `beforeEach` でリセットすること (テスト間で値が共有される)
 - **onMounted テスト**: `withSetup(() => useMyComposable())` ヘルパーで Vue コンポーネントコンテキストを作成 → `onMounted` / `onUnmounted` が発火する (`tests/helpers/with-setup.ts`)
 - **`v8 ignore` 禁止** — 未カバーコードは `withSetup` / テスト追加 / 到達不能コード削除で対処。SSR ガード (`if (import.meta.client)`) は `onMounted` 内に移すか削除 (`onMounted` 自体が SSR で実行されない)
 - **到達不能ブランチ**: `if (!db.objectStoreNames.contains(...))` のような初回のみ通るガードは、条件分岐を消して常に実行する形にリファクタ
+
+### モジュールスコープ状態のテスト分離
+
+composable がモジュールスコープに `ref`, `let` 変数を持つ場合 (シングルトンパターン)、テスト間で状態がリークする。
+
+**対策: `vi.resetModules()` + dynamic import**
+```ts
+let useBleGateway: typeof import('~/composables/useBleGateway').useBleGateway
+
+beforeEach(async () => {
+  vi.clearAllMocks()
+  vi.resetModules()
+  const mod = await import('~/composables/useBleGateway')
+  useBleGateway = mod.useBleGateway
+})
+```
+
+**該当ファイル**: `useBleGateway`, `useFaceDetection`, `useFc1200Serial` (モジュールスコープに `ref`/`let` あり)
+
+### async composable テスト (Worker / WebSocket)
+
+`detect()` 等の async 関数内で `await createImageBitmap()` 後に `worker.postMessage` が呼ばれる場合、テスト側で **await tick** を挟んでからアサートする:
+
+```ts
+const detectPromise = fd.detect(video)
+await new Promise(r => setTimeout(r, 0))  // createImageBitmap の await を通す
+expect(w.postMessage).toHaveBeenLastCalledWith(...)
+w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
+await detectPromise
+```
+
+### vi.useFakeTimers の注意
+
+- happy-dom 環境では `vi.useFakeTimers()` が `navigator` や `WebSocket` と干渉する場合がある
+- **必ず `toFake` オプション**で必要なタイマーだけ指定: `vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] })`
+- `afterEach` で必ず `vi.useRealTimers()` を呼ぶ
+- async 関数 + fake timers の組み合わせはタイムアウトしやすい (reconnect ループ等)
+
+### disconnectWebSocket バグパターン
+
+`ws.close()` は MockWebSocket で同期的に `onclose` を呼ぶ。`onclose` 内で `transport.value = null` が設定されるため、`ws.close()` **後**に `if (transport.value === 'websocket')` をチェックすると false になる。**チェックを `ws.close()` 前に行う**こと。
 
 ### 型同期 (ts-rs)
 
