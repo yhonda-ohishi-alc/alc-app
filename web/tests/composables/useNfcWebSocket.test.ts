@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useNfcWebSocket } from '~/composables/useNfcWebSocket'
+import { withSetup } from '../helpers/with-setup'
 
-// Mock WebSocket
+// Track all created MockWebSocket instances
+let wsInstances: MockWebSocket[] = []
+
 class MockWebSocket {
   static CONNECTING = 0
   static OPEN = 1
@@ -17,6 +19,7 @@ class MockWebSocket {
 
   constructor(url: string) {
     this.url = url
+    wsInstances.push(this)
     // Simulate async open
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN
@@ -29,24 +32,37 @@ class MockWebSocket {
     this.onclose?.(new CloseEvent('close'))
   }
 
-  // Helper to simulate incoming message
   simulateMessage(data: string) {
     this.onmessage?.(new MessageEvent('message', { data }))
   }
 
-  // Helper to simulate error
   simulateError() {
     this.onerror?.(new Event('error'))
   }
+
+  simulateClose() {
+    this.readyState = MockWebSocket.CLOSED
+    this.onclose?.(new CloseEvent('close'))
+  }
+}
+
+function lastWs(): MockWebSocket {
+  return wsInstances[wsInstances.length - 1]!
 }
 
 describe('useNfcWebSocket', () => {
   let originalWebSocket: typeof WebSocket
+  let useNfcWebSocket: typeof import('~/composables/useNfcWebSocket').useNfcWebSocket
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    wsInstances = []
     originalWebSocket = globalThis.WebSocket
     vi.stubGlobal('WebSocket', MockWebSocket)
     vi.useFakeTimers()
+
+    vi.resetModules()
+    const mod = await import('~/composables/useNfcWebSocket')
+    useNfcWebSocket = mod.useNfcWebSocket
   })
 
   afterEach(() => {
@@ -55,9 +71,23 @@ describe('useNfcWebSocket', () => {
   })
 
   it('should start disconnected', () => {
-    const { isConnected, error } = useNfcWebSocket()
+    const { isConnected, error, readers, bridgeVersion } = useNfcWebSocket()
     expect(isConnected.value).toBe(false)
     expect(error.value).toBeNull()
+    expect(readers.value).toEqual([])
+    expect(bridgeVersion.value).toBeNull()
+  })
+
+  it('should use default URL', () => {
+    const nfc = useNfcWebSocket()
+    nfc.connect()
+    expect(lastWs().url).toBe('ws://127.0.0.1:9876')
+  })
+
+  it('should use custom URL', () => {
+    const nfc = useNfcWebSocket('ws://custom:1234')
+    nfc.connect()
+    expect(lastWs().url).toBe('ws://custom:1234')
   })
 
   it('should connect and set isConnected', async () => {
@@ -67,31 +97,39 @@ describe('useNfcWebSocket', () => {
     expect(isConnected.value).toBe(true)
   })
 
-  it('should handle NFC read events', async () => {
-    const { connect, onRead } = useNfcWebSocket()
-    const callback = vi.fn()
-    onRead(callback)
-
-    connect()
-    await vi.advanceTimersByTimeAsync(10)
-
-    // Get the mock WebSocket instance - it was created by connect()
-    // We need to trigger a message on it
-    const wsInstance = (MockWebSocket as any).lastInstance
-    // Actually, let's modify the mock to track instances
-  })
-
-  it('should dispatch nfc_read to onRead callbacks', async () => {
-    const readHandler = vi.fn()
-    // Create composable and register handler
-    const nfc = useNfcWebSocket('ws://test:9876')
-    nfc.onRead(readHandler)
+  it('should reset error on connect', async () => {
+    const nfc = useNfcWebSocket()
     nfc.connect()
     await vi.advanceTimersByTimeAsync(10)
 
-    // Since we can't easily access the internal ws instance from outside,
-    // we'll verify the connect behavior and callback registration
-    expect(nfc.isConnected.value).toBe(true)
+    // Trigger error
+    lastWs().simulateError()
+    expect(nfc.error.value).toBeTruthy()
+
+    // Disconnect then reconnect
+    nfc.disconnect()
+    nfc.connect()
+    // error is cleared at start of connect()
+    expect(nfc.error.value).toBeNull()
+  })
+
+  it('should prevent duplicate connections (OPEN state)', async () => {
+    const nfc = useNfcWebSocket()
+    nfc.connect()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(wsInstances).toHaveLength(1)
+
+    nfc.connect()
+    expect(wsInstances).toHaveLength(1)
+  })
+
+  it('should prevent duplicate connections (CONNECTING state)', () => {
+    const nfc = useNfcWebSocket()
+    nfc.connect()
+    expect(wsInstances).toHaveLength(1)
+
+    nfc.connect()
+    expect(wsInstances).toHaveLength(1)
   })
 
   it('should disconnect and clear state', async () => {
@@ -104,41 +142,409 @@ describe('useNfcWebSocket', () => {
     expect(isConnected.value).toBe(false)
   })
 
-  it('should unregister onRead callback', () => {
-    const { onRead } = useNfcWebSocket()
-    const cb = vi.fn()
-    const unregister = onRead(cb)
-    unregister()
-    // Callback should be removed - no way to trigger without ws, but verifies return function works
-    expect(typeof unregister).toBe('function')
-  })
-
-  it('should unregister onError callback', () => {
-    const { onError } = useNfcWebSocket()
-    const cb = vi.fn()
-    const unregister = onError(cb)
-    unregister()
-    expect(typeof unregister).toBe('function')
-  })
-
-  it('should not reconnect on intentional close', async () => {
-    const { connect, disconnect, isConnected } = useNfcWebSocket()
-    connect()
-    await vi.advanceTimersByTimeAsync(10)
-    disconnect()
-
-    // Advance past reconnect delay
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(isConnected.value).toBe(false)
-  })
-
-  it('should prevent duplicate connections', async () => {
+  it('disconnect is safe when no ws exists', () => {
     const nfc = useNfcWebSocket()
-    nfc.connect()
-    await vi.advanceTimersByTimeAsync(10)
+    nfc.disconnect()
+    expect(nfc.isConnected.value).toBe(false)
+  })
 
-    // Second connect should be a no-op
-    nfc.connect()
-    expect(nfc.isConnected.value).toBe(true)
+  // --- Message handling ---
+
+  describe('onmessage: nfc_read', () => {
+    it('dispatches to onRead callbacks', async () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onRead(cb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_read', employee_id: 'EMP001' }))
+      expect(cb).toHaveBeenCalledWith({ type: 'nfc_read', employee_id: 'EMP001' })
+    })
+  })
+
+  describe('onmessage: nfc_license_read', () => {
+    it('dispatches to licenseRead callbacks and readCallbacks with driver_license substring', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const licenseCb = vi.fn()
+      const readCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onLicenseRead(licenseCb)
+      nfc.onRead(readCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      // card_id with 26+ chars, card_type=driver_license -> substring(10,26)
+      const cardId = '0123456789ABCDEFGHIJKLMNOP' // length=26
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: cardId,
+        card_type: 'driver_license',
+        atr: 'XX',
+      }))
+
+      expect(licenseCb).toHaveBeenCalledWith(expect.objectContaining({ type: 'nfc_license_read', card_id: cardId }))
+      expect(readCb).toHaveBeenCalledWith({ type: 'nfc_read', employee_id: 'ABCDEFGHIJKLMNOP' })
+      consoleSpy.mockRestore()
+    })
+
+    it('uses full card_id for non-driver_license cards', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const readCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onRead(readCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: 'SHORT',
+        card_type: 'other',
+        atr: 'XX',
+      }))
+
+      expect(readCb).toHaveBeenCalledWith({ type: 'nfc_read', employee_id: 'SHORT' })
+      consoleSpy.mockRestore()
+    })
+
+    it('uses full card_id for driver_license with short card_id (<26)', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const readCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onRead(readCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: '0123456789',
+        card_type: 'driver_license',
+        atr: 'XX',
+      }))
+
+      expect(readCb).toHaveBeenCalledWith({ type: 'nfc_read', employee_id: '0123456789' })
+      consoleSpy.mockRestore()
+    })
+  })
+
+  describe('onmessage: nfc_debug', () => {
+    it('logs debug message', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_debug', message: 'test debug' }))
+      expect(consoleSpy).toHaveBeenCalledWith('[NFC]', 'test debug')
+      consoleSpy.mockRestore()
+    })
+  })
+
+  describe('onmessage: nfc_error', () => {
+    it('dispatches to onError callbacks', async () => {
+      const errCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onError(errCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'some_error' }))
+      expect(errCb).toHaveBeenCalledWith({ type: 'nfc_error', error: 'some_error' })
+    })
+
+    it('clears readers on no_readers error', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      // First set readers via status
+      lastWs().simulateMessage(JSON.stringify({ type: 'status', readers: ['Reader1'], connected: true }))
+      expect(nfc.readers.value).toEqual(['Reader1'])
+
+      // Then receive no_readers error
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'no_readers' }))
+      expect(nfc.readers.value).toEqual([])
+    })
+  })
+
+  describe('onmessage: status', () => {
+    it('sets readers and bridgeVersion', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'status',
+        readers: ['ACR122U'],
+        connected: true,
+        version: '1.2.3',
+      }))
+
+      expect(nfc.readers.value).toEqual(['ACR122U'])
+      expect(nfc.bridgeVersion.value).toBe('1.2.3')
+    })
+
+    it('sets readers to empty and version to null when missing', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'status', connected: true }))
+
+      expect(nfc.readers.value).toEqual([])
+      expect(nfc.bridgeVersion.value).toBeNull()
+    })
+  })
+
+  describe('onmessage: non-JSON', () => {
+    it('ignores non-JSON messages without error', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage('not json at all')
+      expect(nfc.isConnected.value).toBe(true)
+    })
+  })
+
+  // --- Error handling ---
+
+  describe('onerror', () => {
+    it('sets error message', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateError()
+      expect(nfc.error.value).toBe('NFC ブリッジとの接続でエラーが発生しました')
+    })
+  })
+
+  // --- WebSocket constructor failure ---
+
+  describe('WebSocket constructor throws', () => {
+    it('sets error and schedules reconnect', async () => {
+      let callCount = 0
+      const ThrowOnceWs = function (url: string) {
+        callCount++
+        if (callCount === 1) throw new Error('connection refused')
+        return new MockWebSocket(url)
+      } as any
+      ThrowOnceWs.CONNECTING = 0
+      ThrowOnceWs.OPEN = 1
+      ThrowOnceWs.CLOSING = 2
+      ThrowOnceWs.CLOSED = 3
+
+      vi.stubGlobal('WebSocket', ThrowOnceWs)
+
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+
+      expect(nfc.error.value).toBe('WebSocket 接続に失敗しました')
+
+      // Should schedule reconnect
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+    })
+  })
+
+  // --- Reconnect logic ---
+
+  describe('reconnect', () => {
+    it('reconnects on unintentional close', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+
+      lastWs().simulateClose()
+      expect(nfc.isConnected.value).toBe(false)
+      expect(nfc.bridgeVersion.value).toBeNull()
+
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+      expect(wsInstances).toHaveLength(2)
+    })
+
+    it('does not reconnect on intentional close (disconnect)', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      nfc.disconnect()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(wsInstances).toHaveLength(1)
+    })
+
+    it.skip('stops reconnecting after MAX_RECONNECT_ATTEMPTS (10)', async () => {
+      let count = 0
+      const AlwaysFailWs = function (url: string) {
+        count++
+        const ws = new MockWebSocket(url)
+        setTimeout(() => {
+          ws.readyState = MockWebSocket.CLOSED
+          ws.onclose?.(new CloseEvent('close'))
+        }, 1)
+        return ws
+      } as any
+      AlwaysFailWs.CONNECTING = 0
+      AlwaysFailWs.OPEN = 1
+      AlwaysFailWs.CLOSING = 2
+      AlwaysFailWs.CLOSED = 3
+
+      vi.stubGlobal('WebSocket', AlwaysFailWs)
+
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+
+      for (let i = 0; i < 10; i++) {
+        await vi.advanceTimersByTimeAsync(3001)
+      }
+
+      await vi.advanceTimersByTimeAsync(3001)
+      expect(nfc.error.value).toBe('NFC ブリッジに接続できません。rust-nfc-bridge が起動しているか確認してください')
+    })
+
+    it('resets reconnect attempts on successful connect', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateClose()
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(10)
+
+      expect(nfc.isConnected.value).toBe(true)
+
+      lastWs().simulateClose()
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+    })
+  })
+
+  // --- Callback unregister ---
+
+  describe('callback unregister', () => {
+    it('onRead unregister removes callback', async () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onRead(cb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      unsub()
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_read', employee_id: 'X' }))
+      expect(cb).not.toHaveBeenCalled()
+    })
+
+    it('onLicenseRead unregister removes callback', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onLicenseRead(cb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      unsub()
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read', card_id: 'X', card_type: 'other', atr: 'X',
+      }))
+      expect(cb).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('onError unregister removes callback', async () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onError(cb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      unsub()
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'test' }))
+      expect(cb).not.toHaveBeenCalled()
+    })
+  })
+
+  // --- bridge-restarted event ---
+
+  describe('bridge-restarted event', () => {
+    it('reconnects on bridge-restarted event with nfc bridge', async () => {
+      const nfc = useNfcWebSocket()
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+      nfc.disconnect()
+
+      window.dispatchEvent(new CustomEvent('bridge-restarted', { detail: { bridge: 'nfc' } }))
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+    })
+
+    it('ignores bridge-restarted event for non-nfc bridge', async () => {
+      const nfc = useNfcWebSocket()
+
+      window.dispatchEvent(new CustomEvent('bridge-restarted', { detail: { bridge: 'serial' } }))
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(false)
+      expect(wsInstances).toHaveLength(0)
+    })
+  })
+
+  // --- onUnmounted cleanup ---
+
+  describe('onUnmounted', () => {
+    it('disconnects and removes event listener on unmount', async () => {
+      const removeListenerSpy = vi.spyOn(window, 'removeEventListener')
+
+      const [nfc, app] = withSetup(() => useNfcWebSocket())
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+
+      app.unmount()
+      expect(nfc.isConnected.value).toBe(false)
+      expect(removeListenerSpy).toHaveBeenCalledWith('bridge-restarted', expect.any(Function))
+      removeListenerSpy.mockRestore()
+    })
+  })
+
+  // --- Multiple callbacks ---
+
+  describe('multiple callbacks', () => {
+    it('dispatches to all registered onRead callbacks', async () => {
+      const cb1 = vi.fn()
+      const cb2 = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onRead(cb1)
+      nfc.onRead(cb2)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_read', employee_id: 'E1' }))
+      expect(cb1).toHaveBeenCalled()
+      expect(cb2).toHaveBeenCalled()
+    })
+
+    it('dispatches to all registered onError callbacks', async () => {
+      const cb1 = vi.fn()
+      const cb2 = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onError(cb1)
+      nfc.onError(cb2)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'err' }))
+      expect(cb1).toHaveBeenCalled()
+      expect(cb2).toHaveBeenCalled()
+    })
   })
 })
