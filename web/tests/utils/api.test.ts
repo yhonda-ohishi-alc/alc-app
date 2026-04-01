@@ -227,8 +227,13 @@ describe('api', () => {
 
     it('should refresh token and retry on 401', async () => {
       if (isLive) {
-        // live: verify that valid token works (refresh not testable with real server)
+        // live: 無効 JWT → refresher が有効 JWT に差し替え → retry で成功
+        let token = 'invalid-expired-token'
+        const refresher = vi.fn(async () => { token = jwtToken! })
+        initApi(API_BASE, () => token, undefined, refresher)
+
         const result = await getEmployees()
+        expect(refresher).toHaveBeenCalledTimes(1)
         expect(Array.isArray(result)).toBe(true)
         return
       }
@@ -248,9 +253,11 @@ describe('api', () => {
 
     it('should fall through to original 401 error when retry also fails', async () => {
       if (isLive) {
-        // live: invalid token should cause auth error
-        initApi(API_BASE, () => 'invalid-token')
-        await expect(getEmployees()).rejects.toThrow()
+        // live: 無効 JWT + refresher が直さない → retry も 401 → エラー
+        const refresher = vi.fn(async () => {}) // token 差し替えなし
+        initApi(API_BASE, () => 'invalid-token', undefined, refresher)
+        await expect(getEmployees()).rejects.toThrow('API エラー (401)')
+        expect(refresher).toHaveBeenCalledTimes(1)
         return
       }
       const refresher = vi.fn(async () => {})
@@ -266,14 +273,9 @@ describe('api', () => {
     })
 
     it('should fall through to original error when refresher rejects', async () => {
-      if (isLive) {
-        // live: invalid token triggers error path
-        initApi(API_BASE, () => 'invalid-token')
-        await expect(getEmployees()).rejects.toThrow()
-        return
-      }
+      // 無効 JWT + refresher が例外 → 元の 401 エラーにフォールスルー
       const refresher = vi.fn(async () => { throw new Error('refresh failed') })
-      initApi('https://api.example.com', () => 'token', undefined, refresher)
+      initApi(isLive ? API_BASE : 'https://api.example.com', () => 'invalid-token', undefined, refresher)
 
       stubResponse({
         ok: false,
@@ -286,51 +288,46 @@ describe('api', () => {
     })
 
     it('should not attempt refresh when no tokenRefresher is set', async () => {
-      if (isLive) {
-        // live: no refresher, invalid token → error
-        initApi(API_BASE, () => 'invalid-token')
-        await expect(getEmployees()).rejects.toThrow()
-        return
-      }
-      initApi('https://api.example.com', () => 'token')
+      // refresher なし + 無効 JWT → 401 (retry なし)
+      initApi(isLive ? API_BASE : 'https://api.example.com', () => 'invalid-token')
       stubResponse({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
+        ok: false, status: 401, statusText: 'Unauthorized',
         text: () => Promise.resolve(''),
       })
-
       await expect(getEmployees()).rejects.toThrow('API エラー (401)')
-      expectMock(mockFetch).toHaveBeenCalledTimes(1)
+      assertMock(() => { expect(mockFetch).toHaveBeenCalledTimes(1) })
     })
 
     it('should not attempt refresh when getAccessToken returns null', async () => {
-      if (isLive) {
-        // live: null token with tenant ID → uses X-Tenant-ID fallback
-        initApi(API_BASE, () => null, () => TEST_TENANT_ID)
-        const result = await getEmployees()
-        expect(Array.isArray(result)).toBe(true)
-        return
-      }
+      // token=null + tenant_id → X-Tenant-ID で認証 (refresher は呼ばれない)
       const refresher = vi.fn(async () => {})
-      initApi('https://api.example.com', () => null, () => 'tenant', refresher)
+      initApi(isLive ? API_BASE : 'https://api.example.com', () => null, () => isLive ? TEST_TENANT_ID : 'tenant', refresher)
       stubResponse({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
+        ok: false, status: 401, statusText: 'Unauthorized',
         text: () => Promise.resolve(''),
       })
-
-      await expect(getEmployees()).rejects.toThrow('API エラー (401)')
+      if (isLive) {
+        // live: X-Tenant-ID で認証成功 → refresher 呼ばれず
+        const result = await getEmployees()
+        expect(Array.isArray(result)).toBe(true)
+      } else {
+        await expect(getEmployees()).rejects.toThrow('API エラー (401)')
+      }
       expect(refresher).not.toHaveBeenCalled()
     })
 
     it('should handle 204 on retry after refresh', async () => {
       if (isLive) {
-        // live: verify delete returns undefined
-        stub204()
-        const result = await callApi(() => deleteSchedule(DEL_SCHEDULE_ID))
-        assertMock(() => { expect(result).toBeUndefined() })
+        // live: まず有効 JWT でスケジュール作成 → 無効 JWT + refresher → retry で delete 成功
+        initApi(API_BASE, () => jwtToken!)
+        const s = await createSchedule(createScheduleBody as any)
+
+        let token = 'invalid-token'
+        const refresher = vi.fn(async () => { token = jwtToken! })
+        initApi(API_BASE, () => token, undefined, refresher)
+        const result = await deleteSchedule(s.id)
+        expect(result).toBeUndefined()
+        expect(refresher).toHaveBeenCalledTimes(1)
         return
       }
       const refresher = vi.fn(async () => {})
@@ -346,10 +343,17 @@ describe('api', () => {
 
     it('should share refresh promise for concurrent 401s', async () => {
       if (isLive) {
-        // live: concurrent valid requests should all succeed
+        // live: 無効 JWT + refresher → 同時 2リクエスト → refresher は 1回だけ
+        let token = 'invalid-token'
+        const refresher = vi.fn(async () => { token = jwtToken! })
+        initApi(API_BASE, () => token, undefined, refresher)
+
         const [r1, r2] = await Promise.all([getEmployees(), getEmployees()])
         expect(Array.isArray(r1)).toBe(true)
         expect(Array.isArray(r2)).toBe(true)
+        // live: タイミング次第で 1 or 2 回呼ばれる (shared promise の保証はネットワーク依存)
+        expect(refresher.mock.calls.length).toBeGreaterThanOrEqual(1)
+        expect(refresher.mock.calls.length).toBeLessThanOrEqual(2)
         return
       }
       let callCount = 0
@@ -367,14 +371,9 @@ describe('api', () => {
     })
 
     it('should handle retry text() error and fall through to original 401', async () => {
-      if (isLive) {
-        // live: invalid token triggers error
-        initApi(API_BASE, () => 'invalid-token')
-        await expect(getEmployees()).rejects.toThrow()
-        return
-      }
+      // 無効 JWT + refresher が JWT 直さない → retry も 401 → 元のエラー
       const refresher = vi.fn(async () => {})
-      initApi('https://api.example.com', () => 'token', undefined, refresher)
+      initApi(isLive ? API_BASE : 'https://api.example.com', () => 'invalid-token', undefined, refresher)
 
       mockFetch
         .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', text: () => Promise.resolve('original') })
