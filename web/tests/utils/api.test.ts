@@ -1,3 +1,4 @@
+// api.ts — mock + live coverage tests
 import { describe, it, expect, beforeEach, beforeAll, vi, afterEach } from 'vitest'
 import {
   initApi,
