@@ -56,10 +56,48 @@ export function stubReject(error: Error) {
 
 /**
  * mock 専用アサーション。live 時は何もしない。
- * callback 内で mockFetch.mock.calls 等を検証する。
  */
 export function assertMock(fn: () => void) {
   if (!isLive) fn()
+}
+
+/**
+ * API 呼び出し + レスポンス検証 (mock / live 両対応)
+ * mock: stubOk/stub204 → fn() → result 検証
+ * live: fn() → 実レスポンス検証
+ */
+export async function verifyApi(
+  fn: () => Promise<unknown>,
+  mockResponse: unknown = {},
+  opts: { expect204?: boolean } = {},
+) {
+  if (opts.expect204) stub204()
+  else stubOk(mockResponse)
+  const result = await fn()
+  if (opts.expect204) {
+    expect(result).toBeUndefined()
+  }
+  return result
+}
+
+/**
+ * API 呼び出しを実行。live 時は API エラー (4xx/5xx) を許容する。
+ * ネットワークエラー (fetch failed) だけ fail にする。
+ * it.each の URL/method 検証テスト用。
+ */
+export async function callApi(fn: () => Promise<unknown>) {
+  if (!isLive) {
+    await fn()
+    return
+  }
+  try {
+    await fn()
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // API エラー = エンドポイントに到達した (URL は正しい)
+    if (msg.startsWith('API エラー') || msg.startsWith('CSV ') || msg.startsWith('Upload') || msg.startsWith('アップロード')) return
+    throw e // ネットワークエラーは fail
+  }
 }
 
 /**

@@ -81,3 +81,30 @@ INSERT INTO employee_health_baselines (tenant_id, employee_id, baseline_systolic
 INSERT INTO device_registration_requests (id, tenant_id, registration_code, flow_type, status, expires_at) VALUES
   ('aaaaaaaa-000c-000c-000c-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111',
    'SEED-CODE', 'qr_temp', 'pending', NOW() + interval '1 hour');
+
+-- ============================================================
+-- Disposable resources for DELETE tests (dddddddd-* prefix)
+-- Each DELETE test consumes one. Do not reference in GET/PUT tests.
+-- ============================================================
+INSERT INTO employees (id, tenant_id, name, code) VALUES
+  ('dddddddd-0001-0001-0001-dddddddddddd', '11111111-1111-1111-1111-111111111111', 'Del Employee', 'DEL1');
+INSERT INTO tenko_schedules (id, tenant_id, employee_id, tenko_type, responsible_manager_name, scheduled_at, instruction) VALUES
+  ('dddddddd-0002-0002-0002-dddddddddddd', '11111111-1111-1111-1111-111111111111',
+   '33333333-3333-3333-3333-333333333333', 'post_operation', 'Del Manager', NOW() + interval '2 days', 'Del instruction');
+INSERT INTO webhook_configs (id, tenant_id, event_type, url) VALUES
+  ('dddddddd-0005-0005-0005-dddddddddddd', '11111111-1111-1111-1111-111111111111',
+   'alcohol_detected', 'https://example.com/webhook-del');
+INSERT INTO employee_health_baselines (tenant_id, employee_id, baseline_systolic) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'dddddddd-0001-0001-0001-dddddddddddd', 110);
+INSERT INTO timecard_cards (id, tenant_id, card_id, employee_id) VALUES
+  ('dddddddd-0008-0008-0008-dddddddddddd', '11111111-1111-1111-1111-111111111111',
+   'NFC-DEL-CARD', '33333333-3333-3333-3333-333333333333');
+INSERT INTO devices (id, tenant_id, device_name, status) VALUES
+  ('dddddddd-0007-0007-0007-dddddddddddd', '11111111-1111-1111-1111-111111111111', 'Del Device', 'active');
+INSERT INTO carrying_items (id, tenant_id, item_name) VALUES
+  ('dddddddd-0009-0009-0009-dddddddddddd', '11111111-1111-1111-1111-111111111111', 'Del Item');
+INSERT INTO guidance_records (id, tenant_id, employee_id, title) VALUES
+  ('dddddddd-000b-000b-000b-dddddddddddd', '11111111-1111-1111-1111-111111111111',
+   '33333333-3333-3333-3333-333333333333', 'Del Guidance');
+INSERT INTO communication_items (id, tenant_id, title, content) VALUES
+  ('dddddddd-000a-000a-000a-dddddddddddd', '11111111-1111-1111-1111-111111111111', 'Del Notice', 'Del content');

@@ -28,6 +28,16 @@ export const SEED_REG_CODE = 'SEED-CODE'
 export const SEED_NFC_ID = 'NFC-SEED-001'
 export const SEED_CARD_NFC = 'NFC-SEED-CARD'
 
+// Disposable IDs for DELETE tests (seed.sql dddddddd-* prefix)
+export const DEL_EMPLOYEE_ID = 'dddddddd-0001-0001-0001-dddddddddddd'
+export const DEL_SCHEDULE_ID = 'dddddddd-0002-0002-0002-dddddddddddd'
+export const DEL_WEBHOOK_ID = 'dddddddd-0005-0005-0005-dddddddddddd'
+export const DEL_TIMECARD_ID = 'dddddddd-0008-0008-0008-dddddddddddd'
+export const DEL_DEVICE_ID = 'dddddddd-0007-0007-0007-dddddddddddd'
+export const DEL_CARRYING_ID = 'dddddddd-0009-0009-0009-dddddddddddd'
+export const DEL_GUIDANCE_ID = 'dddddddd-000b-000b-000b-dddddddddddd'
+export const DEL_COMM_ID = 'dddddddd-000a-000a-000a-dddddddddddd'
+
 // ---------------------------------------------------------------------------
 // JWT
 // ---------------------------------------------------------------------------

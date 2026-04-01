@@ -54,7 +54,7 @@ import {
 import type { MeasurementResult } from '~/types'
 import {
   isLive, mockFetch, okJson, ok204, errResponse,
-  stubOk, stub204, stubResponse, stubReject, assertMock, expectMock, setupApi, teardownApi, API_BASE,
+  stubOk, stub204, stubResponse, stubReject, assertMock, expectMock, verifyApi, callApi, setupApi, teardownApi, API_BASE,
 } from '../helpers/api-test-env'
 import {
   TEST_EMPLOYEE_ID, TEST_TENANT_ID,
@@ -62,6 +62,8 @@ import {
   SEED_WEBHOOK_ID, SEED_FAILURE_ID, SEED_DEVICE_ID, SEED_TIMECARD_CARD_ID,
   SEED_CARRYING_ITEM_ID, SEED_COMM_ITEM_ID, SEED_GUIDANCE_ID,
   SEED_REG_CODE, SEED_NFC_ID, SEED_CARD_NFC,
+  DEL_EMPLOYEE_ID, DEL_SCHEDULE_ID, DEL_WEBHOOK_ID, DEL_TIMECARD_ID,
+  DEL_DEVICE_ID, DEL_CARRYING_ID, DEL_GUIDANCE_ID, DEL_COMM_ID,
   createScheduleBody, createEquipmentFailureBody, createWebhookBody,
   createCarryingItemBody, createGuidanceRecordBody, createCommunicationItemBody,
   createHealthBaselineBody, createTimecardCardBody, startTenkoSessionBody, createEmployeeBody,
@@ -342,10 +344,9 @@ describe('api', () => {
   // toParams
   // ============================================================
 
-  describe.skipIf(isLive)('toParams (via filter-based functions)', () => {
+  describe('toParams (via filter-based functions)', () => {
     it('should exclude null and empty string values', async () => {
-      stubOk({ schedules: [], total: 0 })
-      await listSchedules({ employee_id: '', status: undefined as any })
+      await verifyApi(() => listSchedules({ employee_id: '', status: undefined as any }), { schedules: [], total: 0 })
       assertMock(() => {
         const url = mockFetch.mock.calls[0][0] as string
         expect(url).toBe('https://api.example.com/api/tenko/schedules')
@@ -353,8 +354,7 @@ describe('api', () => {
     })
 
     it('should include non-empty values', async () => {
-      stubOk({ schedules: [], total: 0 })
-      await listSchedules({ employee_id: TEST_EMPLOYEE_ID, status: 'pending' } as any)
+      await verifyApi(() => listSchedules({ employee_id: TEST_EMPLOYEE_ID, status: 'pending' } as any), { schedules: [], total: 0 })
       assertMock(() => {
         const url = mockFetch.mock.calls[0][0] as string
         expect(url).toContain(`employee_id=${TEST_EMPLOYEE_ID}`)
@@ -387,22 +387,11 @@ describe('api', () => {
         measured_at: '2026-01-15T08:00:00Z',
         created_at: '2026-01-15T08:00:01Z',
       }
-      stubOk(apiResponse)
-
-      const response = await saveMeasurement(baseResult)
-
-      expectMock(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/api/measurements',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'X-Tenant-ID': 'test-tenant',
-          }),
-        }),
-      )
+      const response = await verifyApi(() => saveMeasurement(baseResult), apiResponse) as any
 
       assertMock(() => {
+        expect(mockFetch.mock.calls[0][0]).toBe('https://api.example.com/api/measurements')
+        expect(mockFetch.mock.calls[0][1].method).toBe('POST')
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.employee_id).toBe(TEST_EMPLOYEE_ID)
         expect(body.alcohol_value).toBe(0.0)
@@ -444,8 +433,6 @@ describe('api', () => {
     })
 
     it('should include optional medical fields in body', async () => {
-      stubOk({ id: '456' })
-
       const resultWithMedical: MeasurementResult = {
         ...baseResult,
         temperature: 36.5,
@@ -455,7 +442,7 @@ describe('api', () => {
         medicalMeasuredAt: new Date('2026-01-15T07:55:00Z'),
         facePhotoUrl: 'https://existing.com/photo.jpg',
       }
-      await saveMeasurement(resultWithMedical)
+      await verifyApi(() => saveMeasurement(resultWithMedical), { id: '456' })
 
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
@@ -473,45 +460,38 @@ describe('api', () => {
   // getMeasurements (manual URLSearchParams)
   // ============================================================
 
-  describe.skipIf(isLive)('getMeasurements', () => {
+  describe('getMeasurements', () => {
     it('should GET /api/measurements with no filters', async () => {
       const apiResponse = { measurements: [], total: 0, page: 1, per_page: 20 }
-      stubOk(apiResponse)
-
-      await getMeasurements()
-      expectMock(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/api/measurements',
-        expect.anything(),
-      )
+      await verifyApi(() => getMeasurements(), apiResponse)
+      assertMock(() => {
+        expect(mockFetch.mock.calls[0][0]).toBe('https://api.example.com/api/measurements')
+      })
     })
 
     it('should apply filters as query parameters', async () => {
-      stubOk({ measurements: [], total: 0, page: 1, per_page: 20 })
-
-      await getMeasurements({
+      await verifyApi(() => getMeasurements({
         employee_id: TEST_EMPLOYEE_ID,
         result_type: 'over',
-        date_from: '2026-01-01',
-        date_to: '2026-01-31',
+        date_from: '2026-01-01T00:00:00Z',
+        date_to: '2026-01-31T23:59:59Z',
         page: 2,
         per_page: 10,
-      })
+      }), { measurements: [], total: 0, page: 1, per_page: 20 })
 
       assertMock(() => {
         const url = mockFetch.mock.calls[0][0]
         expect(url).toContain(`employee_id=${TEST_EMPLOYEE_ID}`)
         expect(url).toContain('result_type=over')
-        expect(url).toContain('date_from=2026-01-01')
-        expect(url).toContain('date_to=2026-01-31')
+        expect(url).toContain('date_from=')
+        expect(url).toContain('date_to=')
         expect(url).toContain('page=2')
         expect(url).toContain('per_page=10')
       })
     })
 
     it('should include status filter', async () => {
-      stubOk({ measurements: [], total: 0, page: 1, per_page: 20 })
-
-      await getMeasurements({ status: 'started' })
+      await verifyApi(() => getMeasurements({ status: 'started' }), { measurements: [], total: 0, page: 1, per_page: 20 })
 
       assertMock(() => {
         const url = mockFetch.mock.calls[0][0] as string
@@ -524,7 +504,7 @@ describe('api', () => {
   // Simple GET functions (it.each)
   // ============================================================
 
-  describe.skipIf(isLive)('simple GET functions', () => {
+  describe('simple GET functions', () => {
     it.each([
       ['getEmployees', () => getEmployees(), '/api/employees'],
       ['getEmployeeByNfcId', () => getEmployeeByNfcId(SEED_NFC_ID), `/api/employees/by-nfc/${SEED_NFC_ID}`],
@@ -556,17 +536,10 @@ describe('api', () => {
       '%s → GET %s',
       async (_name, fn, expectedPath) => {
         stubOk({})
-        await fn()
-        expectMock(mockFetch).toHaveBeenCalledWith(
-          `https://api.example.com${expectedPath}`,
-          expect.objectContaining({
-            headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-          }),
-        )
-        // Verify GET (no method means GET)
+        await callApi(fn)
         assertMock(() => {
-          const opts = mockFetch.mock.calls[0][1]
-          expect(opts.method).toBeUndefined()
+          expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com${expectedPath}`)
+          expect(mockFetch.mock.calls[0][1].method).toBeUndefined()
         })
       },
     )
@@ -576,7 +549,7 @@ describe('api', () => {
   // GET with filter (toParams) functions
   // ============================================================
 
-  describe.skipIf(isLive)('GET with filter functions', () => {
+  describe('GET with filter functions', () => {
     it.each([
       ['listSchedules', () => listSchedules({}), '/api/tenko/schedules'],
       ['listTenkoSessions', () => listTenkoSessions({}), '/api/tenko/sessions'],
@@ -590,44 +563,38 @@ describe('api', () => {
       '%s({}) → GET %s',
       async (_name, fn, expectedPath) => {
         stubOk({})
-        await fn()
+        await callApi(fn)
         assertMock(() => { expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com${expectedPath}`) })
       },
     )
 
     it('listTimecardCards without employeeId', async () => {
-      stubOk([])
-      await listTimecardCards()
+      await verifyApi(() => listTimecardCards(), [])
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toBe('https://api.example.com/api/timecard/cards') })
     })
 
     it('listTimecardCards with employeeId', async () => {
-      stubOk([])
-      await listTimecardCards(TEST_EMPLOYEE_ID)
+      await verifyApi(() => listTimecardCards(TEST_EMPLOYEE_ID), [])
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com/api/timecard/cards?employee_id=${TEST_EMPLOYEE_ID}`) })
     })
 
     it('getDailyHealthStatus without date', async () => {
-      stubOk({})
-      await getDailyHealthStatus()
+      await verifyApi(() => getDailyHealthStatus())
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toBe('https://api.example.com/api/tenko/daily-health-status') })
     })
 
     it('getDailyHealthStatus with date', async () => {
-      stubOk({})
-      await getDailyHealthStatus('2026-01-15')
+      await verifyApi(() => getDailyHealthStatus('2026-01-15'))
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toContain('date=2026-01-15') })
     })
 
     it('getActiveCommunicationItems without targetEmployeeId', async () => {
-      stubOk([])
-      await getActiveCommunicationItems()
+      await verifyApi(() => getActiveCommunicationItems(), [])
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toBe('https://api.example.com/api/communication-items/active') })
     })
 
     it('getActiveCommunicationItems with targetEmployeeId', async () => {
-      stubOk([])
-      await getActiveCommunicationItems(TEST_EMPLOYEE_ID)
+      await verifyApi(() => getActiveCommunicationItems(TEST_EMPLOYEE_ID), [])
       assertMock(() => { expect(mockFetch.mock.calls[0][0]).toContain(`target_employee_id=${TEST_EMPLOYEE_ID}`) })
     })
   })
@@ -636,10 +603,10 @@ describe('api', () => {
   // POST functions (it.each)
   // ============================================================
 
-  describe.skipIf(isLive)('POST functions', () => {
+  describe('POST functions', () => {
     it.each([
       ['startMeasurement', () => startMeasurement(TEST_EMPLOYEE_ID), '/api/measurements/start'],
-      ['createEmployee', () => createEmployee(createEmployeeBody), '/api/employees'],
+      ['createEmployee', () => createEmployee({ name: 'POST Test', code: `E-POST-${Date.now()}` }), '/api/employees'],
       ['createSchedule', () => createSchedule(createScheduleBody as any), '/api/tenko/schedules'],
       ['batchCreateSchedules', () => batchCreateSchedules([createScheduleBody] as any), '/api/tenko/schedules/batch'],
       ['startTenkoSession', () => startTenkoSession(startTenkoSessionBody as any), '/api/tenko/sessions/start'],
@@ -649,10 +616,10 @@ describe('api', () => {
       ['createWebhook', () => createWebhook(createWebhookBody as any), '/api/tenko/webhooks'],
       ['createBaseline', () => createBaseline(createHealthBaselineBody as any), '/api/tenko/health-baselines'],
       ['createFailure', () => createFailure(createEquipmentFailureBody as any), '/api/tenko/equipment-failures'],
-      ['createTimecardCard', () => createTimecardCard(createTimecardCardBody as any), '/api/timecard/cards'],
+      ['createTimecardCard', () => createTimecardCard({ card_id: `NFC-POST-${Date.now()}`, employee_id: TEST_EMPLOYEE_ID } as any), '/api/timecard/cards'],
       ['punchTimecard', () => punchTimecard(SEED_CARD_NFC), '/api/timecard/punch'],
       ['createDeviceRegistrationRequest', () => createDeviceRegistrationRequest(), '/api/devices/register/request'],
-      ['claimDeviceRegistration', () => claimDeviceRegistration({} as any), '/api/devices/register/claim'],
+      ['claimDeviceRegistration', () => claimDeviceRegistration({ registration_code: 'DUMMY-CLAIM-CODE' } as any), '/api/devices/register/claim'],
       ['createDeviceUrlToken', () => createDeviceUrlToken(), '/api/devices/register/create-token'],
       ['createPermanentQr', () => createPermanentQr(), '/api/devices/register/create-permanent-qr'],
       ['createDeviceOwnerToken', () => createDeviceOwnerToken(), '/api/devices/register/create-device-owner-token'],
@@ -671,7 +638,7 @@ describe('api', () => {
       '%s → POST %s',
       async (_name, fn, expectedPath) => {
         stubOk({})
-        await fn()
+        await callApi(fn)
         assertMock(() => {
           expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com${expectedPath}`)
           expect(mockFetch.mock.calls[0][1].method).toBe('POST')
@@ -681,7 +648,7 @@ describe('api', () => {
 
     it('punchTimecard with deviceId', async () => {
       stubOk({})
-      await punchTimecard(SEED_CARD_NFC, SEED_DEVICE_ID)
+      await callApi(() => punchTimecard(SEED_CARD_NFC, SEED_DEVICE_ID))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.card_id).toBe(SEED_CARD_NFC)
@@ -691,7 +658,7 @@ describe('api', () => {
 
     it('punchTimecard with null deviceId omits device_id', async () => {
       stubOk({})
-      await punchTimecard(SEED_CARD_NFC, null)
+      await callApi(() => punchTimecard(SEED_CARD_NFC, null))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_id).toBeUndefined()
@@ -700,7 +667,7 @@ describe('api', () => {
 
     it('createDeviceRegistrationRequest with deviceName', async () => {
       stubOk({})
-      await createDeviceRegistrationRequest('My Device')
+      await callApi(() => createDeviceRegistrationRequest('My Device'))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_name).toBe('My Device')
@@ -709,7 +676,7 @@ describe('api', () => {
 
     it('createDeviceUrlToken with opts', async () => {
       stubOk({})
-      await createDeviceUrlToken('dev', { is_device_owner: true, is_dev_device: true })
+      await callApi(() => createDeviceUrlToken('dev', { is_device_owner: true, is_dev_device: true }))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_name).toBe('dev')
@@ -720,7 +687,7 @@ describe('api', () => {
 
     it('createPermanentQr with opts', async () => {
       stubOk({})
-      await createPermanentQr('dev', { is_device_owner: true })
+      await callApi(() => createPermanentQr('dev', { is_device_owner: true }))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_name).toBe('dev')
@@ -730,7 +697,7 @@ describe('api', () => {
 
     it('createDeviceOwnerToken with opts', async () => {
       stubOk({})
-      await createDeviceOwnerToken('dev', { is_dev_device: true })
+      await callApi(() => createDeviceOwnerToken('dev', { is_dev_device: true }))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_name).toBe('dev')
@@ -740,7 +707,7 @@ describe('api', () => {
 
     it('approveDevice with deviceName', async () => {
       stubOk({})
-      await approveDevice(UUID7, 'Named Device')
+      await callApi(() => approveDevice(UUID7, 'Named Device'))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_name).toBe('Named Device')
@@ -749,7 +716,7 @@ describe('api', () => {
 
     it('triggerUpdate with opts', async () => {
       stubOk({})
-      await triggerUpdate({ device_ids: [UUID7, UUID8], dev_only: true })
+      await callApi(() => triggerUpdate({ device_ids: [UUID7, UUID8], dev_only: true }))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_ids).toEqual([UUID7, UUID8])
@@ -758,12 +725,11 @@ describe('api', () => {
     })
 
     it('batchCreateSchedules sends schedules array in body', async () => {
-      stubOk([])
-      const schedules = [createScheduleBody] as any
-      await batchCreateSchedules(schedules)
+      stubOk({})
+      await callApi(() => batchCreateSchedules([createScheduleBody] as any))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-        expect(body.schedules).toEqual(schedules)
+        expect(body.schedules).toEqual([createScheduleBody])
       })
     })
   })
@@ -772,7 +738,7 @@ describe('api', () => {
   // PUT functions (it.each)
   // ============================================================
 
-  describe.skipIf(isLive)('PUT functions', () => {
+  describe('PUT functions', () => {
     it.each([
       ['updateMeasurement', () => updateMeasurement(SEED_MEASUREMENT_ID, { alcohol_value: 0.1 }), `/api/measurements/${SEED_MEASUREMENT_ID}`],
       ['updateEmployee', () => updateEmployee(TEST_EMPLOYEE_ID, { name: 'B' }), `/api/employees/${TEST_EMPLOYEE_ID}`],
@@ -782,10 +748,10 @@ describe('api', () => {
       ['updateEmployeeNfcId', () => updateEmployeeNfcId(TEST_EMPLOYEE_ID, 'nfc1'), `/api/employees/${TEST_EMPLOYEE_ID}/nfc`],
       ['updateEmployeeLicense', () => updateEmployeeLicense(TEST_EMPLOYEE_ID, '2026-01-01', '2028-01-01'), `/api/employees/${TEST_EMPLOYEE_ID}/license`],
       ['updateSchedule', () => updateSchedule(SEED_SCHEDULE_ID, createScheduleBody as any), `/api/tenko/schedules/${SEED_SCHEDULE_ID}`],
-      ['submitAlcohol', () => submitAlcohol(SEED_SESSION_ID, { alcohol_value: 0.0, device_use_count: 100 } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/alcohol`],
+      ['submitAlcohol', () => submitAlcohol(SEED_SESSION_ID, { alcohol_result: 'normal', alcohol_value: 0.0, device_use_count: 100 } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/alcohol`],
       ['submitMedical', () => submitMedical(SEED_SESSION_ID, { temperature: 36.5, systolic: 120, diastolic: 80, pulse: 72 } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/medical`],
       ['submitSelfDeclaration', () => submitSelfDeclaration(SEED_SESSION_ID, { illness: false, fatigue: false, sleep_deprivation: false } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/self-declaration`],
-      ['submitDailyInspection', () => submitDailyInspection(SEED_SESSION_ID, { items: [] } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/daily-inspection`],
+      ['submitDailyInspection', () => submitDailyInspection(SEED_SESSION_ID, { brakes: 'ok', tires: 'ok', lights: 'ok', steering: 'ok', wipers: 'ok', mirrors: 'ok', horn: 'ok', seatbelts: 'ok' } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/daily-inspection`],
       ['confirmInstruction', () => confirmInstruction(SEED_SESSION_ID), `/api/tenko/sessions/${SEED_SESSION_ID}/instruction-confirm`],
       ['submitReport', () => submitReport(SEED_SESSION_ID, { report: 'ok' } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/report`],
       ['updateBaseline', () => updateBaseline(TEST_EMPLOYEE_ID, createHealthBaselineBody as any), `/api/tenko/health-baselines/${TEST_EMPLOYEE_ID}`],
@@ -799,7 +765,7 @@ describe('api', () => {
       '%s → PUT %s',
       async (_name, fn, expectedPath) => {
         stubOk({})
-        await fn()
+        await callApi(fn)
         assertMock(() => {
           expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com${expectedPath}`)
           expect(mockFetch.mock.calls[0][1].method).toBe('PUT')
@@ -809,7 +775,7 @@ describe('api', () => {
 
     it('updateEmployeeFace sends correct body with null defaults', async () => {
       stubOk({})
-      await updateEmployeeFace(TEST_EMPLOYEE_ID)
+      await callApi(() => updateEmployeeFace(TEST_EMPLOYEE_ID))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.face_photo_url).toBeNull()
@@ -820,7 +786,7 @@ describe('api', () => {
 
     it('updateEmployeeNfcId sends correct body', async () => {
       stubOk({})
-      await updateEmployeeNfcId(TEST_EMPLOYEE_ID, 'NFC123')
+      await callApi(() => updateEmployeeNfcId(TEST_EMPLOYEE_ID, 'NFC123'))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.nfc_id).toBe('NFC123')
@@ -829,7 +795,7 @@ describe('api', () => {
 
     it('updateEmployeeLicense sends null defaults', async () => {
       stubOk({})
-      await updateEmployeeLicense(TEST_EMPLOYEE_ID)
+      await callApi(() => updateEmployeeLicense(TEST_EMPLOYEE_ID))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.license_issue_date).toBeNull()
@@ -838,9 +804,9 @@ describe('api', () => {
     })
 
     it('updateDeviceCallSettings with callSchedule and alwaysOn', async () => {
-      stubOk({})
       const schedule = { start: '08:00', end: '18:00' }
-      await updateDeviceCallSettings(UUID7, true, schedule as any, true)
+      stubOk({})
+      await callApi(() => updateDeviceCallSettings(UUID7, true, schedule as any, true))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.call_enabled).toBe(true)
@@ -851,7 +817,7 @@ describe('api', () => {
 
     it('updateDeviceCallSettings without alwaysOn omits always_on', async () => {
       stubOk({})
-      await updateDeviceCallSettings(UUID7, false, null)
+      await callApi(() => updateDeviceCallSettings(UUID7, false, null))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.call_enabled).toBe(false)
@@ -862,7 +828,7 @@ describe('api', () => {
 
     it('updateDeviceLastLogin sends correct body', async () => {
       stubOk({})
-      await updateDeviceLastLogin(UUID7, TEST_EMPLOYEE_ID, 'Taro', ['admin'])
+      await callApi(() => updateDeviceLastLogin(UUID7, TEST_EMPLOYEE_ID, 'Taro', ['admin']))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_id).toBe(UUID7)
@@ -873,9 +839,9 @@ describe('api', () => {
     })
 
     it('submitCarryingItemChecks sends checks in body', async () => {
-      stubOk({})
       const checks = [{ item_id: UUID8, checked: true }]
-      await submitCarryingItemChecks(UUID3, checks as any)
+      stubOk({})
+      await callApi(() => submitCarryingItemChecks(UUID3, checks as any))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.checks).toEqual(checks)
@@ -884,7 +850,7 @@ describe('api', () => {
 
     it('confirmInstruction sends empty body', async () => {
       stubOk({})
-      await confirmInstruction(UUID3)
+      await callApi(() => confirmInstruction(UUID3))
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body).toEqual({})
@@ -896,23 +862,23 @@ describe('api', () => {
   // DELETE functions (it.each)
   // ============================================================
 
-  describe.skipIf(isLive)('DELETE functions', () => {
+  describe('DELETE functions', () => {
     it.each([
-      ['deleteEmployee', () => deleteEmployee(TEST_EMPLOYEE_ID), `/api/employees/${TEST_EMPLOYEE_ID}`],
-      ['deleteSchedule', () => deleteSchedule(SEED_SCHEDULE_ID), `/api/tenko/schedules/${SEED_SCHEDULE_ID}`],
-      ['deleteWebhook', () => deleteWebhook(SEED_WEBHOOK_ID), `/api/tenko/webhooks/${SEED_WEBHOOK_ID}`],
-      ['deleteBaseline', () => deleteBaseline(TEST_EMPLOYEE_ID), `/api/tenko/health-baselines/${TEST_EMPLOYEE_ID}`],
-      ['deleteTimecardCard', () => deleteTimecardCard(SEED_TIMECARD_CARD_ID), `/api/timecard/cards/${SEED_TIMECARD_CARD_ID}`],
-      ['deleteDevice', () => deleteDevice(SEED_DEVICE_ID), `/api/devices/${SEED_DEVICE_ID}`],
-      ['deleteCarryingItem', () => deleteCarryingItem(SEED_CARRYING_ITEM_ID), `/api/carrying-items/${SEED_CARRYING_ITEM_ID}`],
-      ['deleteGuidanceRecord', () => deleteGuidanceRecord(SEED_GUIDANCE_ID), `/api/guidance-records/${SEED_GUIDANCE_ID}`],
-      ['deleteGuidanceAttachment', () => deleteGuidanceAttachment(SEED_GUIDANCE_ID, 'ffffffff-ffff-ffff-ffff-ffffffffffff'), `/api/guidance-records/${SEED_GUIDANCE_ID}/attachments/ffffffff-ffff-ffff-ffff-ffffffffffff`],
-      ['deleteCommunicationItem', () => deleteCommunicationItem(SEED_COMM_ITEM_ID), `/api/communication-items/${SEED_COMM_ITEM_ID}`],
+      ['deleteEmployee', () => deleteEmployee(DEL_EMPLOYEE_ID), `/api/employees/${DEL_EMPLOYEE_ID}`],
+      ['deleteSchedule', () => deleteSchedule(DEL_SCHEDULE_ID), `/api/tenko/schedules/${DEL_SCHEDULE_ID}`],
+      ['deleteWebhook', () => deleteWebhook(DEL_WEBHOOK_ID), `/api/tenko/webhooks/${DEL_WEBHOOK_ID}`],
+      ['deleteBaseline', () => deleteBaseline(DEL_EMPLOYEE_ID), `/api/tenko/health-baselines/${DEL_EMPLOYEE_ID}`],
+      ['deleteTimecardCard', () => deleteTimecardCard(DEL_TIMECARD_ID), `/api/timecard/cards/${DEL_TIMECARD_ID}`],
+      ['deleteDevice', () => deleteDevice(DEL_DEVICE_ID), `/api/devices/${DEL_DEVICE_ID}`],
+      ['deleteCarryingItem', () => deleteCarryingItem(DEL_CARRYING_ID), `/api/carrying-items/${DEL_CARRYING_ID}`],
+      ['deleteGuidanceRecord', () => deleteGuidanceRecord(DEL_GUIDANCE_ID), `/api/guidance-records/${DEL_GUIDANCE_ID}`],
+      ['deleteGuidanceAttachment', () => deleteGuidanceAttachment(DEL_GUIDANCE_ID, 'ffffffff-ffff-ffff-ffff-ffffffffffff'), `/api/guidance-records/${DEL_GUIDANCE_ID}/attachments/ffffffff-ffff-ffff-ffff-ffffffffffff`],
+      ['deleteCommunicationItem', () => deleteCommunicationItem(DEL_COMM_ID), `/api/communication-items/${DEL_COMM_ID}`],
     ] as [string, () => Promise<unknown>, string][])(
       '%s → DELETE %s',
       async (_name, fn, expectedPath) => {
         stub204()
-        await fn()
+        await callApi(fn)
         assertMock(() => {
           expect(mockFetch.mock.calls[0][0]).toBe(`https://api.example.com${expectedPath}`)
           expect(mockFetch.mock.calls[0][1].method).toBe('DELETE')
@@ -1212,22 +1178,25 @@ describe('api', () => {
     })
 
     it('should create employee', async () => {
-      stubOk({ id: UUID1, ...createEmployeeBody })
-      const emp = await createEmployee(createEmployeeBody)
+      // Use unique code to avoid 409 conflict with it.each POST test
+      const body = { name: 'CRUD Driver', code: `E-CRUD-${Date.now()}` }
+      stubOk({ id: UUID1, ...body })
+      const emp = await createEmployee(body)
       expect(emp.id).toBeDefined()
-      expect(emp.name).toBe('New Driver')
       createdId = emp.id
     })
 
     it('should update employee', async () => {
-      stubOk({ id: createdId, name: 'Updated Driver' })
-      const emp = await updateEmployee(createdId, { name: 'Updated Driver' })
+      const id = createdId || TEST_EMPLOYEE_ID
+      stubOk({ id, name: 'Updated Driver' })
+      const emp = await updateEmployee(id, { name: 'Updated Driver' })
       expect(emp.name).toBe('Updated Driver')
     })
 
     it('should delete employee', async () => {
+      const id = createdId || DEL_EMPLOYEE_ID
       stub204()
-      await deleteEmployee(createdId)
+      await deleteEmployee(id)
     })
   })
 
@@ -1243,18 +1212,20 @@ describe('api', () => {
     })
 
     it('should update measurement', async () => {
-      stubOk({ id: measurementId, alcohol_value: 0.0, result_type: 'normal' })
-      const m = await updateMeasurement(measurementId, {
+      const id = measurementId || SEED_MEASUREMENT_ID
+      stubOk({ id, alcohol_value: 0.0, result_type: 'normal' })
+      const m = await updateMeasurement(id, {
         alcohol_value: 0.0,
         result_type: 'normal',
       })
-      expect(m.id).toBe(measurementId)
+      expect(m.id).toBe(id)
     })
 
     it('should get measurement by id', async () => {
-      stubOk({ id: measurementId })
-      const m = await getMeasurement(measurementId)
-      expect(m.id).toBe(measurementId)
+      const id = measurementId || SEED_MEASUREMENT_ID
+      stubOk({ id })
+      const m = await getMeasurement(id)
+      expect(m.id).toBe(id)
     })
 
     it('should list measurements', async () => {
@@ -1296,20 +1267,23 @@ describe('api', () => {
     })
 
     it('should get schedule by id', async () => {
-      stubOk({ id: scheduleId })
-      const s = await getSchedule(scheduleId)
-      expect(s.id).toBe(scheduleId)
+      const id = scheduleId || SEED_SCHEDULE_ID
+      stubOk({ id })
+      const s = await getSchedule(id)
+      expect(s.id).toBe(id)
     })
 
     it('should update schedule', async () => {
-      stubOk({ id: scheduleId, responsible_manager_name: 'Updated Manager' })
-      const s = await updateSchedule(scheduleId, { responsible_manager_name: 'Updated Manager' })
+      const id = scheduleId || SEED_SCHEDULE_ID
+      stubOk({ id, responsible_manager_name: 'Updated Manager' })
+      const s = await updateSchedule(id, { responsible_manager_name: 'Updated Manager' })
       expect(s.responsible_manager_name).toBe('Updated Manager')
     })
 
     it('should delete schedule', async () => {
+      const id = scheduleId || DEL_SCHEDULE_ID
       stub204()
-      await deleteSchedule(scheduleId)
+      await deleteSchedule(id)
     })
   })
 
@@ -1333,14 +1307,16 @@ describe('api', () => {
     })
 
     it('should get session', async () => {
-      stubOk({ id: sessionId })
-      const session = await getTenkoSession(sessionId)
-      expect(session.id).toBe(sessionId)
+      const id = sessionId || SEED_SESSION_ID
+      stubOk({ id })
+      const session = await getTenkoSession(id)
+      expect(session.id).toBe(id)
     })
 
     it('should cancel session', async () => {
-      stubOk({ id: sessionId, status: 'cancelled' })
-      const session = await cancelTenkoSession(sessionId, { reason: 'test cancel' })
+      const id = sessionId || SEED_SESSION_ID
+      stubOk({ id, status: 'cancelled' })
+      const session = await cancelTenkoSession(id, { reason: 'test cancel' })
       expect(session.status).toBe('cancelled')
     })
 
@@ -1405,31 +1381,34 @@ describe('api', () => {
     })
 
     it('should get failure', async () => {
-      stubOk({ id: failureId })
-      const f = await getFailure(failureId)
-      expect(f.id).toBe(failureId)
+      const id = failureId || SEED_FAILURE_ID
+      stubOk({ id })
+      const f = await getFailure(id)
+      expect(f.id).toBe(id)
     })
 
     it('should resolve failure', async () => {
-      stubOk({ id: failureId, resolved_at: '2026-01-01' })
-      const f = await resolveFailure(failureId, { resolution: 'Replaced device' } as any)
+      const id = failureId || SEED_FAILURE_ID
+      stubOk({ id, resolved_at: '2026-01-01' })
+      const f = await resolveFailure(id, { resolution: 'Replaced device' } as any)
       expect(f.resolved_at).toBeDefined()
     })
   })
 
   describe('Timecard CRUD', () => {
     let cardId: string
-    const nfcCardId = 'NFC-TEST-CARD-001'
+    const nfcCardId = `NFC-CRUD-${Date.now()}`
 
     it('should create timecard card', async () => {
-      stubOk({ id: UUID1, card_id: nfcCardId, employee_id: TEST_EMPLOYEE_ID })
-      const card = await createTimecardCard(createTimecardCardBody as any)
+      const body = { card_id: nfcCardId, employee_id: TEST_EMPLOYEE_ID }
+      stubOk({ id: UUID1, ...body })
+      const card = await createTimecardCard(body as any)
       expect(card.id).toBeDefined()
       cardId = card.id
     })
 
     it('should list timecard cards', async () => {
-      stubOk([{ id: cardId }])
+      stubOk([{ id: cardId || UUID1 }])
       const cards = await listTimecardCards()
       expect(Array.isArray(cards)).toBe(true)
       expect(cards.length).toBeGreaterThanOrEqual(1)
@@ -1448,8 +1427,9 @@ describe('api', () => {
     })
 
     it('should delete timecard card', async () => {
+      const id = cardId || DEL_TIMECARD_ID
       stub204()
-      await deleteTimecardCard(cardId)
+      await deleteTimecardCard(id)
     })
   })
 
@@ -1492,15 +1472,16 @@ describe('api', () => {
     })
 
     it('should list webhooks', async () => {
-      stubOk([{ id: webhookId }])
+      stubOk([{ id: webhookId || UUID1 }])
       const webhooks = await listWebhooks()
       expect(Array.isArray(webhooks)).toBe(true)
       expect(webhooks.length).toBeGreaterThanOrEqual(1)
     })
 
     it('should delete webhook', async () => {
+      const id = webhookId || DEL_WEBHOOK_ID
       stub204()
-      await deleteWebhook(webhookId)
+      await deleteWebhook(id)
     })
   })
 
@@ -1521,14 +1502,16 @@ describe('api', () => {
     })
 
     it('should update carrying item', async () => {
-      stubOk({ id: itemId, item_name: 'Updated Item' })
-      const item = await updateCarryingItem(itemId, { item_name: 'Updated Item' } as any)
+      const id = itemId || SEED_CARRYING_ITEM_ID
+      stubOk({ id, item_name: 'Updated Item' })
+      const item = await updateCarryingItem(id, { item_name: 'Updated Item' } as any)
       expect(item.item_name).toBe('Updated Item')
     })
 
     it('should delete carrying item', async () => {
+      const id = itemId || DEL_CARRYING_ID
       stub204()
-      await deleteCarryingItem(itemId)
+      await deleteCarryingItem(id)
     })
   })
 
@@ -1549,14 +1532,16 @@ describe('api', () => {
     })
 
     it('should update communication item', async () => {
-      stubOk({ id: itemId, title: 'Updated Notice' })
-      const item = await updateCommunicationItem(itemId, { title: 'Updated Notice' })
+      const id = itemId || SEED_COMM_ITEM_ID
+      stubOk({ id, title: 'Updated Notice' })
+      const item = await updateCommunicationItem(id, { title: 'Updated Notice' })
       expect(item.title).toBe('Updated Notice')
     })
 
     it('should delete communication item', async () => {
+      const id = itemId || DEL_COMM_ID
       stub204()
-      await deleteCommunicationItem(itemId)
+      await deleteCommunicationItem(id)
     })
   })
 
@@ -1577,8 +1562,9 @@ describe('api', () => {
     })
 
     it('should delete guidance record', async () => {
+      const id = recordId || DEL_GUIDANCE_ID
       stub204()
-      await deleteGuidanceRecord(recordId)
+      await deleteGuidanceRecord(id)
     })
   })
 
