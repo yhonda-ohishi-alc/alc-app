@@ -114,3 +114,51 @@ jobs:
           name: coverage-report
           path: web/coverage/
           retention-days: 30
+
+  integration-test:
+    name: API Integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      # fc1200-wasm is a local file: dependency — stub it for CI
+      - name: Stub fc1200-wasm
+        run: |
+          mkdir -p ../fc1200-wasm/pkg
+          echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
+          echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
+
+      - run: npm ci
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start API + DB containers
+        run: docker compose -f docker-compose.test.yml up -d --wait
+        timeout-minutes: 5
+
+      - name: Run integration tests
+        run: npx vitest run tests/integration/api-live.test.ts
+        env:
+          API_BASE_URL: http://localhost:18080
+
+      - name: Show API logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs api
+
+      - name: Cleanup containers
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
