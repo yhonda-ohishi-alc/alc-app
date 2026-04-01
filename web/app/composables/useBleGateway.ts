@@ -235,15 +235,16 @@ export function useBleGateway() {
       }
       catch (e) {
         console.warn('[BLE-GW] autoConnect attempt', attempt + 1, 'failed:', e)
-        // InvalidStateError = ポートがまだ開いている (前回の close 完了待ち)
-        if (e instanceof DOMException && e.name === 'InvalidStateError' && attempt < MAX_RETRIES - 1) {
-          await new Promise(r => setTimeout(r, RETRY_DELAY))
+        // InvalidStateError = ポートがまだ開いている (前回の close 完了待ち) → リトライ
+        if (e instanceof DOMException && e.name === 'InvalidStateError') {
+          if (attempt < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY))
           continue
         }
         await cleanup()
         return false
       }
     }
+    await cleanup()
     return false
   }
 

@@ -463,11 +463,15 @@ describe('useBleGateway', () => {
   // =============================================
 
   describe('startAutoConnect', () => {
-    it.skip('全リトライ失敗 → false', async () => {
-      const promise = gw.startAutoConnect(2, 100)
-      await vi.advanceTimersByTimeAsync(500)  // 1st autoConnect wait
-      await vi.advanceTimersByTimeAsync(100)  // interval
-      await vi.advanceTimersByTimeAsync(500)  // 2nd autoConnect wait
+    it('全リトライ失敗 → false', async () => {
+      // serial なし → autoConnect は WebSocket フォールバック → 未接続 = false
+      const promise = gw.startAutoConnect(2, 10)
+      // 1st autoConnect: connectWebSocket + 500ms wait
+      await vi.advanceTimersByTimeAsync(500)
+      // 1st interval
+      await vi.advanceTimersByTimeAsync(10)
+      // 2nd autoConnect: connectWebSocket + 500ms wait
+      await vi.advanceTimersByTimeAsync(500)
       expect(await promise).toBe(false)
     })
   })
@@ -858,7 +862,7 @@ describe('useBleGateway', () => {
         expect(result).toBe(false)
       })
 
-      it.skip('InvalidStateError → リトライ', async () => {
+      it('InvalidStateError → リトライ → 2回目で成功', async () => {
         let attempt = 0
         const { port } = createMockPort({
           readValues: [{ value: null, done: true }],
@@ -877,13 +881,14 @@ describe('useBleGateway', () => {
         })
 
         const promise = gw.autoConnect()
+        // 1st attempt: InvalidStateError → RETRY_DELAY (500ms) wait
         await vi.advanceTimersByTimeAsync(500)
         const result = await promise
         expect(result).toBe(true)
         expect(attempt).toBe(2)
       })
 
-      it.skip('InvalidStateError on last attempt → cleanup + false', async () => {
+      it('InvalidStateError 全リトライ消費 → cleanup + false', async () => {
         const { port } = createMockPort({
           getInfoResult: { usbVendorId: 0x1A86 },
         })
@@ -895,8 +900,10 @@ describe('useBleGateway', () => {
         })
 
         const promise = gw.autoConnect()
-        await vi.advanceTimersByTimeAsync(500)
-        await vi.advanceTimersByTimeAsync(500)
+        // 3 attempts: each InvalidStateError → continue (1st, 2nd get RETRY_DELAY wait)
+        await vi.advanceTimersByTimeAsync(500) // 1st retry delay
+        await vi.advanceTimersByTimeAsync(500) // 2nd retry delay
+        // 3rd attempt: InvalidStateError → continue → loop ends → cleanup + return false
         const result = await promise
         expect(result).toBe(false)
       })
