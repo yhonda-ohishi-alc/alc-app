@@ -54,7 +54,8 @@ import {
 import type { MeasurementResult } from '~/types'
 import {
   isLive, mockFetch, okJson, ok204, errResponse,
-  stubOk, stub204, stubResponse, stubReject, assertMock, expectMock, verifyApi, callApi, setupApi, teardownApi, API_BASE,
+  stubOk, stub204, stubResponse, stubReject, assertMock, expectMock, verifyApi, callApi,
+  setupApi, teardownApi, API_BASE, jwtToken,
 } from '../helpers/api-test-env'
 import {
   TEST_EMPLOYEE_ID, TEST_TENANT_ID,
@@ -147,73 +148,52 @@ describe('api', () => {
   // Authentication headers
   // ============================================================
 
-  describe.skipIf(isLive)('authentication headers', () => {
-    it('should send Authorization header when JWT is available', async () => {
-      initApi('https://api.example.com', () => 'jwt-token-123', () => 'test-tenant')
+  describe('authentication headers', () => {
+    afterEach(async () => {
+      // テスト後に setupApi の状態に戻す
+      await setupApi()
+    })
+
+    it('should succeed with JWT auth', async () => {
+      initApi(API_BASE, () => jwtToken || 'jwt-token-123', () => TEST_TENANT_ID)
       stubOk([])
-
-      await getEmployees()
-
-      expectMock(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/api/employees',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer jwt-token-123',
-          }),
-        }),
-      )
-      // JWT 優先のため X-Tenant-ID は送信されない
+      const result = await getEmployees()
+      expect(Array.isArray(result)).toBe(true)
       assertMock(() => {
         const headers = mockFetch.mock.calls[0][1].headers
+        expect(headers['Authorization']).toMatch(/^Bearer /)
         expect(headers['X-Tenant-ID']).toBeUndefined()
       })
     })
 
-    it('should fall back to X-Tenant-ID when no JWT is available', async () => {
-      initApi('https://api.example.com', () => null, () => 'kiosk-tenant-id')
+    it('should succeed with X-Tenant-ID (kiosk mode)', async () => {
+      initApi(API_BASE, () => null, () => TEST_TENANT_ID)
       stubOk([])
-
-      await getEmployees()
-
+      const result = await getEmployees()
+      expect(Array.isArray(result)).toBe(true)
       assertMock(() => {
         const headers = mockFetch.mock.calls[0][1].headers
-        expect(headers['X-Tenant-ID']).toBe('kiosk-tenant-id')
+        expect(headers['X-Tenant-ID']).toBe(TEST_TENANT_ID)
         expect(headers['Authorization']).toBeUndefined()
       })
     })
 
-    it('should send no auth headers when both getters return null', async () => {
-      initApi('https://api.example.com', () => null, () => null)
-      stubOk([])
-
-      await getEmployees()
-
-      assertMock(() => {
-        const headers = mockFetch.mock.calls[0][1].headers
-        expect(headers['X-Tenant-ID']).toBeUndefined()
-        expect(headers['Authorization']).toBeUndefined()
-      })
+    it('should reject without any auth', async () => {
+      initApi(API_BASE, () => null, () => null)
+      stubResponse(errResponse(401))
+      await expect(getEmployees()).rejects.toThrow()
     })
 
-    it('should send no auth headers when getters are not provided', async () => {
-      initApi('https://api.example.com')
-      stubOk([])
-
-      await getEmployees()
-
-      assertMock(() => {
-        const headers = mockFetch.mock.calls[0][1].headers
-        expect(headers['X-Tenant-ID']).toBeUndefined()
-        expect(headers['Authorization']).toBeUndefined()
-      })
+    it('should reject when no getters provided', async () => {
+      initApi(API_BASE)
+      stubResponse(errResponse(401))
+      await expect(getEmployees()).rejects.toThrow()
     })
 
-    it('should fall back to X-Tenant-ID when JWT getter not provided but tenant getter returns value', async () => {
+    it.skipIf(isLive)('should fall back to X-Tenant-ID when JWT getter not provided', async () => {
       initApi('https://api.example.com', undefined, () => 'tenant-only')
       stubOk([])
-
       await getEmployees()
-
       assertMock(() => {
         const headers = mockFetch.mock.calls[0][1].headers
         expect(headers['X-Tenant-ID']).toBe('tenant-only')

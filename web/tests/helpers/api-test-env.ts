@@ -154,7 +154,7 @@ async function waitForApi(url: string, maxRetries = 30): Promise<void> {
 // ---------------------------------------------------------------------------
 // Setup / Teardown (beforeEach / afterEach から呼ぶ)
 // ---------------------------------------------------------------------------
-const jwtToken = isLive ? makeJwt() : null
+export const jwtToken = isLive ? makeJwt() : null
 let liveReady = false
 
 export async function setupApi() {
