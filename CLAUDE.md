@@ -149,6 +149,30 @@ bash scripts/sync-types.sh
 - `types/index.ts` から `Backend` namespace で参照: `import { Backend } from '~/types'`
 - フロント固有型 (`FaceAuthResult`, `Fc1200State` 等) は `types/index.ts` に手動定義
 
+### API テスト共通化方針 (mock / live 両対応)
+
+`tests/utils/api.test.ts` は **1つのテストコードで mock と live (実 API コンテナ) の両方で動く**設計。
+
+**原則**:
+- テストデータは `tests/helpers/api-test-data.ts` に一元管理。スキーマ変更時はここだけ修正
+- `tests/helpers/api-test-env.ts` で mock/live 切り替え (`API_BASE_URL` 環境変数の有無で判定)
+- `stubOk(data)` / `stub204()` / `stubResponse(res)`: mock 時は mockFetch にセット、live 時は no-op
+- `assertMock(() => { ... })`: mock 専用アサーション (mockFetch.mock.calls 検証等)。live 時は skip
+- テストに渡す ID は実在する UUID (`api-test-data.ts` の `TEST_EMPLOYEE_ID` 等)。`'s1'`, `'e1'` のような fake ID は禁止 (live で 400 になる)
+- リクエストボディは実 API が受け付ける正しいフィールド名・値を使う (`api-test-data.ts` から import)
+- テストファイルを mock 用 / live 用に分けない。1ファイルで完結させる
+- `api-live.test.ts` のような別ファイルは作らない
+
+**実行方法**:
+```bash
+npm test                                          # mock モード (DB 不要、高速)
+docker compose -f docker-compose.test.yml up -d   # API + DB コンテナ起動
+API_BASE_URL=http://localhost:18080 npm test       # live モード (実 API)
+docker compose -f docker-compose.test.yml down -v  # コンテナ停止
+```
+
+**コンテナ**: `docker-compose.test.yml` で GHCR の `rust-alc-api:latest` + PostgreSQL を起動。seed データは `tests/fixtures/seed.sql`。
+
 ### CI
 
 - **GitHub Actions**: `.github/workflows/test.yml`
