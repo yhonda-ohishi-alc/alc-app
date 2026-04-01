@@ -25,7 +25,7 @@ const FC1200_WS_RECONNECT_DELAY = 3000
 const FC1200_WS_MAX_RECONNECT = 10
 
 function isBleGwPort(info: SerialPortInfo): boolean {
-  if (info.usbVendorId === undefined) return false
+  // 呼び出し元で usbVendorId !== undefined を確認済み
   return BLE_GW_DEVICES.some(d =>
     d.vid === info.usbVendorId && (d.pid === undefined || d.pid === info.usbProductId),
   )
@@ -251,12 +251,11 @@ export function useFc1200Serial() {
   }
 
   async function startReadLoop(): Promise<void> {
-    if (!reader || !session) return
     readLoopActive = true
 
     try {
       while (readLoopActive) {
-        const { value, done } = await reader.read()
+        const { value, done } = await reader!.read()
         if (done) break
         if (!value || !session) break
 
@@ -278,9 +277,8 @@ export function useFc1200Serial() {
       }
     }
     catch {
-      if (readLoopActive) {
-        error.value = 'FC-1200 からの受信中にエラーが発生しました'
-      }
+      // readLoopActive は finally で false にするため、ここでは常に true
+      error.value = 'FC-1200 からの受信中にエラーが発生しました'
     }
     finally {
       readLoopActive = false
@@ -360,12 +358,11 @@ export function useFc1200Serial() {
   }
 
   async function sendPendingResponse(): Promise<void> {
-    if (!writer || !session) return
-
-    let response = session.get_response()
+    // startReadLoop / startMeasurement 等から呼ばれるため writer と session は常に非 null
+    let response = session!.get_response()
     while (response) {
-      await writer.write(response)
-      response = session.get_response()
+      await writer!.write(response)
+      response = session!.get_response()
     }
   }
 

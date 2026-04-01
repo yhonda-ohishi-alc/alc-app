@@ -190,6 +190,12 @@ describe('useTenkoKiosk', () => {
       expect(k.currentStepIndex.value).toBe(k.stepKeys.value.length - 1)
     })
 
+    it('未知のステップ値で idx=-1 (fall-through → -1 返却)', () => {
+      const k = useTenkoKiosk()
+      ;(k.step as any).value = 'unknown_step'
+      expect(k.currentStepIndex.value).toBe(-1)
+    })
+
     it('safety_result + post_operation (self_declaration not in stepKeys) → 0', () => {
       const k = useTenkoKiosk()
       k.selectedSchedule.value = makeSchedule({ tenko_type: 'post_operation' })

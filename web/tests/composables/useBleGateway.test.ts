@@ -1062,6 +1062,68 @@ describe('useBleGateway', () => {
       })
     })
 
+    describe('readLoop finally: isConnected=false → no reconnect', () => {
+      it('readLoop 終了時に isConnected=false なら reconnect しない', async () => {
+        let resolveRead: (v: any) => void
+        const { port, reader: mockReader } = createMockPort({
+          getInfoResult: { usbVendorId: 0x1A86 },
+        })
+        // First read blocks, then returns done: true
+        mockReader.read
+          .mockImplementationOnce(() => new Promise((resolve) => {
+            resolveRead = resolve
+          }))
+
+        installSerialMock({ requestPort: vi.fn(async () => port) })
+        await gw.connect()
+        expect(gw.isConnected.value).toBe(true)
+        expect(gw.transport.value).toBe('serial')
+
+        // Manually set isConnected to false (simulating external cleanup)
+        // Then resolve the read to end the loop
+        // We can't directly set isConnected since it's readonly
+        // Instead, call cleanup which sets isConnected=false
+        await gw.disconnect()
+        // Now resolve the blocked read (readLoop catches the cancelled error)
+        resolveRead!({ value: null, done: true })
+        await vi.advanceTimersByTimeAsync(0)
+
+        // No reconnect should happen since isConnected was false
+        expect(gw.isConnected.value).toBe(false)
+      })
+    })
+
+    describe('autoConnect writable=false', () => {
+      it('writable なし → writer=null でも接続成功', async () => {
+        const { port } = createMockPort({
+          writable: false,
+          readValues: [{ value: null, done: true }],
+          getInfoResult: { usbVendorId: 0x1A86 },
+        })
+        installSerialMock({
+          getPorts: vi.fn(async () => [port]),
+        })
+
+        const result = await gw.autoConnect()
+        expect(result).toBe(true)
+        expect(gw.isConnected.value).toBe(true)
+      })
+    })
+
+    describe('startAutoConnect 成功ケース', () => {
+      it('1回目で接続成功 → true', async () => {
+        const { port } = createMockPort({
+          readValues: [{ value: null, done: true }],
+        })
+        installSerialMock({
+          getPorts: vi.fn(async () => [port]),
+        })
+
+        const result = await gw.startAutoConnect(3, 100)
+        expect(result).toBe(true)
+      })
+    })
+
     describe('writable なし serial', () => {
       it('writer なし → cleanup で writer スキップ', async () => {
         const { port } = createMockPort({

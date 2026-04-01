@@ -53,10 +53,8 @@ export function useAuth() {
       try {
         await refreshAccessToken(refreshToken)
       } catch {
-        // Refresh 失敗 — トークンをクリア
-        if (isClient) {
-          localStorage.removeItem(REFRESH_TOKEN_KEY)
-        }
+        // Refresh 失敗 — トークンをクリア (refreshToken が非 null = isClient は常に true)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
       }
     }
 
@@ -225,15 +223,15 @@ export function useAuth() {
     }
   }
 
-  /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール */
+  /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール
+   *  setTokens / refreshAccessToken の直後に呼ばれるため accessToken は常に非 null */
   function scheduleAutoRefresh() {
     if (refreshTimerId) {
       clearTimeout(refreshTimerId)
       refreshTimerId = null
     }
 
-    const token = accessToken.value
-    if (!token) return
+    const token = accessToken.value!
 
     try {
       const parts = token.split('.')

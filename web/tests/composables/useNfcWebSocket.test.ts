@@ -459,6 +459,14 @@ describe('useNfcWebSocket', () => {
       expect(cb).not.toHaveBeenCalled()
     })
 
+    it('onRead unsubscribe called twice is safe (idx < 0)', () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onRead(cb)
+      unsub()
+      unsub() // second call — idx is -1, splice should not run
+    })
+
     it('onLicenseRead unregister removes callback', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const cb = vi.fn()
@@ -487,6 +495,14 @@ describe('useNfcWebSocket', () => {
 
       lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'test' }))
       expect(cb).not.toHaveBeenCalled()
+    })
+
+    it('onError unsubscribe called twice is safe (idx < 0)', () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onError(cb)
+      unsub()
+      unsub() // second call — idx is -1
     })
   })
 
@@ -549,6 +565,22 @@ describe('useNfcWebSocket', () => {
       expect(bridgeCalls).toHaveLength(0)
 
       addSpy.mockRestore()
+      envMock.isClient = true
+    })
+
+    it('onUnmounted skips removeEventListener when isClient=false', async () => {
+      envMock.isClient = false
+      vi.resetModules()
+      const mod = await import('~/composables/useNfcWebSocket')
+      const removeSpy = vi.spyOn(window, 'removeEventListener')
+
+      const [, app] = withSetup(() => mod.useNfcWebSocket())
+      app.unmount()
+
+      const bridgeCalls = removeSpy.mock.calls.filter(([name]) => name === 'bridge-restarted')
+      expect(bridgeCalls).toHaveLength(0)
+
+      removeSpy.mockRestore()
       envMock.isClient = true
     })
   })

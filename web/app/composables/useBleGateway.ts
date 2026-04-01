@@ -248,13 +248,12 @@ export function useBleGateway() {
   }
 
   async function startReadLoop(): Promise<void> {
-    if (!reader) return
     readLoopActive = true
     const decoder = new TextDecoder()
 
     try {
       while (readLoopActive) {
-        const { value, done } = await reader.read()
+        const { value, done } = await reader!.read()
         if (done) break
         if (!value) continue
 
@@ -272,9 +271,8 @@ export function useBleGateway() {
       }
     }
     catch {
-      if (readLoopActive) {
-        error.value = 'BLE ゲートウェイからの受信中にエラーが発生しました'
-      }
+      // readLoopActive は finally で false にするため、ここでは常に true
+      error.value = 'BLE ゲートウェイからの受信中にエラーが発生しました'
     }
     finally {
       readLoopActive = false

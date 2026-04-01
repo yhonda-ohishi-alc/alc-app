@@ -748,6 +748,31 @@ describe('offline-queue', () => {
     })
   })
 
+  describe('v1→v2 migration (oldVersion=1)', () => {
+    it('skips createObjectStore and adds syncedAt index', async () => {
+      // First, manually create the DB at version 1 (store only, no index)
+      await new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('alc-offline-db', 1)
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore('pending-measurements', { keyPath: 'id', autoIncrement: true })
+        }
+        req.onsuccess = () => { req.result.close(); resolve() }
+        req.onerror = () => reject(req.error)
+      })
+
+      // Now the app's openDb() opens at version 2, triggering upgrade from 1→2
+      // This exercises: (oldVersion < 1) = false branch
+      const items = await getAll()
+      expect(items).toEqual([])
+
+      // Verify the index was created by enqueueing + marking synced
+      const id = await enqueue(createResult(), undefined, undefined, new Date().toISOString())
+      const all = await getAllWithStatus()
+      expect(all).toHaveLength(1)
+      expect(all[0].syncedAt).toBeTruthy()
+    })
+  })
+
   describe('enqueue extras', () => {
     it('should serialize medicalMeasuredAt as ISO string', async () => {
       await enqueue(createResult({
