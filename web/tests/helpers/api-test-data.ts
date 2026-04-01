@@ -6,11 +6,27 @@
  */
 
 // ---------------------------------------------------------------------------
-// IDs (integration test seed data と一致)
+// IDs (seed.sql と一致)
 // ---------------------------------------------------------------------------
 export const TEST_TENANT_ID = '11111111-1111-1111-1111-111111111111'
 export const TEST_USER_ID = '22222222-2222-2222-2222-222222222222'
 export const TEST_EMPLOYEE_ID = '33333333-3333-3333-3333-333333333333'
+
+// Seed resource IDs (seed.sql で作成済み — live で GET しても 404 にならない)
+export const SEED_MEASUREMENT_ID = 'aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa'
+export const SEED_SCHEDULE_ID = 'aaaaaaaa-0002-0002-0002-aaaaaaaaaaaa'
+export const SEED_SESSION_ID = 'aaaaaaaa-0003-0003-0003-aaaaaaaaaaaa'
+export const SEED_RECORD_ID = 'aaaaaaaa-0004-0004-0004-aaaaaaaaaaaa'
+export const SEED_WEBHOOK_ID = 'aaaaaaaa-0005-0005-0005-aaaaaaaaaaaa'
+export const SEED_FAILURE_ID = 'aaaaaaaa-0006-0006-0006-aaaaaaaaaaaa'
+export const SEED_DEVICE_ID = 'aaaaaaaa-0007-0007-0007-aaaaaaaaaaaa'
+export const SEED_TIMECARD_CARD_ID = 'aaaaaaaa-0008-0008-0008-aaaaaaaaaaaa'
+export const SEED_CARRYING_ITEM_ID = 'aaaaaaaa-0009-0009-0009-aaaaaaaaaaaa'
+export const SEED_COMM_ITEM_ID = 'aaaaaaaa-000a-000a-000a-aaaaaaaaaaaa'
+export const SEED_GUIDANCE_ID = 'aaaaaaaa-000b-000b-000b-aaaaaaaaaaaa'
+export const SEED_REG_CODE = 'SEED-CODE'
+export const SEED_NFC_ID = 'NFC-SEED-001'
+export const SEED_CARD_NFC = 'NFC-SEED-CARD'
 
 // ---------------------------------------------------------------------------
 // JWT
@@ -51,7 +67,7 @@ export const createGuidanceRecordBody = {
 
 export const createCommunicationItemBody = {
   title: 'Test Notice',
-  body: 'Test content',
+  content: 'Test content',
 }
 
 export const createHealthBaselineBody = {

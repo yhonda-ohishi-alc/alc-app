@@ -58,6 +58,10 @@ import {
 } from '../helpers/api-test-env'
 import {
   TEST_EMPLOYEE_ID, TEST_TENANT_ID,
+  SEED_MEASUREMENT_ID, SEED_SCHEDULE_ID, SEED_SESSION_ID, SEED_RECORD_ID,
+  SEED_WEBHOOK_ID, SEED_FAILURE_ID, SEED_DEVICE_ID, SEED_TIMECARD_CARD_ID,
+  SEED_CARRYING_ITEM_ID, SEED_COMM_ITEM_ID, SEED_GUIDANCE_ID,
+  SEED_REG_CODE, SEED_NFC_ID, SEED_CARD_NFC,
   createScheduleBody, createEquipmentFailureBody, createWebhookBody,
   createCarryingItemBody, createGuidanceRecordBody, createCommunicationItemBody,
   createHealthBaselineBody, createTimecardCardBody, startTenkoSessionBody, createEmployeeBody,
@@ -485,7 +489,7 @@ describe('api', () => {
       stubOk({ measurements: [], total: 0, page: 1, per_page: 20 })
 
       await getMeasurements({
-        employee_id: 'EMP001',
+        employee_id: TEST_EMPLOYEE_ID,
         result_type: 'over',
         date_from: '2026-01-01',
         date_to: '2026-01-31',
@@ -495,7 +499,7 @@ describe('api', () => {
 
       assertMock(() => {
         const url = mockFetch.mock.calls[0][0]
-        expect(url).toContain('employee_id=EMP001')
+        expect(url).toContain(`employee_id=${TEST_EMPLOYEE_ID}`)
         expect(url).toContain('result_type=over')
         expect(url).toContain('date_from=2026-01-01')
         expect(url).toContain('date_to=2026-01-31')
@@ -523,27 +527,27 @@ describe('api', () => {
   describe.skipIf(isLive)('simple GET functions', () => {
     it.each([
       ['getEmployees', () => getEmployees(), '/api/employees'],
-      ['getEmployeeByNfcId', () => getEmployeeByNfcId('ABC'), '/api/employees/by-nfc/ABC'],
-      ['getEmployeeByCode', () => getEmployeeByCode('C1'), '/api/employees/by-code/C1'],
+      ['getEmployeeByNfcId', () => getEmployeeByNfcId(SEED_NFC_ID), `/api/employees/by-nfc/${SEED_NFC_ID}`],
+      ['getEmployeeByCode', () => getEmployeeByCode('E001'), '/api/employees/by-code/E001'],
       ['getEmployeeById', () => getEmployeeById(TEST_EMPLOYEE_ID), `/api/employees/${TEST_EMPLOYEE_ID}`],
       ['getFaceData', () => getFaceData(), '/api/employees/face-data'],
-      ['getMeasurement', () => getMeasurement(UUID1), `/api/measurements/${UUID1}`],
-      ['getSchedule', () => getSchedule(UUID2), `/api/tenko/schedules/${UUID2}`],
+      ['getMeasurement', () => getMeasurement(SEED_MEASUREMENT_ID), `/api/measurements/${SEED_MEASUREMENT_ID}`],
+      ['getSchedule', () => getSchedule(SEED_SCHEDULE_ID), `/api/tenko/schedules/${SEED_SCHEDULE_ID}`],
       ['getPendingSchedules', () => getPendingSchedules(TEST_EMPLOYEE_ID), `/api/tenko/schedules/pending/${TEST_EMPLOYEE_ID}`],
-      ['getTenkoSession', () => getTenkoSession(UUID3), `/api/tenko/sessions/${UUID3}`],
-      ['getTenkoRecord', () => getTenkoRecord(UUID4), `/api/tenko/records/${UUID4}`],
+      ['getTenkoSession', () => getTenkoSession(SEED_SESSION_ID), `/api/tenko/sessions/${SEED_SESSION_ID}`],
+      ['getTenkoRecord', () => getTenkoRecord(SEED_RECORD_ID), `/api/tenko/records/${SEED_RECORD_ID}`],
       ['getTenkoDashboard', () => getTenkoDashboard(), '/api/tenko/dashboard'],
       ['listWebhooks', () => listWebhooks(), '/api/tenko/webhooks'],
-      ['getWebhook', () => getWebhook(UUID5), `/api/tenko/webhooks/${UUID5}`],
-      ['getWebhookDeliveries', () => getWebhookDeliveries(UUID5), `/api/tenko/webhooks/${UUID5}/deliveries`],
+      ['getWebhook', () => getWebhook(SEED_WEBHOOK_ID), `/api/tenko/webhooks/${SEED_WEBHOOK_ID}`],
+      ['getWebhookDeliveries', () => getWebhookDeliveries(SEED_WEBHOOK_ID), `/api/tenko/webhooks/${SEED_WEBHOOK_ID}/deliveries`],
       ['listBaselines', () => listBaselines(), '/api/tenko/health-baselines'],
       ['getBaseline', () => getBaseline(TEST_EMPLOYEE_ID), `/api/tenko/health-baselines/${TEST_EMPLOYEE_ID}`],
-      ['getFailure', () => getFailure(UUID6), `/api/tenko/equipment-failures/${UUID6}`],
-      ['getTimecardCardByCardId', () => getTimecardCardByCardId('NFC-TEST-001'), '/api/timecard/cards/by-card/NFC-TEST-001'],
+      ['getFailure', () => getFailure(SEED_FAILURE_ID), `/api/tenko/equipment-failures/${SEED_FAILURE_ID}`],
+      ['getTimecardCardByCardId', () => getTimecardCardByCardId(SEED_CARD_NFC), `/api/timecard/cards/by-card/${SEED_CARD_NFC}`],
       ['listDevices', () => listDevices(), '/api/devices'],
       ['listPendingDeviceRegistrations', () => listPendingDeviceRegistrations(), '/api/devices/pending'],
-      ['checkDeviceRegistrationStatus', () => checkDeviceRegistrationStatus('code1'), '/api/devices/register/status/code1'],
-      ['getDeviceSettings', () => getDeviceSettings(UUID7), `/api/devices/settings/${UUID7}`],
+      ['checkDeviceRegistrationStatus', () => checkDeviceRegistrationStatus(SEED_REG_CODE), `/api/devices/register/status/${SEED_REG_CODE}`],
+      ['getDeviceSettings', () => getDeviceSettings(SEED_DEVICE_ID), `/api/devices/settings/${SEED_DEVICE_ID}`],
       ['getCarryingItems', () => getCarryingItems(), '/api/carrying-items'],
       ['getDriverInfo', () => getDriverInfo(TEST_EMPLOYEE_ID), `/api/tenko/driver-info/${TEST_EMPLOYEE_ID}`],
       ['getDtakoDrivers', () => getDtakoDrivers(), '/api/drivers'],
@@ -639,25 +643,25 @@ describe('api', () => {
       ['createSchedule', () => createSchedule(createScheduleBody as any), '/api/tenko/schedules'],
       ['batchCreateSchedules', () => batchCreateSchedules([createScheduleBody] as any), '/api/tenko/schedules/batch'],
       ['startTenkoSession', () => startTenkoSession(startTenkoSessionBody as any), '/api/tenko/sessions/start'],
-      ['cancelTenkoSession', () => cancelTenkoSession(UUID1, { reason: 'test' }), `/api/tenko/sessions/${UUID1}/cancel`],
-      ['interruptTenkoSession', () => interruptTenkoSession(UUID1), `/api/tenko/sessions/${UUID1}/interrupt`],
-      ['resumeTenkoSession', () => resumeTenkoSession(UUID1, { reason: 'resumed' } as any), `/api/tenko/sessions/${UUID1}/resume`],
+      ['cancelTenkoSession', () => cancelTenkoSession(SEED_SESSION_ID, { reason: 'test' }), `/api/tenko/sessions/${SEED_SESSION_ID}/cancel`],
+      ['interruptTenkoSession', () => interruptTenkoSession(SEED_SESSION_ID), `/api/tenko/sessions/${SEED_SESSION_ID}/interrupt`],
+      ['resumeTenkoSession', () => resumeTenkoSession(SEED_SESSION_ID, { reason: 'resumed' } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/resume`],
       ['createWebhook', () => createWebhook(createWebhookBody as any), '/api/tenko/webhooks'],
       ['createBaseline', () => createBaseline(createHealthBaselineBody as any), '/api/tenko/health-baselines'],
       ['createFailure', () => createFailure(createEquipmentFailureBody as any), '/api/tenko/equipment-failures'],
       ['createTimecardCard', () => createTimecardCard(createTimecardCardBody as any), '/api/timecard/cards'],
-      ['punchTimecard', () => punchTimecard('NFC-TEST-001'), '/api/timecard/punch'],
+      ['punchTimecard', () => punchTimecard(SEED_CARD_NFC), '/api/timecard/punch'],
       ['createDeviceRegistrationRequest', () => createDeviceRegistrationRequest(), '/api/devices/register/request'],
-      ['claimDeviceRegistration', () => claimDeviceRegistration({ code: 'TEST-CODE', device_name: 'Test' } as any), '/api/devices/register/claim'],
+      ['claimDeviceRegistration', () => claimDeviceRegistration({} as any), '/api/devices/register/claim'],
       ['createDeviceUrlToken', () => createDeviceUrlToken(), '/api/devices/register/create-token'],
       ['createPermanentQr', () => createPermanentQr(), '/api/devices/register/create-permanent-qr'],
       ['createDeviceOwnerToken', () => createDeviceOwnerToken(), '/api/devices/register/create-device-owner-token'],
-      ['approveDevice', () => approveDevice(UUID7), `/api/devices/approve/${UUID7}`],
-      ['approveDeviceByCode', () => approveDeviceByCode('TEST-CODE'), '/api/devices/approve-by-code/TEST-CODE'],
-      ['rejectDevice', () => rejectDevice(UUID7), `/api/devices/reject/${UUID7}`],
-      ['disableDevice', () => disableDevice(UUID7), `/api/devices/disable/${UUID7}`],
-      ['enableDevice', () => enableDevice(UUID7), `/api/devices/enable/${UUID7}`],
-      ['testFcmNotification', () => testFcmNotification(UUID7), `/api/devices/${UUID7}/test-fcm`],
+      ['approveDevice', () => approveDevice(SEED_DEVICE_ID), `/api/devices/approve/${SEED_DEVICE_ID}`],
+      ['approveDeviceByCode', () => approveDeviceByCode(SEED_REG_CODE), `/api/devices/approve-by-code/${SEED_REG_CODE}`],
+      ['rejectDevice', () => rejectDevice(SEED_DEVICE_ID), `/api/devices/reject/${SEED_DEVICE_ID}`],
+      ['disableDevice', () => disableDevice(SEED_DEVICE_ID), `/api/devices/disable/${SEED_DEVICE_ID}`],
+      ['enableDevice', () => enableDevice(SEED_DEVICE_ID), `/api/devices/enable/${SEED_DEVICE_ID}`],
+      ['testFcmNotification', () => testFcmNotification(SEED_DEVICE_ID), `/api/devices/${SEED_DEVICE_ID}/test-fcm`],
       ['testFcmAll', () => testFcmAll(), '/api/devices/test-fcm-all'],
       ['triggerUpdate', () => triggerUpdate(), '/api/devices/trigger-update'],
       ['createCarryingItem', () => createCarryingItem(createCarryingItemBody as any), '/api/carrying-items'],
@@ -677,17 +681,17 @@ describe('api', () => {
 
     it('punchTimecard with deviceId', async () => {
       stubOk({})
-      await punchTimecard('NFC-TEST-001', UUID7)
+      await punchTimecard(SEED_CARD_NFC, SEED_DEVICE_ID)
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-        expect(body.card_id).toBe('NFC-TEST-001')
-        expect(body.device_id).toBe(UUID7)
+        expect(body.card_id).toBe(SEED_CARD_NFC)
+        expect(body.device_id).toBe(SEED_DEVICE_ID)
       })
     })
 
     it('punchTimecard with null deviceId omits device_id', async () => {
       stubOk({})
-      await punchTimecard('NFC-TEST-001', null)
+      await punchTimecard(SEED_CARD_NFC, null)
       assertMock(() => {
         const body = JSON.parse(mockFetch.mock.calls[0][1].body)
         expect(body.device_id).toBeUndefined()
@@ -770,27 +774,27 @@ describe('api', () => {
 
   describe.skipIf(isLive)('PUT functions', () => {
     it.each([
-      ['updateMeasurement', () => updateMeasurement(UUID1, { alcohol_value: 0.1 }), `/api/measurements/${UUID1}`],
+      ['updateMeasurement', () => updateMeasurement(SEED_MEASUREMENT_ID, { alcohol_value: 0.1 }), `/api/measurements/${SEED_MEASUREMENT_ID}`],
       ['updateEmployee', () => updateEmployee(TEST_EMPLOYEE_ID, { name: 'B' }), `/api/employees/${TEST_EMPLOYEE_ID}`],
       ['updateEmployeeFace', () => updateEmployeeFace(TEST_EMPLOYEE_ID, 'url', [1, 2], 'v1'), `/api/employees/${TEST_EMPLOYEE_ID}/face`],
       ['approveFace', () => approveFace(TEST_EMPLOYEE_ID), `/api/employees/${TEST_EMPLOYEE_ID}/face/approve`],
       ['rejectFace', () => rejectFace(TEST_EMPLOYEE_ID), `/api/employees/${TEST_EMPLOYEE_ID}/face/reject`],
       ['updateEmployeeNfcId', () => updateEmployeeNfcId(TEST_EMPLOYEE_ID, 'nfc1'), `/api/employees/${TEST_EMPLOYEE_ID}/nfc`],
       ['updateEmployeeLicense', () => updateEmployeeLicense(TEST_EMPLOYEE_ID, '2026-01-01', '2028-01-01'), `/api/employees/${TEST_EMPLOYEE_ID}/license`],
-      ['updateSchedule', () => updateSchedule(UUID2, createScheduleBody as any), `/api/tenko/schedules/${UUID2}`],
-      ['submitAlcohol', () => submitAlcohol(UUID3, { alcohol_value: 0.0, device_use_count: 100 } as any), `/api/tenko/sessions/${UUID3}/alcohol`],
-      ['submitMedical', () => submitMedical(UUID3, { temperature: 36.5, systolic: 120, diastolic: 80, pulse: 72 } as any), `/api/tenko/sessions/${UUID3}/medical`],
-      ['submitSelfDeclaration', () => submitSelfDeclaration(UUID3, { illness: false, fatigue: false, sleep_deprivation: false } as any), `/api/tenko/sessions/${UUID3}/self-declaration`],
-      ['submitDailyInspection', () => submitDailyInspection(UUID3, { items: [] } as any), `/api/tenko/sessions/${UUID3}/daily-inspection`],
-      ['confirmInstruction', () => confirmInstruction(UUID3), `/api/tenko/sessions/${UUID3}/instruction-confirm`],
-      ['submitReport', () => submitReport(UUID3, { report: 'ok' } as any), `/api/tenko/sessions/${UUID3}/report`],
+      ['updateSchedule', () => updateSchedule(SEED_SCHEDULE_ID, createScheduleBody as any), `/api/tenko/schedules/${SEED_SCHEDULE_ID}`],
+      ['submitAlcohol', () => submitAlcohol(SEED_SESSION_ID, { alcohol_value: 0.0, device_use_count: 100 } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/alcohol`],
+      ['submitMedical', () => submitMedical(SEED_SESSION_ID, { temperature: 36.5, systolic: 120, diastolic: 80, pulse: 72 } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/medical`],
+      ['submitSelfDeclaration', () => submitSelfDeclaration(SEED_SESSION_ID, { illness: false, fatigue: false, sleep_deprivation: false } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/self-declaration`],
+      ['submitDailyInspection', () => submitDailyInspection(SEED_SESSION_ID, { items: [] } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/daily-inspection`],
+      ['confirmInstruction', () => confirmInstruction(SEED_SESSION_ID), `/api/tenko/sessions/${SEED_SESSION_ID}/instruction-confirm`],
+      ['submitReport', () => submitReport(SEED_SESSION_ID, { report: 'ok' } as any), `/api/tenko/sessions/${SEED_SESSION_ID}/report`],
       ['updateBaseline', () => updateBaseline(TEST_EMPLOYEE_ID, createHealthBaselineBody as any), `/api/tenko/health-baselines/${TEST_EMPLOYEE_ID}`],
-      ['resolveFailure', () => resolveFailure(UUID6, { resolution: 'fixed' } as any), `/api/tenko/equipment-failures/${UUID6}`],
-      ['submitCarryingItemChecks', () => submitCarryingItemChecks(UUID3, []), `/api/tenko/sessions/${UUID3}/carrying-items`],
-      ['updateCarryingItem', () => updateCarryingItem(UUID8, createCarryingItemBody as any), `/api/carrying-items/${UUID8}`],
-      ['updateCommunicationItem', () => updateCommunicationItem(UUID9, { title: 'Updated' }), `/api/communication-items/${UUID9}`],
-      ['updateDeviceCallSettings', () => updateDeviceCallSettings(UUID7, true), `/api/devices/${UUID7}/call-settings`],
-      ['updateDeviceLastLogin', () => updateDeviceLastLogin(UUID7, TEST_EMPLOYEE_ID, 'name', []), '/api/devices/update-last-login'],
+      ['resolveFailure', () => resolveFailure(SEED_FAILURE_ID, { resolution: 'fixed' } as any), `/api/tenko/equipment-failures/${SEED_FAILURE_ID}`],
+      ['submitCarryingItemChecks', () => submitCarryingItemChecks(SEED_SESSION_ID, []), `/api/tenko/sessions/${SEED_SESSION_ID}/carrying-items`],
+      ['updateCarryingItem', () => updateCarryingItem(SEED_CARRYING_ITEM_ID, createCarryingItemBody as any), `/api/carrying-items/${SEED_CARRYING_ITEM_ID}`],
+      ['updateCommunicationItem', () => updateCommunicationItem(SEED_COMM_ITEM_ID, { title: 'Updated' }), `/api/communication-items/${SEED_COMM_ITEM_ID}`],
+      ['updateDeviceCallSettings', () => updateDeviceCallSettings(SEED_DEVICE_ID, true), `/api/devices/${SEED_DEVICE_ID}/call-settings`],
+      ['updateDeviceLastLogin', () => updateDeviceLastLogin(SEED_DEVICE_ID, TEST_EMPLOYEE_ID, 'name', []), '/api/devices/update-last-login'],
     ] as [string, () => Promise<unknown>, string][])(
       '%s → PUT %s',
       async (_name, fn, expectedPath) => {
@@ -895,15 +899,15 @@ describe('api', () => {
   describe.skipIf(isLive)('DELETE functions', () => {
     it.each([
       ['deleteEmployee', () => deleteEmployee(TEST_EMPLOYEE_ID), `/api/employees/${TEST_EMPLOYEE_ID}`],
-      ['deleteSchedule', () => deleteSchedule(UUID2), `/api/tenko/schedules/${UUID2}`],
-      ['deleteWebhook', () => deleteWebhook(UUID5), `/api/tenko/webhooks/${UUID5}`],
+      ['deleteSchedule', () => deleteSchedule(SEED_SCHEDULE_ID), `/api/tenko/schedules/${SEED_SCHEDULE_ID}`],
+      ['deleteWebhook', () => deleteWebhook(SEED_WEBHOOK_ID), `/api/tenko/webhooks/${SEED_WEBHOOK_ID}`],
       ['deleteBaseline', () => deleteBaseline(TEST_EMPLOYEE_ID), `/api/tenko/health-baselines/${TEST_EMPLOYEE_ID}`],
-      ['deleteTimecardCard', () => deleteTimecardCard(UUID10), `/api/timecard/cards/${UUID10}`],
-      ['deleteDevice', () => deleteDevice(UUID7), `/api/devices/${UUID7}`],
-      ['deleteCarryingItem', () => deleteCarryingItem(UUID8), `/api/carrying-items/${UUID8}`],
-      ['deleteGuidanceRecord', () => deleteGuidanceRecord(UUID9), `/api/guidance-records/${UUID9}`],
-      ['deleteGuidanceAttachment', () => deleteGuidanceAttachment(UUID9, UUID10), `/api/guidance-records/${UUID9}/attachments/${UUID10}`],
-      ['deleteCommunicationItem', () => deleteCommunicationItem(UUID9), `/api/communication-items/${UUID9}`],
+      ['deleteTimecardCard', () => deleteTimecardCard(SEED_TIMECARD_CARD_ID), `/api/timecard/cards/${SEED_TIMECARD_CARD_ID}`],
+      ['deleteDevice', () => deleteDevice(SEED_DEVICE_ID), `/api/devices/${SEED_DEVICE_ID}`],
+      ['deleteCarryingItem', () => deleteCarryingItem(SEED_CARRYING_ITEM_ID), `/api/carrying-items/${SEED_CARRYING_ITEM_ID}`],
+      ['deleteGuidanceRecord', () => deleteGuidanceRecord(SEED_GUIDANCE_ID), `/api/guidance-records/${SEED_GUIDANCE_ID}`],
+      ['deleteGuidanceAttachment', () => deleteGuidanceAttachment(SEED_GUIDANCE_ID, 'ffffffff-ffff-ffff-ffff-ffffffffffff'), `/api/guidance-records/${SEED_GUIDANCE_ID}/attachments/ffffffff-ffff-ffff-ffff-ffffffffffff`],
+      ['deleteCommunicationItem', () => deleteCommunicationItem(SEED_COMM_ITEM_ID), `/api/communication-items/${SEED_COMM_ITEM_ID}`],
     ] as [string, () => Promise<unknown>, string][])(
       '%s → DELETE %s',
       async (_name, fn, expectedPath) => {
