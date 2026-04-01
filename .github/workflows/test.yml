@@ -91,8 +91,8 @@ jobs:
 
             echo "" >> $GITHUB_STEP_SUMMARY
 
-            # Lines 100% 未達ファイル一覧
-            echo "<details><summary>Lines &lt; 100% ファイル一覧</summary>" >> $GITHUB_STEP_SUMMARY
+            # 全ファイルカバレッジ一覧
+            echo "<details><summary>全ファイル カバレッジ一覧</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| File | Stmts | Branch | Funcs | Lines |" >> $GITHUB_STEP_SUMMARY
             echo "|------|-------|--------|-------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -100,12 +100,11 @@ jobs:
               const path = require('path');
               const s = require('./coverage/coverage-summary.json');
               const cwd = process.cwd();
-              Object.keys(s).filter(k => k !== 'total').forEach(k => {
+              Object.keys(s).filter(k => k !== 'total').sort().forEach(k => {
                 const e = s[k];
-                if (e.lines.pct < 100) {
-                  const rel = path.relative(cwd, k);
-                  console.log('| ' + rel + ' | ' + e.statements.pct + '% | ' + e.branches.pct + '% | ' + e.functions.pct + '% | ' + e.lines.pct + '% |');
-                }
+                const rel = path.relative(cwd, k);
+                const mark = e.lines.pct === 100 ? '✅' : '⚠️';
+                console.log('| ' + mark + ' ' + rel + ' | ' + e.statements.pct + '% | ' + e.branches.pct + '% | ' + e.functions.pct + '% | ' + e.lines.pct + '% |');
               });
             " >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
