@@ -8,6 +8,10 @@ on:
     branches: [main]
     paths: ['web/**', '.github/workflows/test.yml']
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   test:
     name: Vitest + Coverage
