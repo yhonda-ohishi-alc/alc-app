@@ -73,7 +73,7 @@ function makeJwt(overrides: Record<string, unknown> = {}): string {
 async function waitForApi(url: string, maxRetries = 30): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`${url}/health`)
+      const res = await fetch(`${url}/api/health`)
       if (res.ok) return
     } catch {
       // not ready yet
@@ -191,7 +191,9 @@ describe('API Live Integration Tests', () => {
       const s = await createSchedule({
         employee_id: EMPLOYEE_ID,
         tenko_type: 'pre_operation',
-        scheduled_date: new Date().toISOString().slice(0, 10),
+        responsible_manager_name: 'Test Manager',
+        scheduled_at: new Date().toISOString(),
+        instruction: 'Test instruction',
       })
       expect(s.id).toBeDefined()
       scheduleId = s.id
@@ -209,8 +211,8 @@ describe('API Live Integration Tests', () => {
     })
 
     it('should update schedule', async () => {
-      const s = await updateSchedule(scheduleId, { tenko_type: 'post_operation' })
-      expect(s.tenko_type).toBe('post_operation')
+      const s = await updateSchedule(scheduleId, { responsible_manager_name: 'Updated Manager' })
+      expect(s.responsible_manager_name).toBe('Updated Manager')
     })
 
     it('should delete schedule', async () => {
@@ -230,7 +232,9 @@ describe('API Live Integration Tests', () => {
       const s = await createSchedule({
         employee_id: EMPLOYEE_ID,
         tenko_type: 'pre_operation',
-        scheduled_date: new Date().toISOString().slice(0, 10),
+        responsible_manager_name: 'Test Manager',
+        scheduled_at: new Date().toISOString(),
+        instruction: 'Test instruction',
       })
       scheduleId = s.id
     })
@@ -273,14 +277,9 @@ describe('API Live Integration Tests', () => {
     it('should create baseline', async () => {
       const b = await createBaseline({
         employee_id: EMPLOYEE_ID,
-        systolic_min: 90,
-        systolic_max: 140,
-        diastolic_min: 60,
-        diastolic_max: 90,
-        pulse_min: 50,
-        pulse_max: 100,
-        temperature_min: 35.5,
-        temperature_max: 37.5,
+        baseline_systolic: 120,
+        baseline_diastolic: 80,
+        baseline_temperature: 36.5,
       })
       expect(b.employee_id).toBe(EMPLOYEE_ID)
     })
@@ -296,8 +295,8 @@ describe('API Live Integration Tests', () => {
     })
 
     it('should update baseline', async () => {
-      const b = await updateBaseline(EMPLOYEE_ID, { systolic_max: 150 })
-      expect(b.systolic_max).toBe(150)
+      const b = await updateBaseline(EMPLOYEE_ID, { baseline_systolic: 130 })
+      expect(b.baseline_systolic).toBe(130)
     })
 
     it('should delete baseline', async () => {
@@ -313,9 +312,8 @@ describe('API Live Integration Tests', () => {
 
     it('should create failure', async () => {
       const f = await createFailure({
-        equipment_type: 'alcohol_detector',
+        failure_type: 'manual_report',
         description: 'Test failure',
-        reported_by: EMPLOYEE_ID,
       })
       expect(f.id).toBeDefined()
       failureId = f.id
@@ -334,7 +332,6 @@ describe('API Live Integration Tests', () => {
     it('should resolve failure', async () => {
       const f = await resolveFailure(failureId, {
         resolution: 'Replaced device',
-        resolved_by: USER_ID,
       })
       expect(f.resolved_at).toBeDefined()
     })
@@ -384,12 +381,12 @@ describe('API Live Integration Tests', () => {
     it('should create device registration request', async () => {
       // This is a public endpoint (no auth needed), but initApi sets X-Tenant-ID
       const result = await createDeviceRegistrationRequest('Test Device')
-      expect(result.code).toBeDefined()
+      expect(result.registration_code).toBeDefined()
     })
 
     it('should check registration status', async () => {
       const reg = await createDeviceRegistrationRequest('Status Check Device')
-      const status = await checkDeviceRegistrationStatus(reg.code)
+      const status = await checkDeviceRegistrationStatus(reg.registration_code)
       expect(status.status).toBeDefined()
     })
 
@@ -413,7 +410,7 @@ describe('API Live Integration Tests', () => {
     it('should create webhook', async () => {
       const w = await createWebhook({
         url: 'https://example.com/webhook',
-        events: ['tenko.completed'],
+        event_type: 'tenko_completed',
       })
       expect(w.id).toBeDefined()
       webhookId = w.id
@@ -437,7 +434,7 @@ describe('API Live Integration Tests', () => {
     let itemId: string
 
     it('should create carrying item', async () => {
-      const item = await createCarryingItem({ name: 'Test Item' })
+      const item = await createCarryingItem({ item_name: 'Test Item' })
       expect(item.id).toBeDefined()
       itemId = item.id
     })
@@ -448,8 +445,8 @@ describe('API Live Integration Tests', () => {
     })
 
     it('should update carrying item', async () => {
-      const item = await updateCarryingItem(itemId, { name: 'Updated Item' })
-      expect(item.name).toBe('Updated Item')
+      const item = await updateCarryingItem(itemId, { item_name: 'Updated Item' })
+      expect(item.item_name).toBe('Updated Item')
     })
 
     it('should delete carrying item', async () => {
@@ -466,7 +463,7 @@ describe('API Live Integration Tests', () => {
     it('should create communication item', async () => {
       const item = await createCommunicationItem({
         title: 'Test Notice',
-        content: 'Test content',
+        body: 'Test content',
       })
       expect(item.id).toBeDefined()
       itemId = item.id
@@ -496,8 +493,8 @@ describe('API Live Integration Tests', () => {
     it('should create guidance record', async () => {
       const r = await createGuidanceRecord({
         employee_id: EMPLOYEE_ID,
-        guidance_date: new Date().toISOString().slice(0, 10),
-        content: 'Test guidance',
+        title: 'Test Guidance',
+        content: 'Test guidance content',
       })
       expect(r.id).toBeDefined()
       recordId = r.id

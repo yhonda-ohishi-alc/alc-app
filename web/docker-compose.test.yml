@@ -51,3 +51,4 @@ services:
       GOOGLE_CLIENT_SECRET: dummy-google-client-secret
       OAUTH_STATE_SECRET: dummy-oauth-state-secret
       STORAGE_BACKEND: gcs
+      RUST_LOG: debug
