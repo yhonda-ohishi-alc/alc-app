@@ -357,14 +357,20 @@ describe('api', () => {
         expect(refresher.mock.calls.length).toBeLessThanOrEqual(2)
         return
       }
-      let callCount = 0
-      const refresher = vi.fn(async () => { callCount++ })
+      // refresher を手動制御にして、2番目のリクエストが refreshPromise を共有することを保証
+      let resolveRefresh!: () => void
+      const refresher = vi.fn(() => new Promise<void>(r => { resolveRefresh = r }))
       initApi('https://api.example.com', () => 'token', undefined, refresher)
 
-      stubResponse({ ok: false, status: 401, statusText: 'Unauthorized', text: () => Promise.resolve('') })
+      const res401 = { ok: false, status: 401, statusText: 'Unauthorized', text: () => Promise.resolve('') }
+      mockFetch.mockResolvedValue(res401)
 
       const p1 = getEmployees().catch(() => {})
       const p2 = getEmployees().catch(() => {})
+
+      // 両方が refreshPromise を await している状態で resolve
+      await vi.waitFor(() => { expect(refresher).toHaveBeenCalledTimes(1) })
+      resolveRefresh()
 
       await Promise.all([p1, p2])
 
