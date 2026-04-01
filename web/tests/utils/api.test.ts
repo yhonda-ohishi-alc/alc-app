@@ -223,6 +223,7 @@ describe('api', () => {
   // ============================================================
 
   describe('401 token refresh', () => {
+    beforeEach(() => { restoreNativeApis() })
     afterEach(async () => { await setupApi() })
 
     it('should refresh token and retry on 401', async () => {
@@ -955,18 +956,10 @@ describe('api', () => {
 
     it('should upload and return URL', async () => {
       if (isLive) {
-        // happy-dom の fetch は multipart を正しく送れないため、
-        // Node native fetch + undici FormData で直接 API を叩く
-        const fd = new FormData()
-        fd.append('file', new Blob(['photo'], { type: 'image/jpeg' }), 'face.jpg')
-        const res = await fetch(`${API_BASE}/api/upload/face-photo`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${jwtToken}` },
-          body: fd,
-        })
-        expect(res.ok).toBe(true)
-        const data = await res.json() as { url: string }
-        expect(typeof data.url).toBe('string')
+        // restoreNativeApis() で undici fetch/FormData/Blob に置換済み
+        const blob = new Blob(['photo'], { type: 'image/jpeg' })
+        const url = await uploadFacePhoto(blob)
+        expect(typeof url).toBe('string')
         return
       }
       stubResponse({
@@ -1011,16 +1004,9 @@ restoreNativeApis()
 
     it('should upload and return URL', async () => {
       if (isLive) {
-        const fd = new FormData()
-        fd.append('file', new Blob(['audio'], { type: 'audio/webm' }), 'report.webm')
-        const res = await fetch(`${API_BASE}/api/upload/report-audio`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${jwtToken}` },
-          body: fd,
-        })
-        expect(res.ok).toBe(true)
-        const data = await res.json() as { url: string }
-        expect(typeof data.url).toBe('string')
+        const blob = new Blob(['audio'], { type: 'audio/webm' })
+        const url = await uploadReportAudio(blob)
+        expect(typeof url).toBe('string')
         return
       }
       stubResponse({
@@ -1059,16 +1045,9 @@ restoreNativeApis()
 
     it('should upload and return URL', async () => {
       if (isLive) {
-        const fd = new FormData()
-        fd.append('file', new Blob(['video'], { type: 'video/webm' }), 'blow.webm')
-        const res = await fetch(`${API_BASE}/api/upload/blow-video`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${jwtToken}` },
-          body: fd,
-        })
-        expect(res.ok).toBe(true)
-        const data = await res.json() as { url: string }
-        expect(typeof data.url).toBe('string')
+        const blob = new Blob(['video'], { type: 'video/webm' })
+        const url = await uploadBlowVideo(blob)
+        expect(typeof url).toBe('string')
         return
       }
       stubResponse({
@@ -1177,12 +1156,18 @@ restoreNativeApis()
 
     it('should return object URL on success', async () => {
       if (isLive) {
-        // URL.createObjectURL doesn't exist in Node, so test the endpoint directly
-        const res = await fetch(`${API_BASE}/api/measurements/${SEED_MEASUREMENT_ID}/face-photo`, {
-          headers: { 'Authorization': `Bearer ${jwtToken}` },
-        })
-        // May be 200 (photo exists) or 500 (no photo stored yet)
-        expect(res.ok || res.status === 500).toBe(true)
+        // URL.createObjectURL は Node.js に存在しないのでスタブ追加
+        restoreNativeApis()
+        ;(globalThis.URL as any).createObjectURL = vi.fn((_blob: Blob) => 'blob:test/face')
+        try {
+          const result = await fetchFacePhoto(SEED_MEASUREMENT_ID)
+          // photo が存在する場合は blob URL、存在しない場合は null (R2 に未保存)
+          if (result !== null) {
+            expect(result).toBe('blob:test/face')
+          }
+        } finally {
+          delete (globalThis.URL as any).createObjectURL
+        }
         return
       }
       stubResponse({
