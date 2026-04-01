@@ -1,69 +1,127 @@
-# 100% カバレッジ達成済みファイル登録簿 (Lines 基準)
+# 100% カバレッジ達成済みファイル登録簿 (Lines + Branches 基準)
 # CI で coverage-summary.json と照合してリグレッション検出
 # 確認: npm run test:coverage → node scripts/check_coverage_100.mjs
+#
+# branches = true のファイルは Branches 100% もチェックする
 
 # --- composables ---
 
 [[files]]
 path = "app/composables/useAndroidLandscape.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useAuth.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useDemoMode.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useFaceAuth.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useFc1200Serial.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useFaceDetection.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useFaceSync.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useFingerprint.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useManagerAuth.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useNfcBridgeUpdate.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useNfcWebSocket.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useOfflineSync.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useBleGateway.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useCamera.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useScreenShare.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useSerialDeviceManager.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useTenkoAdmin.ts"
+branches = true
+
+[[files]]
+path = "app/composables/useTenkoKiosk.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useVideoRecorder.ts"
+branches = true
 
 [[files]]
 path = "app/composables/useWebRtc.ts"
+branches = true
 
 # --- middleware ---
 
 [[files]]
 path = "app/middleware/auth.global.ts"
+branches = true
 
 # --- utils ---
 
 [[files]]
+path = "app/utils/api.ts"
+branches = true
+
+[[files]]
 path = "app/utils/face-approval.ts"
+branches = true
 
 [[files]]
 path = "app/utils/face-db.ts"
+branches = true
 
 [[files]]
 path = "app/utils/fc1200.ts"
+branches = true
 
 [[files]]
 path = "app/utils/human-config.ts"
+branches = true
 
 [[files]]
 path = "app/utils/license.ts"
+branches = true
 
 [[files]]
 path = "app/utils/offline-queue.ts"
+branches = true
 
 [[files]]
 path = "app/utils/video-store.ts"
+branches = true

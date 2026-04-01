@@ -145,7 +145,7 @@ export function useBleGateway() {
   }
 
   function sendWsCommand(cmd: Record<string, string>): void {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (ws?.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify(cmd))
     console.log('[BLE-GW WS TX]', cmd)
   }
@@ -235,26 +235,26 @@ export function useBleGateway() {
       }
       catch (e) {
         console.warn('[BLE-GW] autoConnect attempt', attempt + 1, 'failed:', e)
-        // InvalidStateError = ポートがまだ開いている (前回の close 完了待ち)
-        if (e instanceof DOMException && e.name === 'InvalidStateError' && attempt < MAX_RETRIES - 1) {
-          await new Promise(r => setTimeout(r, RETRY_DELAY))
+        // InvalidStateError = ポートがまだ開いている (前回の close 完了待ち) → リトライ
+        if (e instanceof DOMException && e.name === 'InvalidStateError') {
+          if (attempt < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY))
           continue
         }
         await cleanup()
         return false
       }
     }
+    await cleanup()
     return false
   }
 
   async function startReadLoop(): Promise<void> {
-    if (!reader) return
     readLoopActive = true
     const decoder = new TextDecoder()
 
     try {
       while (readLoopActive) {
-        const { value, done } = await reader.read()
+        const { value, done } = await reader!.read()
         if (done) break
         if (!value) continue
 
@@ -272,9 +272,8 @@ export function useBleGateway() {
       }
     }
     catch {
-      if (readLoopActive) {
-        error.value = 'BLE ゲートウェイからの受信中にエラーが発生しました'
-      }
+      // readLoopActive は finally で false にするため、ここでは常に true
+      error.value = 'BLE ゲートウェイからの受信中にエラーが発生しました'
     }
     finally {
       readLoopActive = false

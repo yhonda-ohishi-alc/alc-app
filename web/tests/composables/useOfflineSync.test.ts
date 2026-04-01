@@ -18,6 +18,11 @@ vi.mock('~/utils/offline-queue', () => ({
   cleanupOld: vi.fn().mockResolvedValue(undefined),
 }))
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 import { useOfflineSync } from '~/composables/useOfflineSync'
 import { saveMeasurement, updateMeasurement } from '~/utils/api'
 import { enqueue, flush, getAllWithStatus, remove, clearAll, cleanupOld } from '~/utils/offline-queue'
@@ -258,6 +263,27 @@ describe('useOfflineSync', () => {
       const { setRetentionDays } = useOfflineSync()
       setRetentionDays(180)
       expect(localStorage.getItem('alc-retention-days')).toBe('180')
+    })
+  })
+
+  describe('SSR (isClient=false)', () => {
+    afterEach(() => {
+      envMock.isClient = true
+    })
+
+    it('getRetentionDays returns default when isClient=false', () => {
+      envMock.isClient = false
+      const { getRetentionDays } = useOfflineSync()
+      expect(getRetentionDays()).toBe(730)
+    })
+
+    it('setRetentionDays is no-op when isClient=false', () => {
+      envMock.isClient = false
+      localStorage.setItem('alc-retention-days', '365')
+      const { setRetentionDays } = useOfflineSync()
+      setRetentionDays(90)
+      // Should not have changed because setRetentionDays is a no-op
+      expect(localStorage.getItem('alc-retention-days')).toBe('365')
     })
   })
 

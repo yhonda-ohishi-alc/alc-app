@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useCamera } from '~/composables/useCamera'
+import { withSetup } from '../helpers/with-setup'
+
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
 
 describe('useCamera', () => {
   let mockGetUserMedia: ReturnType<typeof vi.fn>
@@ -182,15 +188,207 @@ describe('useCamera', () => {
       await cam.start()
       expect(cam.takeSnapshot()).toBeNull()
     })
+
+    it('正常: canvas に描画して blob 返却', async () => {
+      mockGetUserMedia.mockResolvedValue(createMockStream())
+      const cam = useCamera()
+      const mockVideo = {
+        srcObject: null,
+        play: vi.fn().mockResolvedValue(undefined),
+        videoWidth: 640,
+        videoHeight: 480,
+      } as any
+      cam.videoRef.value = mockVideo
+      await cam.start()
+
+      const fakeBlob = new Blob(['test'], { type: 'image/jpeg' })
+      const drawImage = vi.fn()
+      const mockCtx = { drawImage }
+      const origCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'canvas') {
+          const canvas = origCreateElement('canvas') as HTMLCanvasElement
+          vi.spyOn(canvas, 'getContext').mockReturnValue(mockCtx as any)
+          vi.spyOn(canvas, 'toBlob').mockImplementation((cb) => cb(fakeBlob))
+          return canvas
+        }
+        return origCreateElement(tag)
+      })
+
+      const result = cam.takeSnapshot()
+      expect(drawImage).toHaveBeenCalledWith(mockVideo, 0, 0)
+      expect(result).toBe(fakeBlob)
+
+      vi.restoreAllMocks()
+    })
+
+    it('getContext null → null 返却', async () => {
+      mockGetUserMedia.mockResolvedValue(createMockStream())
+      const cam = useCamera()
+      const mockVideo = {
+        srcObject: null,
+        play: vi.fn().mockResolvedValue(undefined),
+        videoWidth: 640,
+        videoHeight: 480,
+      } as any
+      cam.videoRef.value = mockVideo
+      await cam.start()
+
+      const origCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'canvas') {
+          const canvas = origCreateElement('canvas') as HTMLCanvasElement
+          vi.spyOn(canvas, 'getContext').mockReturnValue(null)
+          return canvas
+        }
+        return origCreateElement(tag)
+      })
+
+      expect(cam.takeSnapshot()).toBeNull()
+      vi.restoreAllMocks()
+    })
   })
 
   describe('takeSnapshotAsync', () => {
     it('videoRef なしで null', async () => {
       expect(await useCamera().takeSnapshotAsync()).toBeNull()
     })
+
+    it('正常: canvas に描画して blob を Promise で返却', async () => {
+      mockGetUserMedia.mockResolvedValue(createMockStream())
+      const cam = useCamera()
+      const mockVideo = {
+        srcObject: null,
+        play: vi.fn().mockResolvedValue(undefined),
+        videoWidth: 640,
+        videoHeight: 480,
+      } as any
+      cam.videoRef.value = mockVideo
+      await cam.start()
+
+      const fakeBlob = new Blob(['test'], { type: 'image/jpeg' })
+      const drawImage = vi.fn()
+      const mockCtx = { drawImage }
+      const origCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'canvas') {
+          const canvas = origCreateElement('canvas') as HTMLCanvasElement
+          vi.spyOn(canvas, 'getContext').mockReturnValue(mockCtx as any)
+          vi.spyOn(canvas, 'toBlob').mockImplementation((cb) => cb(fakeBlob))
+          return canvas
+        }
+        return origCreateElement(tag)
+      })
+
+      const result = await cam.takeSnapshotAsync()
+      expect(drawImage).toHaveBeenCalledWith(mockVideo, 0, 0)
+      expect(result).toBe(fakeBlob)
+
+      vi.restoreAllMocks()
+    })
+
+    it('getContext null → null 返却', async () => {
+      mockGetUserMedia.mockResolvedValue(createMockStream())
+      const cam = useCamera()
+      const mockVideo = {
+        srcObject: null,
+        play: vi.fn().mockResolvedValue(undefined),
+        videoWidth: 640,
+        videoHeight: 480,
+      } as any
+      cam.videoRef.value = mockVideo
+      await cam.start()
+
+      const origCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'canvas') {
+          const canvas = origCreateElement('canvas') as HTMLCanvasElement
+          vi.spyOn(canvas, 'getContext').mockReturnValue(null)
+          return canvas
+        }
+        return origCreateElement(tag)
+      })
+
+      expect(await cam.takeSnapshotAsync()).toBeNull()
+      vi.restoreAllMocks()
+    })
   })
 
-  it('switchToDummyCamera が window に存在する', () => {
-    expect(typeof (window as any).switchToDummyCamera).toBe('function')
+  describe('onUnmounted', () => {
+    it('unmount 時に stop() が呼ばれる', async () => {
+      mockGetUserMedia.mockResolvedValue(createMockStream())
+
+      const [cam, app] = withSetup(() => useCamera())
+      await cam.start()
+      expect(cam.isActive.value).toBe(true)
+
+      app.unmount()
+      expect(cam.isActive.value).toBe(false)
+      expect(mockTrackStop).toHaveBeenCalled()
+    })
+  })
+
+  describe('SSR (isClient=false)', () => {
+    it('switchToDummyCamera is not set when isClient=false', async () => {
+      delete (window as any).switchToDummyCamera
+      envMock.isClient = false
+      vi.resetModules()
+      await import('~/composables/useCamera')
+      expect((window as any).switchToDummyCamera).toBeUndefined()
+      // Restore: re-import with isClient=true to re-register the side effect
+      envMock.isClient = true
+      vi.resetModules()
+      await import('~/composables/useCamera')
+    })
+  })
+
+  describe('switchToDummyCamera', () => {
+    it('window に存在する', () => {
+      expect(typeof (window as any).switchToDummyCamera).toBe('function')
+    })
+
+    it('全 video 要素の srcObject を差し替え', () => {
+      const mockPlay = vi.fn()
+      const mockVideo1 = { srcObject: null, play: mockPlay } as any
+      const mockVideo2 = { srcObject: null, play: mockPlay } as any
+
+      vi.spyOn(document, 'querySelectorAll').mockReturnValue([mockVideo1, mockVideo2] as any)
+
+      const origCreateElement = document.createElement.bind(document)
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'canvas') {
+          const canvas = origCreateElement('canvas') as HTMLCanvasElement
+          const mockCtx = {
+            createLinearGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
+            fillRect: vi.fn(),
+            beginPath: vi.fn(),
+            moveTo: vi.fn(),
+            quadraticCurveTo: vi.fn(),
+            lineTo: vi.fn(),
+            closePath: vi.fn(),
+            fill: vi.fn(),
+            ellipse: vi.fn(),
+            arc: vi.fn(),
+            stroke: vi.fn(),
+            set fillStyle(_: any) {},
+            set strokeStyle(_: any) {},
+            set lineWidth(_: any) {},
+          }
+          vi.spyOn(canvas, 'getContext').mockReturnValue(mockCtx as any)
+          const fakeStream = { id: 'dummy' } as any
+          vi.spyOn(canvas, 'captureStream').mockReturnValue(fakeStream)
+          return canvas
+        }
+        return origCreateElement(tag)
+      })
+
+      ;(window as any).switchToDummyCamera()
+
+      expect(mockVideo1.srcObject).toBeTruthy()
+      expect(mockVideo2.srcObject).toBeTruthy()
+      expect(mockPlay).toHaveBeenCalledTimes(2)
+
+      vi.restoreAllMocks()
+    })
   })
 })

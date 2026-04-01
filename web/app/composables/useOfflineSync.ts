@@ -1,4 +1,5 @@
 import type { MeasurementResult } from '~/types'
+import { isClient } from '~/utils/env'
 import type { PendingMeasurement } from '~/utils/offline-queue'
 import { saveMeasurement, updateMeasurement } from '~/utils/api'
 import { enqueue, flush, getAllWithStatus, remove, clearAll, cleanupOld } from '~/utils/offline-queue'
@@ -74,18 +75,18 @@ export function useOfflineSync() {
 
   /** 保存期間設定を取得 */
   function getRetentionDays(): number {
-    if (!import.meta.client) return DEFAULT_RETENTION_DAYS
+    if (!isClient) return DEFAULT_RETENTION_DAYS
     const stored = localStorage.getItem('alc-retention-days')
     return stored ? parseInt(stored, 10) || DEFAULT_RETENTION_DAYS : DEFAULT_RETENTION_DAYS
   }
 
   /** 保存期間設定を変更 */
   function setRetentionDays(days: number) {
-    if (!import.meta.client) return
+    if (!isClient) return
     localStorage.setItem('alc-retention-days', String(days))
   }
 
-  if (import.meta.client) {
+  if (isClient) {
     isOnline.value = navigator.onLine
 
     const handleOnline = () => {

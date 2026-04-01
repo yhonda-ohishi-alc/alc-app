@@ -2,6 +2,7 @@
 /**
  * coverage_100.toml に登録されたファイルが 100% カバレッジを維持しているか検証する。
  * coverage/coverage-summary.json を読み込み、登録ファイルの lines.pct を確認。
+ * branches = true のファイルは branches.pct も 100% を要求する。
  *
  * Usage: node scripts/check_coverage_100.mjs
  * Exit 0: 全ファイル 100% or 登録ファイルなし
@@ -15,14 +16,23 @@ const ROOT = resolve(import.meta.dirname, '..')
 const TOML_PATH = join(ROOT, 'coverage_100.toml')
 const SUMMARY_PATH = join(ROOT, 'coverage', 'coverage-summary.json')
 
-// Parse coverage_100.toml — extract [[files]] path entries
+// Parse coverage_100.toml — extract [[files]] entries with optional branches flag
 function parseToml(content) {
-  const paths = []
+  const entries = []
+  let current = null
   for (const line of content.split('\n')) {
-    const match = line.match(/^path\s*=\s*"(.+)"/)
-    if (match) paths.push(match[1])
+    if (line.trim() === '[[files]]') {
+      current = { path: '', branches: false }
+      entries.push(current)
+      continue
+    }
+    if (!current) continue
+    const pathMatch = line.match(/^path\s*=\s*"(.+)"/)
+    if (pathMatch) { current.path = pathMatch[1]; continue }
+    const branchMatch = line.match(/^branches\s*=\s*true/)
+    if (branchMatch) current.branches = true
   }
-  return paths
+  return entries.filter(e => e.path)
 }
 
 // Main
@@ -41,8 +51,9 @@ if (!existsSync(SUMMARY_PATH)) {
 
 const summary = JSON.parse(readFileSync(SUMMARY_PATH, 'utf-8'))
 let failed = false
+let branchChecked = 0
 
-for (const filePath of registeredFiles) {
+for (const { path: filePath, branches: checkBranches } of registeredFiles) {
   // coverage-summary.json uses absolute paths as keys
   const absPath = resolve(ROOT, filePath)
   const entry = summary[absPath]
@@ -53,19 +64,27 @@ for (const filePath of registeredFiles) {
     continue
   }
 
-  const pct = entry.lines.pct
-  if (pct < 100) {
-    console.error(`FAIL: ${filePath} — lines ${pct}% (expected 100%)`)
+  const linesPct = entry.lines.pct
+  const branchPct = entry.branches.pct
+
+  if (linesPct < 100) {
+    console.error(`FAIL: ${filePath} — lines ${linesPct}% (expected 100%)`)
+    failed = true
+  } else if (checkBranches && branchPct < 100) {
+    console.error(`FAIL: ${filePath} — branches ${branchPct}% (expected 100%)`)
     failed = true
   } else {
-    console.log(`  OK: ${filePath} — 100%`)
+    const branchLabel = checkBranches ? ` branches ${branchPct}%` : ''
+    console.log(`  OK: ${filePath} — lines 100%${branchLabel}`)
   }
+
+  if (checkBranches) branchChecked++
 }
 
 if (failed) {
   console.error('\ncoverage_100 regression detected!')
   process.exit(1)
 } else {
-  console.log(`\nAll ${registeredFiles.length} registered files at 100%.`)
+  console.log(`\nAll ${registeredFiles.length} files at 100% lines (${branchChecked} also checked branches).`)
   process.exit(0)
 }

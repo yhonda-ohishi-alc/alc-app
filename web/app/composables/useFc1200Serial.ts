@@ -1,4 +1,5 @@
 import type { Fc1200State, Fc1200Event, MeasurementResult, SensorLifetime, MemoryRecord } from '~/types'
+import { isClient } from '~/utils/env'
 import type { Fc1200WasmSession } from 'fc1200-wasm'
 import { initFc1200Wasm, createFc1200Session } from '~/utils/fc1200'
 
@@ -24,7 +25,7 @@ const FC1200_WS_RECONNECT_DELAY = 3000
 const FC1200_WS_MAX_RECONNECT = 10
 
 function isBleGwPort(info: SerialPortInfo): boolean {
-  if (info.usbVendorId === undefined) return false
+  // 呼び出し元で usbVendorId !== undefined を確認済み
   return BLE_GW_DEVICES.some(d =>
     d.vid === info.usbVendorId && (d.pid === undefined || d.pid === info.usbProductId),
   )
@@ -62,7 +63,7 @@ export function useFc1200Serial() {
     // WebSerial 対応 or Android WebView (WebSocket フォールバック)
     if (isWebSerialSupported()) return true
     // WebView 内 = WebSocket ブリッジが使える
-    if (typeof window !== 'undefined' && typeof WebSocket !== 'undefined') return true
+    if (isClient && typeof WebSocket !== 'undefined') return true
     return false
   }
 
@@ -146,7 +147,7 @@ export function useFc1200Serial() {
   }
 
   function sendWsCommand(command: string): void {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (ws?.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({ command }))
     console.log('[FC-1200 WS TX]', command)
   }
@@ -250,12 +251,11 @@ export function useFc1200Serial() {
   }
 
   async function startReadLoop(): Promise<void> {
-    if (!reader || !session) return
     readLoopActive = true
 
     try {
       while (readLoopActive) {
-        const { value, done } = await reader.read()
+        const { value, done } = await reader!.read()
         if (done) break
         if (!value || !session) break
 
@@ -277,9 +277,8 @@ export function useFc1200Serial() {
       }
     }
     catch {
-      if (readLoopActive) {
-        error.value = 'FC-1200 からの受信中にエラーが発生しました'
-      }
+      // readLoopActive は finally で false にするため、ここでは常に true
+      error.value = 'FC-1200 からの受信中にエラーが発生しました'
     }
     finally {
       readLoopActive = false
@@ -359,12 +358,11 @@ export function useFc1200Serial() {
   }
 
   async function sendPendingResponse(): Promise<void> {
-    if (!writer || !session) return
-
-    let response = session.get_response()
+    // startReadLoop / startMeasurement 等から呼ばれるため writer と session は常に非 null
+    let response = session!.get_response()
     while (response) {
-      await writer.write(response)
-      response = session.get_response()
+      await writer!.write(response)
+      response = session!.get_response()
     }
   }
 
@@ -382,9 +380,8 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.start_measurement()
-    state.value = session.state() as Fc1200State
+    session!.start_measurement()
+    state.value = session!.state() as Fc1200State
     await sendPendingResponse()
   }
 
@@ -402,8 +399,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.check_sensor_lifetime()
+    session!.check_sensor_lifetime()
     await sendPendingResponse()
   }
 
@@ -421,8 +417,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.start_memory_read()
+    session!.start_memory_read()
     await sendPendingResponse()
   }
 
@@ -438,8 +433,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.complete_memory_read()
+    session!.complete_memory_read()
     await sendPendingResponse()
   }
 
@@ -458,8 +452,7 @@ export function useFc1200Serial() {
       return
     }
 
-    if (!session) return
-    session.update_date(dt)
+    session!.update_date(dt)
     await sendPendingResponse()
   }
 

@@ -69,6 +69,50 @@ describe('video-store', () => {
     expect(record).toBeUndefined()
   })
 
+  it('getPendingVideos は空のDBで空配列を返す', async () => {
+    const pending = await getPendingVideos()
+    expect(pending).toEqual([])
+  })
+
+  it('getPendingVideos は全てアップロード済みなら空配列', async () => {
+    const blob = new Blob(['data'])
+    await saveVideo('vid-1', blob, 'emp-001')
+    await saveVideo('vid-2', blob, 'emp-002')
+    await markVideoUploaded('vid-1')
+    await markVideoUploaded('vid-2')
+
+    const pending = await getPendingVideos()
+    expect(pending).toEqual([])
+  })
+
+  it('saveVideo は measurementId なしでも保存できる', async () => {
+    const blob = new Blob(['data'], { type: 'video/webm' })
+    await saveVideo('vid-no-meas', blob, 'emp-001')
+
+    const record = await getVideo('vid-no-meas')
+    expect(record).toBeDefined()
+    expect(record!.measurementId).toBeUndefined()
+  })
+
+  it('cleanupOldVideos は新しい録画のみなら 0 を返す', async () => {
+    const blob = new Blob(['data'])
+    await saveVideo('vid-new', blob, 'emp-001')
+
+    const deleted = await cleanupOldVideos(7)
+    expect(deleted).toBe(0)
+
+    expect(await getVideo('vid-new')).toBeDefined()
+  })
+
+  it('cleanupOldVideos は空のDBで 0 を返す', async () => {
+    const deleted = await cleanupOldVideos(7)
+    expect(deleted).toBe(0)
+  })
+
+  it('deleteVideo は存在しない ID でもエラーにならない', async () => {
+    await expect(deleteVideo('nonexistent')).resolves.not.toThrow()
+  })
+
   it('cleanupOldVideos は古い録画を削除', async () => {
     const blob = new Blob(['data'])
     await saveVideo('vid-old', blob, 'emp-001')

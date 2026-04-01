@@ -86,14 +86,55 @@ node scripts/check_coverage_100.mjs  # 100% リグレッション検出
 ### テストパターン
 
 - **pure utils**: モック不要、直接テスト (`license.ts`, `face-approval.ts`)
-- **composables**: `vi.mock('~/utils/api')` で API モック、`vi.resetModules()` でモジュールキャッシュリセット
-- **ブラウザ API** (WebSerial, BLE, NFC): `(navigator as any).serial = { ... }` でモック
+- **composables**: `vi.mock('~/utils/api')` で API モック
+- **ブラウザ API** (WebSerial, BLE, NFC): `Object.defineProperty(navigator, 'serial', { value: {...}, configurable: true })` でモック。`delete (navigator as any).serial` で削除
 - **Android bridge**: `(window as any).Android = { ... }` でモック
 - **Nuxt auto-import のモック**: `mockNuxtImport('useRoute', () => mockFn)` (`@nuxt/test-utils/runtime`)
 - **useState 共有ステート**: `beforeEach` でリセットすること (テスト間で値が共有される)
 - **onMounted テスト**: `withSetup(() => useMyComposable())` ヘルパーで Vue コンポーネントコンテキストを作成 → `onMounted` / `onUnmounted` が発火する (`tests/helpers/with-setup.ts`)
 - **`v8 ignore` 禁止** — 未カバーコードは `withSetup` / テスト追加 / 到達不能コード削除で対処。SSR ガード (`if (import.meta.client)`) は `onMounted` 内に移すか削除 (`onMounted` 自体が SSR で実行されない)
 - **到達不能ブランチ**: `if (!db.objectStoreNames.contains(...))` のような初回のみ通るガードは、条件分岐を消して常に実行する形にリファクタ
+
+### モジュールスコープ状態のテスト分離
+
+composable がモジュールスコープに `ref`, `let` 変数を持つ場合 (シングルトンパターン)、テスト間で状態がリークする。
+
+**対策: `vi.resetModules()` + dynamic import**
+```ts
+let useBleGateway: typeof import('~/composables/useBleGateway').useBleGateway
+
+beforeEach(async () => {
+  vi.clearAllMocks()
+  vi.resetModules()
+  const mod = await import('~/composables/useBleGateway')
+  useBleGateway = mod.useBleGateway
+})
+```
+
+**該当ファイル**: `useBleGateway`, `useFaceDetection`, `useFc1200Serial` (モジュールスコープに `ref`/`let` あり)
+
+### async composable テスト (Worker / WebSocket)
+
+`detect()` 等の async 関数内で `await createImageBitmap()` 後に `worker.postMessage` が呼ばれる場合、テスト側で **await tick** を挟んでからアサートする:
+
+```ts
+const detectPromise = fd.detect(video)
+await new Promise(r => setTimeout(r, 0))  // createImageBitmap の await を通す
+expect(w.postMessage).toHaveBeenLastCalledWith(...)
+w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
+await detectPromise
+```
+
+### vi.useFakeTimers の注意
+
+- happy-dom 環境では `vi.useFakeTimers()` が `navigator` や `WebSocket` と干渉する場合がある
+- **必ず `toFake` オプション**で必要なタイマーだけ指定: `vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] })`
+- `afterEach` で必ず `vi.useRealTimers()` を呼ぶ
+- async 関数 + fake timers の組み合わせはタイムアウトしやすい (reconnect ループ等)
+
+### disconnectWebSocket バグパターン
+
+`ws.close()` は MockWebSocket で同期的に `onclose` を呼ぶ。`onclose` 内で `transport.value = null` が設定されるため、`ws.close()` **後**に `if (transport.value === 'websocket')` をチェックすると false になる。**チェックを `ws.close()` 前に行う**こと。
 
 ### 型同期 (ts-rs)
 
@@ -107,6 +148,30 @@ bash scripts/sync-types.sh
 - `types/generated/` は git 管理 (CI で差分チェック可能)
 - `types/index.ts` から `Backend` namespace で参照: `import { Backend } from '~/types'`
 - フロント固有型 (`FaceAuthResult`, `Fc1200State` 等) は `types/index.ts` に手動定義
+
+### API テスト共通化方針 (mock / live 両対応)
+
+`tests/utils/api.test.ts` は **1つのテストコードで mock と live (実 API コンテナ) の両方で動く**設計。
+
+**原則**:
+- テストデータは `tests/helpers/api-test-data.ts` に一元管理。スキーマ変更時はここだけ修正
+- `tests/helpers/api-test-env.ts` で mock/live 切り替え (`API_BASE_URL` 環境変数の有無で判定)
+- `stubOk(data)` / `stub204()` / `stubResponse(res)`: mock 時は mockFetch にセット、live 時は no-op
+- `assertMock(() => { ... })`: mock 専用アサーション (mockFetch.mock.calls 検証等)。live 時は skip
+- テストに渡す ID は実在する UUID (`api-test-data.ts` の `TEST_EMPLOYEE_ID` 等)。`'s1'`, `'e1'` のような fake ID は禁止 (live で 400 になる)
+- リクエストボディは実 API が受け付ける正しいフィールド名・値を使う (`api-test-data.ts` から import)
+- テストファイルを mock 用 / live 用に分けない。1ファイルで完結させる
+- `api-live.test.ts` のような別ファイルは作らない
+
+**実行方法**:
+```bash
+npm test                                          # mock モード (DB 不要、高速)
+docker compose -f docker-compose.test.yml up -d   # API + DB コンテナ起動
+API_BASE_URL=http://localhost:18080 npm test       # live モード (実 API)
+docker compose -f docker-compose.test.yml down -v  # コンテナ停止
+```
+
+**コンテナ**: `docker-compose.test.yml` で GHCR の `rust-alc-api:latest` + PostgreSQL を起動。seed データは `tests/fixtures/seed.sql`。
 
 ### CI
 

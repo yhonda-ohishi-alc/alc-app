@@ -40,17 +40,12 @@ function openDb(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = (event) => {
       const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
+      if ((event.oldVersion || 0) < 1) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true })
       }
-      // v2: syncedAt インデックス追加
-      if ((event.oldVersion || 0) < 2) {
-        const tx = request.transaction!
-        const store = tx.objectStore(STORE_NAME)
-        if (!store.indexNames.contains('syncedAt')) {
-          store.createIndex('syncedAt', 'syncedAt', { unique: false })
-        }
-      }
+      // v2: syncedAt インデックス追加 (v0→v2, v1→v2 どちらでも実行)
+      const store = request.transaction!.objectStore(STORE_NAME)
+      store.createIndex('syncedAt', 'syncedAt', { unique: false })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)

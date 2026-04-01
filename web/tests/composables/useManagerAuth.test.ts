@@ -27,6 +27,15 @@ describe('useManagerAuth', () => {
     expect(authenticatedManagerId.value).toBeNull()
   })
 
+  it('setManagerId(null) は Android bridge を呼ばない', () => {
+    const mockSetManagerId = vi.fn()
+    ;(window as any).Android = { setManagerId: mockSetManagerId }
+
+    const { setManagerId } = useManagerAuth()
+    setManagerId(null)
+    expect(mockSetManagerId).not.toHaveBeenCalled()
+  })
+
   it('Android bridge があれば setManagerId を呼ぶ', () => {
     const mockSetManagerId = vi.fn()
     ;(window as any).Android = { setManagerId: mockSetManagerId }

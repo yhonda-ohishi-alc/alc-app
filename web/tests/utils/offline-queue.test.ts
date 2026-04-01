@@ -277,6 +277,33 @@ describe('offline-queue', () => {
       expect(mockMarkUploaded).toHaveBeenCalledWith('vid-1')
     })
 
+    it('should skip video upload when video record not found', async () => {
+      const { getVideo } = await import('~/utils/video-store')
+      const { uploadBlowVideo } = await import('~/utils/api')
+
+      vi.mocked(getVideo).mockResolvedValue(undefined)
+
+      await enqueue(createResult(), undefined, undefined, undefined, 'vid-missing')
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(vi.mocked(uploadBlowVideo)).not.toHaveBeenCalled()
+    })
+
+    it('should skip video upload when videoStoreId is undefined', async () => {
+      const { getVideo } = await import('~/utils/video-store')
+
+      await enqueue(createResult()) // no videoStoreId
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      await flush(saveFn)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(vi.mocked(getVideo)).not.toHaveBeenCalled()
+    })
+
     it('should not crash when video upload fails', async () => {
       const { getVideo } = await import('~/utils/video-store')
       vi.mocked(getVideo).mockRejectedValue(new Error('video error'))
@@ -315,6 +342,42 @@ describe('offline-queue', () => {
 
       await new Promise(resolve => setTimeout(resolve, 50))
       expect(vi.mocked(uploadBlowVideo)).not.toHaveBeenCalled()
+    })
+
+    it('should not crash when updateFn rejects during video url update', async () => {
+      const { getVideo, markVideoUploaded } = await import('~/utils/video-store')
+      const { uploadBlowVideo } = await import('~/utils/api')
+
+      vi.mocked(getVideo).mockResolvedValue({
+        id: 'vid-err',
+        videoBlob: new Blob(['data']),
+        employeeId: 'EMP001',
+        createdAt: new Date().toISOString(),
+      })
+      vi.mocked(uploadBlowVideo).mockResolvedValue('https://example.com/v.webm')
+      vi.mocked(markVideoUploaded).mockResolvedValue(undefined)
+
+      await enqueue(
+        createResult({ facePhotoUrl: 'https://photo.jpg' }),
+        undefined,
+        'meas-err-1',
+        undefined,
+        'vid-err',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      // updateFn succeeds for measurement completion but rejects for video_url update
+      const updateFn = vi.fn()
+        .mockResolvedValueOnce(undefined) // measurement completion succeeds
+        .mockRejectedValueOnce(new Error('update failed')) // video_url update fails
+
+      const result = await flush(saveFn, updateFn)
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // flush itself should succeed, video update error is caught
+      expect(result).toEqual({ sent: 1, failed: 0 })
+      // markVideoUploaded should still be called because uploadBlowVideo succeeded
+      expect(vi.mocked(markVideoUploaded)).toHaveBeenCalledWith('vid-err')
     })
 
     it('should call updateFn for video url when measurementId is present', async () => {
@@ -447,6 +510,266 @@ describe('offline-queue', () => {
       const size = await estimateDbSize()
       expect(size.recordCount).toBe(2)
       expect(size.totalBytes).toBeGreaterThan(0)
+    })
+  })
+
+  describe('enqueue with facePhotoBlob (base64 conversion)', () => {
+    it('should convert blob to base64 data URL', async () => {
+      const imageData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]) // JPEG magic bytes
+      const blob = new Blob([imageData], { type: 'image/jpeg' })
+      const id = await enqueue(createResult(), blob)
+      const items = await getAllWithStatus()
+      const entry = items.find(i => i.id === id)!
+      expect(entry.facePhotoBase64).toBeTruthy()
+      expect(entry.facePhotoBase64).toMatch(/^data:/)
+      expect(entry.facePhotoBase64).toContain('base64,')
+    })
+
+    it('should store undefined facePhotoBase64 when no blob provided', async () => {
+      await enqueue(createResult())
+      const items = await getAll()
+      expect(items[0].facePhotoBase64).toBeUndefined()
+    })
+  })
+
+  describe('incrementRetry (via flush failure)', () => {
+    it('should increment retryCount for existing entry on flush error', async () => {
+      await enqueue(createResult())
+      const saveFn = vi.fn().mockRejectedValue(new Error('network'))
+
+      await flush(saveFn)
+      let items = await getAll()
+      expect(items[0].retryCount).toBe(1)
+
+      await flush(saveFn)
+      items = await getAll()
+      expect(items[0].retryCount).toBe(2)
+
+      await flush(saveFn)
+      items = await getAll()
+      expect(items[0].retryCount).toBe(3)
+    })
+  })
+
+  describe('flush with non-existent entry (incrementRetry no-op)', () => {
+    it('should not crash when incrementRetry targets a deleted entry', async () => {
+      // Enqueue then delete, but simulate flush failure to trigger incrementRetry on non-existent id
+      const id = await enqueue(createResult())
+      await remove(id)
+
+      // Manually insert an entry with a specific id that we'll delete mid-flight
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('alc-offline-db', 2)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('pending-measurements', 'readwrite')
+        tx.objectStore('pending-measurements').add({
+          id: 99999,
+          result: {
+            employeeId: 'EMP-GHOST',
+            alcoholValue: 0.0,
+            resultType: 'normal' as const,
+            deviceUseCount: 100,
+            measuredAt: '2026-01-15T08:00:00.000Z',
+          },
+          createdAt: new Date().toISOString(),
+          retryCount: 0,
+        })
+        tx.oncomplete = () => { db.close(); resolve() }
+        tx.onerror = () => reject(tx.error)
+      })
+
+      // Delete the entry before flush tries to incrementRetry
+      const saveFn = vi.fn().mockImplementation(async () => {
+        // Delete the entry while flush is processing
+        await remove(99999)
+        throw new Error('fail')
+      })
+      const result = await flush(saveFn)
+      // incrementRetry is called on id 99999 but the entry is already gone
+      // Should not crash
+      expect(result).toEqual({ sent: 0, failed: 1 })
+    })
+  })
+
+  describe('flush with facePhotoBase64 (base64-to-blob conversion)', () => {
+    it('should convert facePhotoBase64 back to Blob in traditional POST path', async () => {
+      // Enqueue with a real blob so facePhotoBase64 is stored
+      const blob = new Blob(['photo-data'], { type: 'image/jpeg' })
+      await enqueue(createResult(), blob) // no activeMeasurementId → traditional POST path
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn)
+
+      expect(result).toEqual({ sent: 1, failed: 0 })
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      const passedBlob = saveFn.mock.calls[0][1]
+      expect(passedBlob).toBeInstanceOf(Blob)
+      expect(passedBlob.type).toBe('image/jpeg')
+    })
+
+    it('should convert facePhotoBase64 to blob and fallback to saveFn when activeMeasurementId + no facePhotoUrl', async () => {
+      const blob = new Blob(['face-photo'], { type: 'image/png' })
+      await enqueue(createResult(), blob, 'meas-active-1') // activeMeasurementId but no facePhotoUrl
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      // Should fallback to saveFn (not updateFn) because no facePhotoUrl
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      expect(updateFn).not.toHaveBeenCalled()
+      expect(result).toEqual({ sent: 1, failed: 0 })
+
+      // Verify the blob was reconstructed and passed
+      const passedBlob = saveFn.mock.calls[0][1]
+      expect(passedBlob).toBeInstanceOf(Blob)
+    })
+
+    it('should use updateFn when activeMeasurementId + facePhotoBase64 + facePhotoUrl present', async () => {
+      const blob = new Blob(['photo'], { type: 'image/jpeg' })
+      await enqueue(
+        createResult({ facePhotoUrl: 'https://example.com/face.jpg' }),
+        blob,
+        'meas-with-url',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      // Should use updateFn because facePhotoUrl is available
+      expect(updateFn).toHaveBeenCalledTimes(1)
+      expect(saveFn).not.toHaveBeenCalled()
+      expect(result).toEqual({ sent: 1, failed: 0 })
+      expect(updateFn.mock.calls[0][1]).toMatchObject({
+        face_photo_url: 'https://example.com/face.jpg',
+      })
+    })
+
+    it('should handle malformed base64 string without comma (fallback branches in base64ToBlob)', async () => {
+      // First, create the DB by enqueuing a dummy entry, then remove it
+      const dummyId = await enqueue(createResult({ employeeId: 'DUMMY' }))
+      await remove(dummyId)
+
+      // Now directly insert an entry with a malformed facePhotoBase64 (no comma separator)
+      // This triggers the || '' fallback branches in base64ToBlob (L73-75)
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('alc-offline-db', 2)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('pending-measurements', 'readwrite')
+        tx.objectStore('pending-measurements').add({
+          result: {
+            employeeId: 'EMP001',
+            alcoholValue: 0.0,
+            resultType: 'normal' as const,
+            deviceUseCount: 100,
+            measuredAt: '2026-01-15T08:00:00.000Z',
+          },
+          facePhotoBase64: ',', // Split produces ['', ''] → parts[0] is '' → || '' fires, parts[1] is '' → || '' fires
+          createdAt: new Date().toISOString(),
+          retryCount: 0,
+        })
+        tx.oncomplete = () => { db.close(); resolve() }
+        tx.onerror = () => reject(tx.error)
+      })
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn)
+
+      expect(result).toEqual({ sent: 1, failed: 0 })
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      // The blob should still be created (empty data, default mime)
+      const passedBlob = saveFn.mock.calls[0][1]
+      expect(passedBlob).toBeInstanceOf(Blob)
+      expect(passedBlob.type).toBe('image/jpeg') // fallback mime
+    })
+
+    it('should handle base64 string with non-standard header (mime fallback)', async () => {
+      // First, create the DB
+      const dummyId = await enqueue(createResult({ employeeId: 'DUMMY' }))
+      await remove(dummyId)
+
+      // Insert entry with base64 that has a comma but no mime pattern in header
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('alc-offline-db', 2)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('pending-measurements', 'readwrite')
+        tx.objectStore('pending-measurements').add({
+          result: {
+            employeeId: 'EMP002',
+            alcoholValue: 0.0,
+            resultType: 'normal' as const,
+            deviceUseCount: 100,
+            measuredAt: '2026-01-15T08:00:00.000Z',
+          },
+          facePhotoBase64: 'invalid-header,' + btoa('test'), // header has no :mime; pattern
+          createdAt: new Date().toISOString(),
+          retryCount: 0,
+        })
+        tx.oncomplete = () => { db.close(); resolve() }
+        tx.onerror = () => reject(tx.error)
+      })
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn)
+
+      expect(result).toEqual({ sent: 1, failed: 0 })
+      const passedBlob = saveFn.mock.calls[0][1]
+      expect(passedBlob).toBeInstanceOf(Blob)
+      expect(passedBlob.type).toBe('image/jpeg') // mime fallback
+    })
+
+    it('should handle medicalMeasuredAt in fallback saveFn path with activeMeasurementId', async () => {
+      const blob = new Blob(['photo'], { type: 'image/jpeg' })
+      await enqueue(
+        createResult({ medicalMeasuredAt: new Date('2026-03-15T10:00:00Z') }),
+        blob,
+        'meas-medical',
+      )
+
+      const saveFn = vi.fn().mockResolvedValue(undefined)
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      const result = await flush(saveFn, updateFn)
+
+      expect(saveFn).toHaveBeenCalledTimes(1)
+      const savedResult = saveFn.mock.calls[0][0]
+      expect(savedResult.medicalMeasuredAt).toBeInstanceOf(Date)
+      expect(savedResult.medicalMeasuredAt.toISOString()).toBe('2026-03-15T10:00:00.000Z')
+      expect(result).toEqual({ sent: 1, failed: 0 })
+    })
+  })
+
+  describe('v1→v2 migration (oldVersion=1)', () => {
+    it('skips createObjectStore and adds syncedAt index', async () => {
+      // First, manually create the DB at version 1 (store only, no index)
+      await new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('alc-offline-db', 1)
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore('pending-measurements', { keyPath: 'id', autoIncrement: true })
+        }
+        req.onsuccess = () => { req.result.close(); resolve() }
+        req.onerror = () => reject(req.error)
+      })
+
+      // Now the app's openDb() opens at version 2, triggering upgrade from 1→2
+      // This exercises: (oldVersion < 1) = false branch
+      const items = await getAll()
+      expect(items).toEqual([])
+
+      // Verify the index was created by enqueueing + marking synced
+      const id = await enqueue(createResult(), undefined, undefined, new Date().toISOString())
+      const all = await getAllWithStatus()
+      expect(all).toHaveLength(1)
+      expect(all[0].syncedAt).toBeTruthy()
     })
   })
 

@@ -125,6 +125,23 @@ describe('useFaceDetection', () => {
       expect(workerInstances).toHaveLength(1) // no new worker
     })
 
+    it('ignores unknown message type during init', async () => {
+      const fd = useFaceDetection()
+
+      const loadPromise = fd.load()
+      const w = workerInstances[0]!
+
+      // Simulate an unknown message type — neither 'ready' nor 'error'
+      w.simulateMessage({ type: 'unknown' })
+
+      // The promise should still be pending (not resolved or rejected)
+      // Now resolve it properly with 'ready'
+      w.simulateMessage({ type: 'ready' })
+      await loadPromise
+
+      expect(fd.isReady.value).toBe(true)
+    })
+
     it('skips if already loading (isLoading guard)', async () => {
       const fd = useFaceDetection()
 
@@ -212,7 +229,7 @@ describe('useFaceDetection', () => {
       expect(fd.latestEmbedding.value).toEqual([0.1, 0.2, 0.3])
     })
 
-    it.skip('does NOT send detect-full once embedding is acquired', async () => {
+    it('does NOT send detect-full once embedding is acquired', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -229,6 +246,7 @@ describe('useFaceDetection', () => {
 
       // Frame 4: full → acquire embedding
       const p4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       w.simulateMessage({ type: 'result-full', face: [{ embedding: [1, 2] }], gesture: {} })
       await p4
       expect(fd.latestEmbedding.value).toEqual([1, 2])
@@ -236,6 +254,7 @@ describe('useFaceDetection', () => {
       // Frame 5-8: should all be detect-lite because embedding is now set
       for (let i = 0; i < 4; i++) {
         const p = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         expect(w.postMessage).toHaveBeenLastCalledWith(
           expect.objectContaining({ type: 'detect-lite' }),
           expect.any(Array),
@@ -245,7 +264,7 @@ describe('useFaceDetection', () => {
       }
     })
 
-    it.skip('result-full without embedding does not set latestEmbedding', async () => {
+    it('result-full without embedding does not set latestEmbedding', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -261,12 +280,13 @@ describe('useFaceDetection', () => {
 
       // Frame 4 full, but no embedding in face
       const p4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       w.simulateMessage({ type: 'result-full', face: [{}], gesture: {} })
       await p4
       expect(fd.latestEmbedding.value).toBeNull()
     })
 
-    it.skip('result-full with empty embedding array does not set latestEmbedding', async () => {
+    it('result-full with empty embedding array does not set latestEmbedding', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -280,12 +300,13 @@ describe('useFaceDetection', () => {
       }
 
       const p4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       w.simulateMessage({ type: 'result-full', face: [{ embedding: [] }], gesture: {} })
       await p4
       expect(fd.latestEmbedding.value).toBeNull()
     })
 
-    it.skip('result-full with no face array does not set latestEmbedding', async () => {
+    it('result-full with no face array does not set latestEmbedding', async () => {
       const fd = useFaceDetection()
       await loadWorker(fd)
       const w = workerInstances[0]!
@@ -299,6 +320,7 @@ describe('useFaceDetection', () => {
       }
 
       const p4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       w.simulateMessage({ type: 'result-full', face: undefined, gesture: {} })
       await p4
       expect(fd.latestEmbedding.value).toBeNull()
@@ -323,7 +345,7 @@ describe('useFaceDetection', () => {
   })
 
   describe('terminateAll', () => {
-    it.skip('terminates worker and resets all state', async () => {
+    it('terminates worker and resets all state', async () => {
       const fd = useFaceDetection()
 
       // Load first
@@ -337,10 +359,12 @@ describe('useFaceDetection', () => {
       const video = {} as HTMLVideoElement
       for (let i = 0; i < 3; i++) {
         const dp = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         w.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await dp
       }
       const dp4 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       w.simulateMessage({ type: 'result-full', face: [{ embedding: [1] }], gesture: {} })
       await dp4
       expect(fd.latestEmbedding.value).toEqual([1])
@@ -360,7 +384,7 @@ describe('useFaceDetection', () => {
       expect(fd.latestEmbedding.value).toBeNull()
     })
 
-    it.skip('resets frameCounter so detect-full cycle starts over after reload', async () => {
+    it('resets frameCounter so detect-full cycle starts over after reload', async () => {
       const fd = useFaceDetection()
 
       // Load and do 3 frames
@@ -371,6 +395,7 @@ describe('useFaceDetection', () => {
       const video = {} as HTMLVideoElement
       for (let i = 0; i < 3; i++) {
         const dp = fd.detect(video)
+        await new Promise(r => setTimeout(r, 0))
         workerInstances[0]!.simulateMessage({ type: 'result-lite', face: [], gesture: {} })
         await dp
       }
@@ -386,6 +411,7 @@ describe('useFaceDetection', () => {
 
       // Frame 1 after reload: should be detect-lite (frameCounter reset to 0, now 1)
       const dp1 = fd.detect(video)
+      await new Promise(r => setTimeout(r, 0))
       expect(w2.postMessage).toHaveBeenLastCalledWith(
         expect.objectContaining({ type: 'detect-lite' }),
         expect.any(Array),

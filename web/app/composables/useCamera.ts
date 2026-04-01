@@ -1,6 +1,8 @@
+import { isClient } from '~/utils/env'
+
 // コンソールから window.switchToDummyCamera() で全videoをシルエット映像に差し替え
 // マニュアル用スクリーンショット撮影時に使用
-if (import.meta.client) {
+if (isClient) {
   (window as any).switchToDummyCamera = () => {
     const canvas = document.createElement('canvas')
     canvas.width = 720

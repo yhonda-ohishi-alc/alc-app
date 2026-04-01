@@ -146,6 +146,9 @@ describe('useTenkoKiosk', () => {
       expect(k.stepKeys.value).not.toContain('medical')
       expect(k.stepKeys.value).not.toContain('self_declaration')
       expect(k.stepKeys.value).not.toContain('daily_inspection')
+      // stepLabels もカバー (post_operation ブランチ)
+      expect(k.stepLabels.value).toContain('運行報告')
+      expect(k.stepLabels.value).not.toContain('日常点検')
     })
 
     it('remoteMode では schedule_select / 予定選択 がない', () => {
@@ -185,6 +188,21 @@ describe('useTenkoKiosk', () => {
       const k = useTenkoKiosk()
       k.step.value = 'cancelled'
       expect(k.currentStepIndex.value).toBe(k.stepKeys.value.length - 1)
+    })
+
+    it('未知のステップ値で idx=-1 (fall-through → -1 返却)', () => {
+      const k = useTenkoKiosk()
+      ;(k.step as any).value = 'unknown_step'
+      expect(k.currentStepIndex.value).toBe(-1)
+    })
+
+    it('safety_result + post_operation (self_declaration not in stepKeys) → 0', () => {
+      const k = useTenkoKiosk()
+      k.selectedSchedule.value = makeSchedule({ tenko_type: 'post_operation' })
+      k.step.value = 'safety_result'
+      // post_operation stepKeys doesn't include 'self_declaration'
+      // indexOf('self_declaration') returns -1, so -1 + 1 = 0
+      expect(k.currentStepIndex.value).toBe(0)
     })
   })
 
@@ -827,6 +845,14 @@ describe('useTenkoKiosk', () => {
       expect(k.step.value).toBe('interrupted')
     })
 
+    it('cancelled → cancelled (_advanceByStatus 経由)', async () => {
+      vi.mocked(confirmInstruction).mockResolvedValue(makeSession({ status: 'cancelled' }))
+      const k = useTenkoKiosk()
+      k.session.value = makeSession()
+      await k.onInstructionConfirm()
+      expect(k.step.value).toBe('cancelled')
+    })
+
     it('unknown status → step 変更なし', async () => {
       const sess = makeSession({ status: 'alcohol_testing' as any })
       vi.mocked(submitMedical).mockResolvedValue(sess)
@@ -838,6 +864,19 @@ describe('useTenkoKiosk', () => {
       await k.onMedicalSubmit({ temperature: 36.5 })
       // default case does nothing, so step stays
       expect(k.step.value).toBe('medical')
+    })
+
+    it('safety_judgment_pending + fail via onMedicalSubmit → interrupted', async () => {
+      const sj: SafetyJudgment = { status: 'fail', failed_items: ['temperature'], judged_at: '2026-03-31T00:00:00Z', medical_diffs: null }
+      const sess = makeSession({ status: 'safety_judgment_pending', safety_judgment: sj })
+      vi.mocked(submitMedical).mockResolvedValue(sess)
+
+      const k = useTenkoKiosk()
+      k.session.value = makeSession()
+
+      await k.onMedicalSubmit({ temperature: 39.0 })
+      expect(k.session.value?.safety_judgment?.status).toBe('fail')
+      expect(k.step.value).toBe('interrupted')
     })
   })
 

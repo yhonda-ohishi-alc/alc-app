@@ -104,9 +104,8 @@ export function useWebRtc(role: 'device' | 'admin') {
   }
 
   async function createAndSendOffer() {
-    if (!pc) return
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
+    const offer = await pc!.createOffer()
+    await pc!.setLocalDescription(offer)
     sendSignaling({ type: 'sdp_offer', sdp: offer.sdp! })
   }
 

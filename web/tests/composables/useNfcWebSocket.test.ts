@@ -50,6 +50,11 @@ function lastWs(): MockWebSocket {
   return wsInstances[wsInstances.length - 1]!
 }
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 describe('useNfcWebSocket', () => {
   let originalWebSocket: typeof WebSocket
   let useNfcWebSocket: typeof import('~/composables/useNfcWebSocket').useNfcWebSocket
@@ -378,13 +383,26 @@ describe('useNfcWebSocket', () => {
       expect(wsInstances).toHaveLength(1)
     })
 
-    it.skip('stops reconnecting after MAX_RECONNECT_ATTEMPTS (10)', async () => {
+    it('stops reconnecting after MAX_RECONNECT_ATTEMPTS (10)', async () => {
       let count = 0
+      // Plain object mock: only fires onclose, never onopen
+      // (MockWebSocket auto-fires onopen which resets reconnectAttempts)
       const AlwaysFailWs = function (url: string) {
         count++
-        const ws = new MockWebSocket(url)
+        const ws: any = {
+          readyState: 0,
+          url,
+          onopen: null,
+          onclose: null,
+          onmessage: null,
+          onerror: null,
+          close() {
+            this.readyState = 3
+            this.onclose?.(new CloseEvent('close'))
+          },
+        }
         setTimeout(() => {
-          ws.readyState = MockWebSocket.CLOSED
+          ws.readyState = 3
           ws.onclose?.(new CloseEvent('close'))
         }, 1)
         return ws
@@ -441,6 +459,14 @@ describe('useNfcWebSocket', () => {
       expect(cb).not.toHaveBeenCalled()
     })
 
+    it('onRead unsubscribe called twice is safe (idx < 0)', () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onRead(cb)
+      unsub()
+      unsub() // second call — idx is -1, splice should not run
+    })
+
     it('onLicenseRead unregister removes callback', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const cb = vi.fn()
@@ -469,6 +495,14 @@ describe('useNfcWebSocket', () => {
 
       lastWs().simulateMessage(JSON.stringify({ type: 'nfc_error', error: 'test' }))
       expect(cb).not.toHaveBeenCalled()
+    })
+
+    it('onError unsubscribe called twice is safe (idx < 0)', () => {
+      const cb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onError(cb)
+      unsub()
+      unsub() // second call — idx is -1
     })
   })
 
@@ -513,6 +547,162 @@ describe('useNfcWebSocket', () => {
       expect(nfc.isConnected.value).toBe(false)
       expect(removeListenerSpy).toHaveBeenCalledWith('bridge-restarted', expect.any(Function))
       removeListenerSpy.mockRestore()
+    })
+  })
+
+  // --- SSR (isClient=false) ---
+
+  describe('SSR (isClient=false)', () => {
+    it('no event listener is registered when isClient=false', async () => {
+      envMock.isClient = false
+      vi.resetModules()
+      const addSpy = vi.spyOn(window, 'addEventListener')
+
+      const mod = await import('~/composables/useNfcWebSocket')
+      const nfc = mod.useNfcWebSocket()
+
+      const bridgeCalls = addSpy.mock.calls.filter(([name]) => name === 'bridge-restarted')
+      expect(bridgeCalls).toHaveLength(0)
+
+      addSpy.mockRestore()
+      envMock.isClient = true
+    })
+
+    it('onUnmounted skips removeEventListener when isClient=false', async () => {
+      envMock.isClient = false
+      vi.resetModules()
+      const mod = await import('~/composables/useNfcWebSocket')
+      const removeSpy = vi.spyOn(window, 'removeEventListener')
+
+      const [, app] = withSetup(() => mod.useNfcWebSocket())
+      app.unmount()
+
+      const bridgeCalls = removeSpy.mock.calls.filter(([name]) => name === 'bridge-restarted')
+      expect(bridgeCalls).toHaveLength(0)
+
+      removeSpy.mockRestore()
+      envMock.isClient = true
+    })
+  })
+
+  // --- onLicenseRead callback ---
+
+  describe('onLicenseRead', () => {
+    it('registers and fires license read callback', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const licenseCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onLicenseRead(licenseCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      const msg = {
+        type: 'nfc_license_read',
+        card_id: '0123456789ABCDEFGHIJKLMNOP',
+        card_type: 'driver_license',
+        atr: 'XX',
+        expiry_date: '2030-01-01',
+      }
+      lastWs().simulateMessage(JSON.stringify(msg))
+
+      expect(licenseCb).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'nfc_license_read',
+        card_id: '0123456789ABCDEFGHIJKLMNOP',
+      }))
+      consoleSpy.mockRestore()
+    })
+
+    it('unsubscribe removes the license read callback', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const licenseCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onLicenseRead(licenseCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      unsub()
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: 'ABCD',
+        card_type: 'other',
+        atr: 'XX',
+      }))
+
+      expect(licenseCb).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('unsubscribe called twice is safe (idx < 0)', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const licenseCb = vi.fn()
+      const nfc = useNfcWebSocket()
+      const unsub = nfc.onLicenseRead(licenseCb)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      unsub()
+      unsub() // second call — idx will be -1, splice should not be called
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: 'X',
+        card_type: 'other',
+        atr: 'XX',
+      }))
+
+      expect(licenseCb).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('multiple licenseRead callbacks all fire', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const cb1 = vi.fn()
+      const cb2 = vi.fn()
+      const nfc = useNfcWebSocket()
+      nfc.onLicenseRead(cb1)
+      nfc.onLicenseRead(cb2)
+      nfc.connect()
+      await vi.advanceTimersByTimeAsync(10)
+
+      lastWs().simulateMessage(JSON.stringify({
+        type: 'nfc_license_read',
+        card_id: 'TESTCARD',
+        card_type: 'other',
+        atr: 'XX',
+      }))
+
+      expect(cb1).toHaveBeenCalled()
+      expect(cb2).toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+  })
+
+  // --- bridge-restarted bridgeRestartHandler directly ---
+
+  describe('bridge-restarted handler (import.meta.client branch)', () => {
+    it('dispatching bridge-restarted with nfc resets reconnectAttempts and connects', async () => {
+      const countBefore = wsInstances.length
+      const nfc = useNfcWebSocket()
+      // Do not call connect initially — ws is null
+      expect(nfc.isConnected.value).toBe(false)
+
+      window.dispatchEvent(new CustomEvent('bridge-restarted', { detail: { bridge: 'nfc' } }))
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(true)
+      // At least one new WebSocket created by this instance
+      expect(wsInstances.length).toBeGreaterThan(countBefore)
+    })
+
+    it('bridge-restarted with null detail is ignored', async () => {
+      const nfc = useNfcWebSocket()
+
+      window.dispatchEvent(new CustomEvent('bridge-restarted', { detail: null }))
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(nfc.isConnected.value).toBe(false)
+      expect(wsInstances).toHaveLength(0)
     })
   })
 

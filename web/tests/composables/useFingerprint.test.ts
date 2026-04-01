@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useFingerprint } from '~/composables/useFingerprint'
 
+const envMock = vi.hoisted(() => ({
+  isClient: true,
+}))
+vi.mock('~/utils/env', () => envMock)
+
 describe('useFingerprint', () => {
   beforeEach(() => {
     ;(window as any).Android = undefined
@@ -127,15 +132,30 @@ describe('useFingerprint', () => {
   })
 
   it('window が undefined なら isAndroidApp = false', () => {
-    const origWindow = globalThis.window
-    // @ts-expect-error SSR シミュレーション
-    delete globalThis.window
+    envMock.isClient = false
     try {
       const { isAndroidApp } = useFingerprint()
       expect(isAndroidApp.value).toBe(false)
     } finally {
-      globalThis.window = origWindow
+      envMock.isClient = true
     }
+  })
+
+  describe('SSR (isClient=false)', () => {
+    it('getAndroid returns null when isClient=false', () => {
+      // Even with Android bridge present, isClient=false should return null
+      ;(window as any).Android = {
+        getAndroidId: () => 'device-001',
+        isFingerprintAvailable: () => true,
+        requestFingerprint: vi.fn(),
+      }
+
+      envMock.isClient = false
+      const { isAndroidApp, deviceId } = useFingerprint()
+      expect(isAndroidApp.value).toBe(false)
+      expect(deviceId.value).toBeNull()
+      envMock.isClient = true
+    })
   })
 
   it('localStorage に deviceId のキーがない場合は空セット', () => {

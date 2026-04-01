@@ -10,7 +10,7 @@ export default defineVitestConfig({
         domEnvironment: 'happy-dom',
       },
     },
-    setupFiles: ['./tests/setup.ts'],
+    setupFiles: ['./tests/save-native.ts', './tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',

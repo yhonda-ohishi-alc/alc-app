@@ -1,4 +1,5 @@
 import type { AuthUser, AuthResponse, RefreshResponse } from '~/types'
+import { isClient } from '~/utils/env'
 
 /** Base64url → UTF-8 JSON デコード (マルチバイト文字対応) */
 function decodeJwtPayload(base64url: string): any {
@@ -18,10 +19,10 @@ const accessToken = ref<string | null>(null)
 const isLoading = ref(true)
 // モジュールロード時に即座に復元 (子コンポーネントの onMounted が app.vue の init() より先に走るため)
 const deviceTenantId = ref<string | null>(
-  typeof window !== 'undefined' ? localStorage.getItem(DEVICE_TENANT_KEY) : null,
+  isClient ? localStorage.getItem(DEVICE_TENANT_KEY) : null,
 )
 const deviceId = ref<string | null>(
-  typeof window !== 'undefined' ? localStorage.getItem(DEVICE_ID_KEY) : null,
+  isClient ? localStorage.getItem(DEVICE_ID_KEY) : null,
 )
 
 let initialized = false
@@ -44,7 +45,7 @@ export function useAuth() {
     // deviceTenantId はモジュールスコープで既に復元済み
 
     // Refresh token があれば自動ログイン試行
-    const refreshToken = typeof window !== 'undefined'
+    const refreshToken = isClient
       ? localStorage.getItem(REFRESH_TOKEN_KEY)
       : null
 
@@ -52,15 +53,13 @@ export function useAuth() {
       try {
         await refreshAccessToken(refreshToken)
       } catch {
-        // Refresh 失敗 — トークンをクリア
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(REFRESH_TOKEN_KEY)
-        }
+        // Refresh 失敗 — トークンをクリア (refreshToken が非 null = isClient は常に true)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
       }
     }
 
     // Device Owner 自動アクティベーション
-    if (!isDeviceActivated.value && typeof window !== 'undefined') {
+    if (!isDeviceActivated.value && isClient) {
       const android = (window as any).Android
       if (android?.getProvisioningInfo) {
         try {
@@ -134,7 +133,7 @@ export function useAuth() {
 
   /** Refresh token で access token を更新 */
   async function refreshAccessToken(refreshToken?: string): Promise<void> {
-    const token = refreshToken || (typeof window !== 'undefined' ? localStorage.getItem(REFRESH_TOKEN_KEY) : null)
+    const token = refreshToken || (isClient ? localStorage.getItem(REFRESH_TOKEN_KEY) : null)
     if (!token) throw new Error('Refresh token がありません')
 
     const res = await fetch(`${apiBase}/api/auth/refresh`, {
@@ -175,7 +174,7 @@ export function useAuth() {
     accessToken.value = data.access_token
     user.value = data.user
 
-    if (typeof window !== 'undefined') {
+    if (isClient) {
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
     }
 
@@ -203,7 +202,7 @@ export function useAuth() {
 
   /** ユーザー操作イベントの監視を開始 */
   function startInactivityWatch() {
-    if (typeof window === 'undefined') return
+    if (!isClient) return
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const
     for (const event of events) {
       window.addEventListener(event, resetInactivityTimer, { passive: true })
@@ -213,7 +212,7 @@ export function useAuth() {
 
   /** ユーザー操作イベントの監視を停止 */
   function stopInactivityWatch() {
-    if (typeof window === 'undefined') return
+    if (!isClient) return
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const
     for (const event of events) {
       window.removeEventListener(event, resetInactivityTimer)
@@ -224,15 +223,15 @@ export function useAuth() {
     }
   }
 
-  /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール */
+  /** JWT の exp から逆算して期限前に自動リフレッシュをスケジュール
+   *  setTokens / refreshAccessToken の直後に呼ばれるため accessToken は常に非 null */
   function scheduleAutoRefresh() {
     if (refreshTimerId) {
       clearTimeout(refreshTimerId)
       refreshTimerId = null
     }
 
-    const token = accessToken.value
-    if (!token) return
+    const token = accessToken.value!
 
     try {
       const parts = token.split('.')
@@ -284,7 +283,7 @@ export function useAuth() {
 
     accessToken.value = null
     user.value = null
-    if (typeof window !== 'undefined') {
+    if (isClient) {
       localStorage.removeItem(REFRESH_TOKEN_KEY)
 
       // Google の OAuth セッションをクリア (iframe で非同期実行)
@@ -301,7 +300,7 @@ export function useAuth() {
   function activateDevice(tenantId: string, devId?: string) {
     deviceTenantId.value = tenantId
     if (devId) deviceId.value = devId
-    if (typeof window !== 'undefined') {
+    if (isClient) {
       localStorage.setItem(DEVICE_TENANT_KEY, tenantId)
       if (devId) {
         localStorage.setItem(DEVICE_ID_KEY, devId)
@@ -318,7 +317,7 @@ export function useAuth() {
   function deactivateDevice() {
     deviceTenantId.value = null
     deviceId.value = null
-    if (typeof window !== 'undefined') {
+    if (isClient) {
       localStorage.removeItem(DEVICE_TENANT_KEY)
       localStorage.removeItem(DEVICE_ID_KEY)
       const android = (window as any).Android
@@ -330,7 +329,7 @@ export function useAuth() {
 
   /** LINE WORKS コールバックの hash fragment からトークンをセット (auth-worker 形式) */
   function handleLineworksHash(): boolean {
-    if (typeof window === 'undefined') return false
+    if (!isClient) return false
     const hash = window.location.hash
     const search = window.location.search
     if (!hash.includes('token=')) return false
