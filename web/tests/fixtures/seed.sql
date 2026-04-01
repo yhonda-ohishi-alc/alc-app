@@ -17,10 +17,10 @@ INSERT INTO employees (id, tenant_id, name, code, nfc_id) VALUES
   ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111',
    'Test Driver', 'E001', 'NFC-SEED-001');
 
--- Measurement
-INSERT INTO measurements (id, tenant_id, employee_id, status) VALUES
+-- Measurement (with face photo for fetchFacePhoto test)
+INSERT INTO measurements (id, tenant_id, employee_id, status, face_photo_url) VALUES
   ('aaaaaaaa-0001-0001-0001-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111',
-   '33333333-3333-3333-3333-333333333333', 'started');
+   '33333333-3333-3333-3333-333333333333', 'started', 'http://localhost:9000/alc-test/test-face.jpg');
 
 -- Tenko schedule
 INSERT INTO tenko_schedules (id, tenant_id, employee_id, tenko_type, responsible_manager_name, scheduled_at, instruction) VALUES

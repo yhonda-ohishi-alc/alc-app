@@ -157,6 +157,25 @@ async function waitForApi(url: string, maxRetries = 30): Promise<void> {
 export const jwtToken = isLive ? makeJwt() : null
 let liveReady = false
 
+/**
+ * live 時: happy-dom の FormData/Blob を Node.js native に戻す。
+ * happy-dom は setupFiles より先に環境を適用するため、save-native では間に合わない。
+ * undici + node:buffer から直接取得する。
+ */
+export function restoreNativeApis() {
+  if (!isLive) return
+  // Blob を先にセット (undici が globalThis.Blob を参照するため)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  globalThis.Blob = require('node:buffer').Blob
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  globalThis.URL = require('node:url').URL
+  // undici の FormData/fetch は Blob セット後にロード
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const undici = require('undici')
+  globalThis.FormData = undici.FormData
+  globalThis.fetch = undici.fetch
+}
+
 export async function setupApi() {
   if (isLive) {
     if (!liveReady) {
