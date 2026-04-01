@@ -8,6 +8,10 @@ on:
     branches: [main]
     paths: ['web/**', '.github/workflows/test.yml']
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   test:
     name: Vitest + Coverage
@@ -151,8 +155,9 @@ jobs:
         timeout-minutes: 5
 
       - name: Run integration tests
-        run: npx vitest run tests/integration/api-live.test.ts
+        run: npx vitest run tests/utils/api.test.ts
         env:
+          TEST_LIVE: '1'
           API_BASE_URL: http://localhost:18080
 
       - name: Show API logs on failure
