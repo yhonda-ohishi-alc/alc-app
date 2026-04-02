@@ -26,7 +26,7 @@ async function loadDrivers() {
   try {
     drivers.value = await getDtakoDrivers()
     if (drivers.value.length > 0 && !selectedDriverId.value) {
-      selectedDriverId.value = drivers.value[0].id
+      selectedDriverId.value = drivers.value[0]!.id
     }
   } catch (e) {
     console.error('ドライバー取得エラー:', e)
@@ -36,7 +36,7 @@ async function loadDrivers() {
 async function loadHours() {
   loading.value = true
   try {
-    const [year, month] = selectedMonth.value.split('-').map(Number)
+    const [year, month] = selectedMonth.value.split('-').map(Number) as [number, number]
     const dateFrom = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
     const dateTo = `${year}-${String(month).padStart(2, '0')}-${lastDay}`

@@ -98,7 +98,7 @@ const cancelReason = ref('')
 async function handleCancel(id: string) {
   error.value = null
   try {
-    await cancelTenkoSession(id, { reason: cancelReason.value || undefined })
+    await cancelTenkoSession(id, { reason: cancelReason.value || '' })
     cancellingId.value = null
     cancelReason.value = ''
     await fetchData()
@@ -140,7 +140,7 @@ async function handleBulkCancel() {
   isBulkCancelling.value = true
   error.value = null
   try {
-    await Promise.all([...selectedIds.value].map(id => cancelTenkoSession(id, {})))
+    await Promise.all([...selectedIds.value].map(id => cancelTenkoSession(id, { reason: '' })))
     selectedIds.value = new Set()
     await fetchData()
     emit('changed')

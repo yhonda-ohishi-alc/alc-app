@@ -6,7 +6,7 @@ const THRESHOLD = 0.55
 
 function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0, normA = 0, normB = 0
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i] }
+  for (let i = 0; i < a.length; i++) { dot += a[i]! * b[i]!; normA += a[i]! * a[i]!; normB += b[i]! * b[i]! }
   return normA > 0 && normB > 0 ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0
 }
 
@@ -80,14 +80,16 @@ export function useFaceAuth() {
     const embArr = Array.isArray(embedding) ? embedding : Array.from(embedding as any) as number[]
     let bestIdx = -1, bestSim = 0
     for (let i = 0; i < all.length; i++) {
-      const sim = cosineSimilarity(embArr, all[i].descriptor)
+      const record = all[i]
+      if (!record) continue
+      const sim = cosineSimilarity(embArr, record.descriptor)
       if (sim > bestSim) { bestSim = sim; bestIdx = i }
     }
 
     if (bestIdx < 0 || bestSim < THRESHOLD) return null
 
     return {
-      employeeId: all[bestIdx].employeeId,
+      employeeId: all[bestIdx]?.employeeId ?? '',
       similarity: bestSim,
     }
   }

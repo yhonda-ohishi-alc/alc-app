@@ -82,8 +82,8 @@ const showNfcGuide = ref(false)
         class="w-3 h-3 rounded-full"
         :class="{
           'bg-red-500': !isConnected,
-          'bg-yellow-500': isConnected && (readers.value?.length ?? 0) === 0,
-          'bg-green-500': isConnected && (readers.value?.length ?? 0) > 0,
+          'bg-yellow-500': isConnected && (readers?.length ?? 0) === 0,
+          'bg-green-500': isConnected && (readers?.length ?? 0) > 0,
         }"
       />
       <span class="text-gray-600">{{ statusText }}</span>

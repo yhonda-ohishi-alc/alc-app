@@ -81,7 +81,7 @@ async function handleCreate() {
       instruction: r.instruction || undefined,
     }))
     if (data.length === 1) {
-      await createSchedule(data[0])
+      await createSchedule(data[0]!)
     } else {
       await batchCreateSchedules(data)
     }
