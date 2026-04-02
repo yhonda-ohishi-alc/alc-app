@@ -10,6 +10,13 @@ const { accessToken, isAuthenticated, deviceTenantId, refreshAccessToken, handle
 // LINE WORKS コールバック処理 (hash fragment からトークン取得)
 onMounted(() => { handleLineworksHash() })
 
+// auth-worker URL 解決: ?auth=staging で staging auth-worker に切り替え
+function resolveAuthWorkerUrl(): string {
+  const authParam = route.query.auth as string | undefined
+  if (authParam === 'staging') return 'https://auth-worker-staging.m-tama-ramu.workers.dev'
+  return (config.public.authWorkerUrl as string).replace(/\/$/, '')
+}
+
 // LINE WORKS ログイン (auth-worker 経由)
 const lwDomain = ref('')
 function loginWithLineworks() {
@@ -17,7 +24,8 @@ function loginWithLineworks() {
   if (!input) return
   const redirectUri = encodeURIComponent(window.location.origin + '/?role=general')
   const address = encodeURIComponent(input)
-  window.location.href = `https://auth.mtamaramu.com/oauth/lineworks/redirect?address=${address}&redirect_uri=${redirectUri}`
+  const authWorkerUrl = resolveAuthWorkerUrl()
+  window.location.href = `${authWorkerUrl}/oauth/lineworks/redirect?address=${address}&redirect_uri=${redirectUri}`
 }
 initApi(
   config.public.apiBase as string,

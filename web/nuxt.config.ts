@@ -11,6 +11,7 @@ export default defineNuxtConfig({
       signalingUrl: process.env.NUXT_PUBLIC_SIGNALING_URL || 'http://localhost:8787',
       tenantId: process.env.NUXT_PUBLIC_TENANT_ID || 'default',
       googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      authWorkerUrl: process.env.NUXT_PUBLIC_AUTH_WORKER_URL || 'https://auth.mtamaramu.com',
     },
   },
 
