@@ -1,4 +1,4 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<unknown> => {
   const config = useRuntimeConfig()
   const id = getRouterParam(event, 'id')
   const headers = getHeaders(event)

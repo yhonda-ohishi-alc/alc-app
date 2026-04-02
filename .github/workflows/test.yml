@@ -119,6 +119,32 @@ jobs:
           path: web/coverage/
           retention-days: 30
 
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      # fc1200-wasm is a local file: dependency — stub it for CI
+      - name: Stub fc1200-wasm
+        run: |
+          mkdir -p ../fc1200-wasm/pkg
+          echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js","types":"index.d.ts"}' > ../fc1200-wasm/pkg/package.json
+          echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
+          cp app/types/fc1200-wasm.d.ts ../fc1200-wasm/pkg/index.d.ts
+
+      - run: npm ci
+      - run: npx nuxi typecheck
+
   integration-test:
     name: API Integration
     runs-on: ubuntu-latest

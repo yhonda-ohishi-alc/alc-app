@@ -295,7 +295,7 @@ function toggleCallSettings(dev: Device) {
   } else {
     editingSchedules.value[id] = dev.call_schedule
       ? { ...dev.call_schedule }
-      : null
+      : { ...defaultSchedule }
     expandedCallSettings.value.add(id)
     expandedCallSettings.value = new Set(expandedCallSettings.value)
   }
@@ -685,7 +685,7 @@ onMounted(() => refresh())
               </div>
             </div>
             <div v-if="tokenQrUrls[req.registration_code]" class="mt-2 text-center">
-              <img :src="tokenQrUrls[req.registration_code]" alt="QR" class="mx-auto cursor-pointer w-[200px]" @click="zoomedQrSrc = tokenQrUrls[req.registration_code]" />
+              <img :src="tokenQrUrls[req.registration_code]" alt="QR" class="mx-auto cursor-pointer w-[200px]" @click="zoomedQrSrc = tokenQrUrls[req.registration_code] ?? ''" />
             </div>
           </div>
         </div>

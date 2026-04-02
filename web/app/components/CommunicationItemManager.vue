@@ -30,7 +30,7 @@ const PRIORITIES = [
 ]
 
 function priorityInfo(val: string) {
-  return PRIORITIES.find(p => p.value === val) || PRIORITIES[1]
+  return PRIORITIES.find(p => p.value === val) || PRIORITIES[1]!
 }
 
 async function load() {

@@ -54,7 +54,7 @@ function typeColor(value: string): string {
     skill: 'bg-purple-100 text-purple-700',
     other: 'bg-gray-100 text-gray-600',
   }
-  return map[value] || map.other
+  return map[value] || map.other!
 }
 
 // Employee search (対象者)
@@ -90,7 +90,7 @@ function onEmployeeKeydown(e: KeyboardEvent) {
     employeeHighlight.value = Math.max(employeeHighlight.value - 1, 0)
   } else if (e.key === 'Enter' && employeeHighlight.value >= 0) {
     e.preventDefault()
-    selectEmployee(results[employeeHighlight.value])
+    selectEmployee(results[employeeHighlight.value]!)
   }
 }
 
@@ -132,7 +132,7 @@ function onGuidedByKeydown(e: KeyboardEvent) {
     guidedByHighlight.value = Math.max(guidedByHighlight.value - 1, 0)
   } else if (e.key === 'Enter' && guidedByHighlight.value >= 0) {
     e.preventDefault()
-    selectGuidedBy(results[guidedByHighlight.value])
+    selectGuidedBy(results[guidedByHighlight.value]!)
   }
 }
 

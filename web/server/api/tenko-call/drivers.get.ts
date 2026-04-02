@@ -1,4 +1,4 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<unknown> => {
   const config = useRuntimeConfig()
   const headers = getHeaders(event)
   return $fetch(`${config.public.apiBase}/api/tenko-call/drivers`, {

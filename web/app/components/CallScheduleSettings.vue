@@ -16,7 +16,7 @@ const schedule = computed(() => props.modelValue)
 const startTime = computed({
   get: () => `${String(schedule.value.startHour).padStart(2, '0')}:${String(schedule.value.startMin).padStart(2, '0')}`,
   set: (v: string) => {
-    const [h, m] = v.split(':').map(Number)
+    const [h, m] = v.split(':').map(Number) as [number, number]
     emit('update:modelValue', { ...schedule.value, startHour: h, startMin: m })
   },
 })
@@ -24,7 +24,7 @@ const startTime = computed({
 const endTime = computed({
   get: () => `${String(schedule.value.endHour).padStart(2, '0')}:${String(schedule.value.endMin).padStart(2, '0')}`,
   set: (v: string) => {
-    const [h, m] = v.split(':').map(Number)
+    const [h, m] = v.split(':').map(Number) as [number, number]
     emit('update:modelValue', { ...schedule.value, endHour: h, endMin: m })
   },
 })
