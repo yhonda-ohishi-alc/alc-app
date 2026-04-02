@@ -193,3 +193,69 @@ jobs:
       - name: Cleanup containers
         if: always()
         run: docker compose -f docker-compose.test.yml down -v
+
+  deploy-staging:
+    name: Deploy Staging
+    if: github.event_name == 'pull_request'
+    needs: [test, typecheck]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Stub fc1200-wasm
+        run: |
+          mkdir -p ../fc1200-wasm/pkg
+          echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
+          echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers (staging)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --env staging
+
+  deploy-release:
+    name: Deploy Release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test, typecheck]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Stub fc1200-wasm
+        run: |
+          mkdir -p ../fc1200-wasm/pkg
+          echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
+          echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers (release)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy

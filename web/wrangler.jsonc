@@ -4,5 +4,13 @@
 	"main": ".output/server/index.mjs",
 	"assets": {
 		"directory": ".output/public"
+	},
+	"env": {
+		"staging": {
+			"name": "alc-app-staging",
+			"vars": {
+				"NUXT_PUBLIC_API_BASE": "STAGING_API_URL"
+			}
+		}
 	}
 }
