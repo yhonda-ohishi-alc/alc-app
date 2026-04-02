@@ -83,7 +83,7 @@ function startLoop() {
         drawOverlay(result)
         // full Worker がバックグラウンドで取得した embedding を使う
         if (latestEmbedding.value && latestEmbedding.value.length > 0) {
-          lastGoodEmbedding.value = latestEmbedding.value
+          lastGoodEmbedding.value = [...latestEmbedding.value]
         }
         if (allChecksPassed.value) {
           if (props.mode === 'register') {

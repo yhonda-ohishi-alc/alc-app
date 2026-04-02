@@ -84,9 +84,9 @@ function minutesToHM(m: number | null) {
       <div v-else-if="activeTab === 'health'" class="space-y-3">
         <h4 class="font-bold text-sm">健康基準値</h4>
         <div v-if="info.health_baseline" class="grid grid-cols-2 gap-2 text-sm">
-          <div>収縮期血圧: {{ info.health_baseline.systolic_baseline ?? '-' }} ±{{ info.health_baseline.systolic_tolerance ?? '-' }}</div>
-          <div>拡張期血圧: {{ info.health_baseline.diastolic_baseline ?? '-' }} ±{{ info.health_baseline.diastolic_tolerance ?? '-' }}</div>
-          <div>体温: {{ info.health_baseline.temperature_baseline ?? '-' }} ±{{ info.health_baseline.temperature_tolerance ?? '-' }}</div>
+          <div>収縮期血圧: {{ info.health_baseline.baseline_systolic ?? '-' }} ±{{ info.health_baseline.systolic_tolerance ?? '-' }}</div>
+          <div>拡張期血圧: {{ info.health_baseline.baseline_diastolic ?? '-' }} ±{{ info.health_baseline.diastolic_tolerance ?? '-' }}</div>
+          <div>体温: {{ info.health_baseline.baseline_temperature ?? '-' }} ±{{ info.health_baseline.temperature_tolerance ?? '-' }}</div>
         </div>
         <div v-else class="text-sm text-gray-400">基準値未設定</div>
 
@@ -190,7 +190,7 @@ function minutesToHM(m: number | null) {
         <h4 class="font-bold text-sm mt-4">未解決の機器故障</h4>
         <div v-for="f in info.equipment_failures" :key="f.id" class="border rounded p-2 text-xs">
           <div>{{ f.failure_type }} - {{ f.description || '詳細なし' }}</div>
-          <div class="text-gray-400">報告日: {{ formatDate(f.reported_at) }}</div>
+          <div class="text-gray-400">報告日: {{ formatDate(f.detected_at) }}</div>
         </div>
         <div v-if="info.equipment_failures.length === 0" class="text-xs text-green-600">未解決の故障なし</div>
       </div>

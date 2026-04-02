@@ -1,4 +1,4 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<unknown> => {
   const config = useRuntimeConfig()
   const body = await readBody(event)
   const secret = getHeader(event, 'X-Internal-Secret') || ''

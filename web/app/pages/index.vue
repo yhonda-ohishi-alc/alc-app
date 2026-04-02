@@ -174,6 +174,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 // 同タブ再クリックで再認証させるためのキー
 const managerAuthKey = ref(0)
 const adminAuthKey = ref(0)
+function reloadPage() { window.location.reload() }
 function onRoleTabClick(role: RoleTab) {
   if (activeRole.value === role) {
     if (role === 'manager') managerAuthKey.value++
@@ -203,7 +204,7 @@ function onRoleTabClick(role: RoleTab) {
       <button
         class="p-2 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
         title="ページ更新"
-        @click="location.reload()"
+        @click="reloadPage()"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.49 15a8 8 0 0013.02 2.13M19.51 9A8 8 0 006.49 6.87" />
@@ -332,7 +333,7 @@ function onRoleTabClick(role: RoleTab) {
               <!-- ロール切替 -->
               <div class="px-3 py-1 text-xs text-gray-400 font-medium">ロール切替</div>
               <button
-                v-for="role in (['manager', 'admin', 'general'] as const)"
+                v-for="role in (['manager', 'admin', 'general'] as RoleTab[])"
                 :key="role"
                 class="w-full text-left px-4 py-2 text-sm transition-colors"
                 :class="activeRole === role
@@ -389,7 +390,7 @@ function onRoleTabClick(role: RoleTab) {
               <!-- ページ更新 -->
               <button
                 class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
-                @click="location.reload()"
+                @click="reloadPage()"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.49 15a8 8 0 0013.02 2.13M19.51 9A8 8 0 006.49 6.87" />
