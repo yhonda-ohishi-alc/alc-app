@@ -14,6 +14,11 @@ const { navigateToMock } = vi.hoisted(() => ({
 }))
 mockNuxtImport('navigateTo', () => navigateToMock)
 
+const { useRuntimeConfigMock } = vi.hoisted(() => ({
+  useRuntimeConfigMock: vi.fn(() => ({ public: { stagingTenantId: '' } })),
+}))
+mockNuxtImport('useRuntimeConfig', () => useRuntimeConfigMock)
+
 import authMiddleware from '~/middleware/auth.global'
 
 describe('auth.global middleware', () => {
@@ -53,6 +58,14 @@ describe('auth.global middleware', () => {
 
   it('isLoading 中はスキップ (リダイレクトしない)', () => {
     useAuthMock.mockReturnValue({ isAuthenticated: { value: false }, isLoading: { value: true } })
+    const result = authMiddleware({ path: '/register' } as any, {} as any)
+    expect(result).toBeUndefined()
+    expect(navigateToMock).not.toHaveBeenCalled()
+  })
+
+  it('stagingTenantId 設定時は認証スキップ', () => {
+    useRuntimeConfigMock.mockReturnValue({ public: { stagingTenantId: 'staging-123' } })
+    useAuthMock.mockReturnValue({ isAuthenticated: { value: false }, isLoading: { value: false } })
     const result = authMiddleware({ path: '/register' } as any, {} as any)
     expect(result).toBeUndefined()
     expect(navigateToMock).not.toHaveBeenCalled()
