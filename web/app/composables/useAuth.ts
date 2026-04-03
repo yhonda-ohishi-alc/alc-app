@@ -78,6 +78,13 @@ export function useAuth() {
       }
     }
 
+    // Staging auth bypass: NUXT_PUBLIC_STAGING_TENANT_ID が設定されていれば
+    // OAuth なしで X-Tenant-ID ヘッダー経由のキオスクモードを自動有効化
+    const stagingTenantId = config.public.stagingTenantId as string
+    if (stagingTenantId && !isAuthenticated.value && !isDeviceActivated.value) {
+      activateDevice(stagingTenantId)
+    }
+
     isLoading.value = false
   }
 

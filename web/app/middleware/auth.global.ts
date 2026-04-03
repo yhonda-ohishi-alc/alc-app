@@ -1,5 +1,9 @@
 /** 管理ページの認証ミドルウェア */
 export default defineNuxtRouteMiddleware((to) => {
+  // Staging bypass: NUXT_PUBLIC_STAGING_TENANT_ID 設定時は認証スキップ
+  const config = useRuntimeConfig()
+  if (config.public.stagingTenantId) return
+
   const protectedPaths = ['/register', '/maintenance']
 
   if (!protectedPaths.some(p => to.path.startsWith(p))) {

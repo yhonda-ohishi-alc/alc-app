@@ -11,12 +11,14 @@
     "deploy": "nuxt build && wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vladmandic/human": "^3.3.6",
+    "@yhonda-ohishi-pub-dev/auth-client": "^0.1.32",
     "fc1200-wasm": "file:../fc1200-wasm/pkg",
     "jspdf": "^4.2.0",
     "nuxt": "^4.3.1",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@nuxt/test-utils": "^4.0.0",
+    "@playwright/test": "^1.59.1",
     "@types/w3c-web-serial": "^1.0.8",
     "@vitest/coverage-v8": "^4.1.2",
     "@vue/test-utils": "^2.4.6",
