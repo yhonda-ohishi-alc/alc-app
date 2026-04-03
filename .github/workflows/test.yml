@@ -35,7 +35,7 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
 
       - name: Run tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
@@ -142,7 +142,7 @@ jobs:
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
           cp app/types/fc1200-wasm.d.ts ../fc1200-wasm/pkg/index.d.ts
 
-      - run: npm ci
+      - run: npm install
       - run: npx nuxi typecheck
 
   integration-test:
@@ -167,7 +167,7 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -217,7 +217,7 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build
         run: npm run build
@@ -250,7 +250,7 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build
         run: npm run build
