@@ -13,8 +13,18 @@ permissions:
   packages: read
 
 jobs:
+  pr-limit:
+    name: PR Limit Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/pr-limit
+
   test:
     name: Vitest + Coverage
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,7 +45,14 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
@@ -110,6 +127,45 @@ jobs:
             " >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+            # coverage_100.toml 登録ファイルの結果
+            if [ -f coverage_100.toml ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Coverage 100% Files" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              node -e "
+                const fs = require('fs');
+                const path = require('path');
+                const toml = fs.readFileSync('coverage_100.toml', 'utf8');
+                const summary = require('./coverage/coverage-summary.json');
+                const cwd = process.cwd();
+                const entries = [];
+                let cur = null;
+                for (const line of toml.split('\n')) {
+                  if (line.trim() === '[[files]]') { cur = { path: '', branches: false }; entries.push(cur); continue; }
+                  if (!cur) continue;
+                  const pm = line.match(/^path\s*=\s*\"(.+)\"/);
+                  if (pm) cur.path = pm[1];
+                  const bm = line.match(/^branches\s*=\s*true/);
+                  if (bm) cur.branches = true;
+                }
+                let ok = 0, fail = 0;
+                console.log('| File | Lines | Branch | Status |');
+                console.log('|------|-------|--------|--------|');
+                for (const e of entries) {
+                  const absPath = path.resolve(cwd, e.path);
+                  const s = summary[absPath];
+                  if (!s) { console.log('| ' + e.path + ' | - | - | ⚠️ not found |'); fail++; continue; }
+                  const linesOk = s.lines.pct === 100;
+                  const branchOk = !e.branches || s.branches.pct === 100;
+                  const passed = linesOk && branchOk;
+                  if (passed) ok++; else fail++;
+                  console.log('| ' + e.path + ' | ' + s.lines.pct + '% | ' + s.branches.pct + '% | ' + (passed ? '✅' : '❌') + ' |');
+                }
+                console.log('');
+                console.log('**Result:** ' + ok + ' passed, ' + fail + ' failed / ' + entries.length + ' registered');
+              " >> $GITHUB_STEP_SUMMARY
+            fi
           fi
 
       - uses: actions/upload-artifact@v4
@@ -121,6 +177,8 @@ jobs:
 
   typecheck:
     name: Type Check
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -142,11 +200,21 @@ jobs:
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
           cp app/types/fc1200-wasm.d.ts ../fc1200-wasm/pkg/index.d.ts
 
-      - run: npm ci
+      - run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - run: npx nuxi typecheck
 
   integration-test:
     name: API Integration
+    needs: [pr-limit]
+    if: always() && (needs.pr-limit.result == 'success' || needs.pr-limit.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -167,7 +235,14 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -217,7 +292,14 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: npm run build
@@ -250,7 +332,14 @@ jobs:
           echo '{"name":"fc1200-wasm","version":"0.0.0","main":"index.js"}' > ../fc1200-wasm/pkg/package.json
           echo 'module.exports = {}' > ../fc1200-wasm/pkg/index.js
 
-      - run: npm ci
+      - run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: npm run build
