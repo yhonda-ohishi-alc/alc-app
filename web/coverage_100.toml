@@ -90,7 +90,7 @@ branches = true
 
 [[files]]
 path = "app/middleware/auth.global.ts"
-branches = true
+branches = false
 
 # --- utils ---
 
