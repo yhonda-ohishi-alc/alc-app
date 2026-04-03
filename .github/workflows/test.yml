@@ -49,6 +49,11 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
 
@@ -198,6 +203,12 @@ jobs:
       - run: npm install
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - run: npx nuxi typecheck
 
   integration-test:
@@ -228,6 +239,11 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -256,7 +272,7 @@ jobs:
   deploy-staging:
     name: Deploy Staging
     if: github.event_name == 'pull_request'
-    needs: [test, typecheck]
+    needs: [test, typecheck, integration-test]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -279,6 +295,11 @@ jobs:
       - run: npm install
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: npm run build
@@ -314,6 +335,11 @@ jobs:
       - run: npm install
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ippoan/auth-worker/.github/actions/use-auth-client-dev@main
+        with:
+          working-directory: web
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: npm run build
