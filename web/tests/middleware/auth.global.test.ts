@@ -14,10 +14,9 @@ const { navigateToMock } = vi.hoisted(() => ({
 }))
 mockNuxtImport('navigateTo', () => navigateToMock)
 
-const { useRuntimeConfigMock } = vi.hoisted(() => ({
-  useRuntimeConfigMock: vi.fn(() => ({ public: { stagingTenantId: '' } })),
-}))
-mockNuxtImport('useRuntimeConfig', () => useRuntimeConfigMock)
+// useRuntimeConfig は vi.stubGlobal でモック (mockNuxtImport だと useRouter 初期化に影響)
+const useRuntimeConfigMock = vi.fn(() => ({ public: { stagingTenantId: '' } }))
+vi.stubGlobal('useRuntimeConfig', useRuntimeConfigMock)
 
 import authMiddleware from '~/middleware/auth.global'
 
