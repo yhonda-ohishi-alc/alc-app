@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { StagingFooter } from '@yhonda-ohishi-pub-dev/auth-client'
+import { StagingFooter } from '@ippoan/auth-client'
 
 const { init, isLoading } = useAuth()
 const { isAndroidApp } = useFingerprint()
