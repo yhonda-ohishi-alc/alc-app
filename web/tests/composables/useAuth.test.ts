@@ -1354,4 +1354,46 @@ describe('useAuth', () => {
       expect(localStorage.getItem('alc_refresh_token')).toBeNull()
     })
   })
+
+  describe('staging auth bypass', () => {
+    it('should auto-activate device when stagingTenantId is set', async () => {
+      // Override useRuntimeConfig to include stagingTenantId
+      const mockUseRuntimeConfig = vi.fn(() => ({
+        public: {
+          apiBase: 'http://localhost:3001',
+          stagingTenantId: 'staging-tenant-123',
+          googleClientId: '',
+          authWorkerUrl: '',
+        },
+      }))
+      vi.stubGlobal('useRuntimeConfig', mockUseRuntimeConfig)
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      await auth.init()
+
+      expect(auth.isDeviceActivated.value).toBe(true)
+      expect(auth.deviceTenantId.value).toBe('staging-tenant-123')
+    })
+
+    it('should not auto-activate when stagingTenantId is empty', async () => {
+      const mockUseRuntimeConfig = vi.fn(() => ({
+        public: {
+          apiBase: 'http://localhost:3001',
+          stagingTenantId: '',
+          googleClientId: '',
+          authWorkerUrl: '',
+        },
+      }))
+      vi.stubGlobal('useRuntimeConfig', mockUseRuntimeConfig)
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      await auth.init()
+
+      expect(auth.isDeviceActivated.value).toBe(false)
+    })
+  })
 })

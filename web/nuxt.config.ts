@@ -16,6 +16,14 @@ export default defineNuxtConfig({
     },
   },
 
+  typescript: {
+    tsConfig: {
+      compilerOptions: {
+        skipLibCheck: true,
+      },
+    },
+  },
+
   nitro: {
     preset: 'cloudflare_module',
   },
