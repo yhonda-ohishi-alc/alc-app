@@ -16,15 +16,6 @@ export default defineNuxtConfig({
     },
   },
 
-  typescript: {
-    tsConfig: {
-      compilerOptions: {
-        skipLibCheck: true,
-      },
-      exclude: ['node_modules/@yhonda-ohishi-pub-dev/auth-client/**'],
-    },
-  },
-
   nitro: {
     preset: 'cloudflare_module',
   },

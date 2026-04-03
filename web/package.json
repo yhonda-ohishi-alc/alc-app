@@ -18,7 +18,7 @@
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vladmandic/human": "^3.3.6",
-    "@yhonda-ohishi-pub-dev/auth-client": "^0.1.32",
+    "@yhonda-ohishi-pub-dev/auth-client": "^0.1.33",
     "fc1200-wasm": "file:../fc1200-wasm/pkg",
     "jspdf": "^4.2.0",
     "nuxt": "^4.3.1",
