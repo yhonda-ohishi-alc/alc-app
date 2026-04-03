@@ -21,6 +21,7 @@ export default defineNuxtConfig({
       compilerOptions: {
         skipLibCheck: true,
       },
+      exclude: ['node_modules/@yhonda-ohishi-pub-dev/auth-client/**'],
     },
   },
 

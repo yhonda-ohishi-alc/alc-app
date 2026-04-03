@@ -1357,43 +1357,51 @@ describe('useAuth', () => {
 
   describe('staging auth bypass', () => {
     it('should auto-activate device when stagingTenantId is set', async () => {
-      // Override useRuntimeConfig to include stagingTenantId
-      const mockUseRuntimeConfig = vi.fn(() => ({
-        public: {
-          apiBase: 'http://localhost:3001',
-          stagingTenantId: 'staging-tenant-123',
-          googleClientId: '',
-          authWorkerUrl: '',
-        },
-      }))
-      vi.stubGlobal('useRuntimeConfig', mockUseRuntimeConfig)
-
       const { useAuth } = await import('~/composables/useAuth')
       const auth = useAuth()
 
-      await auth.init()
+      expect(auth.isDeviceActivated.value).toBe(false)
+      auth.applyStagingBypass('staging-tenant-123')
 
       expect(auth.isDeviceActivated.value).toBe(true)
       expect(auth.deviceTenantId.value).toBe('staging-tenant-123')
     })
 
     it('should not auto-activate when stagingTenantId is empty', async () => {
-      const mockUseRuntimeConfig = vi.fn(() => ({
-        public: {
-          apiBase: 'http://localhost:3001',
-          stagingTenantId: '',
-          googleClientId: '',
-          authWorkerUrl: '',
-        },
-      }))
-      vi.stubGlobal('useRuntimeConfig', mockUseRuntimeConfig)
-
       const { useAuth } = await import('~/composables/useAuth')
       const auth = useAuth()
 
+      auth.applyStagingBypass('')
+      expect(auth.isDeviceActivated.value).toBe(false)
+    })
+
+    it('should not auto-activate when already authenticated', async () => {
+      const jwt = createFakeJwtWithExp(defaultPayload, 3600)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ access_token: jwt }),
+      })
+      localStorage.setItem('alc_refresh_token', 'valid-refresh')
+
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
       await auth.init()
 
+      expect(auth.isAuthenticated.value).toBe(true)
+      auth.applyStagingBypass('staging-tenant-123')
       expect(auth.isDeviceActivated.value).toBe(false)
+    })
+
+    it('should not auto-activate when already device-activated', async () => {
+      const { useAuth } = await import('~/composables/useAuth')
+      const auth = useAuth()
+
+      auth.activateDevice('existing-tenant')
+      expect(auth.isDeviceActivated.value).toBe(true)
+
+      auth.applyStagingBypass('different-tenant')
+      // 既にアクティベート済みなので変更されない
+      expect(auth.deviceTenantId.value).toBe('existing-tenant')
     })
   })
 })
