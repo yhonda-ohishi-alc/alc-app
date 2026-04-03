@@ -78,7 +78,17 @@ export function useAuth() {
       }
     }
 
+    // Staging auth bypass
+    applyStagingBypass(config.public.stagingTenantId as string)
+
     isLoading.value = false
+  }
+
+  /** staging 環境で NUXT_PUBLIC_STAGING_TENANT_ID が設定されていれば自動 activateDevice */
+  function applyStagingBypass(stagingTenantId: string) {
+    if (stagingTenantId && !isAuthenticated.value && !isDeviceActivated.value) {
+      activateDevice(stagingTenantId)
+    }
   }
 
   /** Google OAuth ログイン (Authorization Code Flow + prompt=login) */
@@ -389,5 +399,6 @@ export function useAuth() {
     logout,
     activateDevice,
     deactivateDevice,
+    applyStagingBypass,
   }
 }
