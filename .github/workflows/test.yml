@@ -272,7 +272,7 @@ jobs:
   deploy-staging:
     name: Deploy Staging
     if: github.event_name == 'pull_request'
-    needs: [test, typecheck]
+    needs: [test, typecheck, integration-test]
     runs-on: ubuntu-latest
     defaults:
       run:
