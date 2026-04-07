@@ -11,7 +11,10 @@
 		"staging": {
 			"name": "alc-app-staging",
 			"routes": [
-				{ "pattern": "alc-staging.ippoan.org", "custom_domain": true }
+				{
+					"pattern": "alc-staging.ippoan.org",
+					"custom_domain": true
+				}
 			],
 			"vars": {
 				"NUXT_PUBLIC_API_BASE": "https://rust-alc-api-staging-566bls5vfq-an.a.run.app",
@@ -19,5 +22,11 @@
 				"NUXT_PUBLIC_GOOGLE_CLIENT_ID": "747065218280-ugkrbgaoik32f5mmi94sso4b0026j3cp.apps.googleusercontent.com"
 			}
 		}
-	}
+	},
+	"routes": [
+		{
+			"pattern": "alc.ippoan.org",
+			"custom_domain": true
+		}
+	]
 }
