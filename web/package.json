@@ -15,10 +15,10 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ippoan/auth-client": "^0.2.10",
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vladmandic/human": "^3.3.6",
-    "@ippoan/auth-client": "^0.1.6",
     "fc1200-wasm": "file:../fc1200-wasm/pkg",
     "jspdf": "^4.2.0",
     "nuxt": "^4.3.1",
