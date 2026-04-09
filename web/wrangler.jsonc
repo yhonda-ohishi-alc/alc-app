@@ -7,6 +7,10 @@
 	"assets": {
 		"directory": ".output/public"
 	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
 	"env": {
 		"staging": {
 			"name": "alc-app-staging",
@@ -22,6 +26,10 @@
 				"NUXT_PUBLIC_GOOGLE_CLIENT_ID": "747065218280-ugkrbgaoik32f5mmi94sso4b0026j3cp.apps.googleusercontent.com"
 			}
 		}
+	},
+	"vars": {
+		"NUXT_PUBLIC_API_BASE": "https://alc-api.ippoan.org",
+		"NUXT_PUBLIC_GOOGLE_CLIENT_ID": "747065218280-ugkrbgaoik32f5mmi94sso4b0026j3cp.apps.googleusercontent.com"
 	},
 	"routes": [
 		{
