@@ -33,3 +33,6 @@ jobs:
       integration_env: 'TEST_LIVE=1 API_BASE_URL=http://localhost:18080'
       cache_dependency_path: web/package-lock.json
     secrets: inherit
+
+  dev-proxy:
+    uses: ippoan/ci-workflows/.github/workflows/dev-proxy-validate.yml@main

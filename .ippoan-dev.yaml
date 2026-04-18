@@ -1,0 +1,5 @@
+# dev-proxy metadata. Source of truth for https://<name>-dev.ippoan.org.
+name: alc-app
+port: 3014
+subdir: web
+cmd: "PORT=$PORT HOST=0.0.0.0 npm run dev"
