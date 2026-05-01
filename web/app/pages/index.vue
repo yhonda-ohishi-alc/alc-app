@@ -17,7 +17,8 @@ function loginWithLineworks() {
   if (!input) return
   const redirectUri = encodeURIComponent(window.location.origin + '/?role=general')
   const address = encodeURIComponent(input)
-  window.location.href = `https://auth.mtamaramu.com/oauth/lineworks/redirect?address=${address}&redirect_uri=${redirectUri}`
+  const authWorkerUrl = (config.public.authWorkerUrl as string) || 'https://auth.ippoan.org'
+  window.location.href = `${authWorkerUrl}/oauth/lineworks/redirect?address=${address}&redirect_uri=${redirectUri}`
 }
 initApi(
   config.public.apiBase as string,
