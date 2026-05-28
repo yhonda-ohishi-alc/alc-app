@@ -13,6 +13,11 @@ permissions:
   contents: write
   packages: read
   pull-requests: write
+  # frontend-ci.yml の nested secret-verify job が id-token: write を要求する。
+  # `if:` で skip される run でも reusable parse 時に caller permissions が
+  # 検証されるため、宣言しないと startup_failure になる
+  # (ippoan/ci-workflows CLAUDE.md「startup_failure」参照)。
+  id-token: write
 
 jobs:
   ci:
